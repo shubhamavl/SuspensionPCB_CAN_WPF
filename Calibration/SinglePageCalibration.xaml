@@ -174,49 +174,85 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Point Management Card -->
+                    <!-- Target Weight Input Card -->
                     <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
                         <StackPanel>
-                            <TextBlock Text="Point Management" Style="{StaticResource SectionHeader}"/>
+                            <TextBlock Text="Target Weight Input" Style="{StaticResource SectionHeader}"/>
                             
-                            <!-- Current Point Info -->
-                            <Grid Margin="0,0,0,15">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Current Point:" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="CurrentPointText" Grid.Column="1" Text="0" 
-                                           FontWeight="Bold" HorizontalAlignment="Right"/>
-                            </Grid>
-
-                            <!-- Point Management Buttons -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                <Button x:Name="DeleteLastBtn" Content="Delete Last" 
-                                        Style="{StaticResource WarningButton}" 
-                                        Click="DeleteLast_Click" Margin="0,0,10,0" 
-                                        IsEnabled="False"/>
-                                <Button x:Name="ResetSessionBtn" Content="Reset Session" 
-                                        Style="{StaticResource DangerButton}" 
-                                        Click="ResetSession_Click" 
-                                        IsEnabled="False"/>
-                            </StackPanel>
-
-                            <!-- Point Count Display -->
-                            <Border Background="#F8F9FA" BorderBrush="#DEE2E6" BorderThickness="1" 
-                                    CornerRadius="4" Padding="10" Margin="0,0,0,15">
-                                <TextBlock x:Name="PointCountText" Text="Points Collected: 0" 
-                                           FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                            <!-- Weight Input -->
+                            <Border Background="#F8F9FA" BorderBrush="#28A745" BorderThickness="2" 
+                                    CornerRadius="6" Padding="15" Margin="0,0,0,10">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="Enter Target Weight" FontSize="12" FontWeight="SemiBold" 
+                                               Foreground="#155724" Margin="0,0,0,8"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <TextBox x:Name="WeightInput" Text="" FontSize="20" FontWeight="Bold"
+                                                 Width="120" TextAlignment="Center" BorderThickness="0" 
+                                                 Background="Transparent" KeyDown="WeightInput_KeyDown"
+                                                 GotFocus="WeightInput_GotFocus" LostFocus="WeightInput_LostFocus"/>
+                                        <TextBlock Text="kg" FontSize="16" Foreground="#6C757D" 
+                                                   VerticalAlignment="Bottom" Margin="5,0,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
                             </Border>
 
-                            <!-- Calibration Points List -->
+                            <!-- Set Target Button -->
+                            <Button x:Name="SetTargetBtn" Content="Set as Target Weight" 
+                                    Style="{StaticResource SuccessButton}" 
+                                    Click="SetTarget_Click" FontSize="12" Padding="15,8"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Current Reading Card -->
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
+                        <StackPanel>
+                            <TextBlock Text="Current Weight Reading" Style="{StaticResource SectionHeader}"/>
+                            
+                            <!-- Current Weight Display -->
+                            <Border x:Name="CurrentWeightBorder" Background="#E8F5E8" BorderBrush="#28A745" 
+                                    BorderThickness="2" CornerRadius="6" Padding="15" Margin="0,0,0,10">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="Current Total Weight" FontSize="12" 
+                                               Foreground="#155724" HorizontalAlignment="Center"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
+                                        <TextBlock x:Name="CurrentWeightText" Text="0.0" FontSize="24" 
+                                                   FontWeight="Bold" Foreground="#155724"/>
+                                        <TextBlock Text="kg" FontSize="16" Foreground="#155724" 
+                                                   VerticalAlignment="Bottom" Margin="5,0,0,0"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="StabilityText" Text="Waiting for data..." 
+                                               FontSize="10" FontWeight="Bold" Foreground="#28A745" 
+                                               HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Capture Button -->
+                            <Button x:Name="CapturePointBtn" Content="Capture This Point" 
+                                    Style="{StaticResource SuccessButton}" 
+                                    Click="CapturePoint_Click" FontSize="12" Padding="15,8" 
+                                    IsEnabled="False"/>
+                        </StackPanel>
+                    </Border>
+
+
+                </StackPanel>
+
+                <!-- Center Column: Point Management & Data Visualization -->
+                <StackPanel Grid.Column="1" Margin="10,0">
+                    
+                    <!-- Calibration Points Management Card -->
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
+                        <StackPanel>
+                            <TextBlock Text="Calibration Points Management" Style="{StaticResource SectionHeader}"/>
+                            
+                            <!-- Calibration Points Table -->
                             <Border Background="#F8F9FA" BorderBrush="#DEE2E6" BorderThickness="1" 
                                     CornerRadius="4" Padding="10">
                                 <StackPanel>
-                                    <TextBlock Text="Calibration Points" FontWeight="SemiBold" 
+                                    <TextBlock Text="Captured Calibration Points" FontWeight="SemiBold" 
                                                HorizontalAlignment="Center" Margin="0,0,0,10"/>
                                     
-                                    <ListView x:Name="CalibrationPointsList" Height="200" 
+                                    <ListView x:Name="CalibrationPointsList" Height="300" 
                                               Background="White" BorderBrush="#DEE2E6" BorderThickness="1">
                                         <ListView.View>
                                             <GridView>
@@ -273,153 +309,26 @@
                         </StackPanel>
                     </Border>
 
-                </StackPanel>
-
-                <!-- Center Column: Weight Input & Capture -->
-                <StackPanel Grid.Column="1" Margin="10,0">
-                    
-                    <!-- Target Weight Input Card -->
-                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
-                        <StackPanel>
-                            <TextBlock Text="Target Weight Input" Style="{StaticResource SectionHeader}"/>
-                            
-                            <!-- Weight Input -->
-                            <Border Background="#F8F9FA" BorderBrush="#28A745" BorderThickness="2" 
-                                    CornerRadius="6" Padding="20" Margin="0,0,0,15">
-                                <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="Enter Target Weight" FontSize="14" FontWeight="SemiBold" 
-                                               Foreground="#155724" Margin="0,0,0,10"/>
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                        <TextBox x:Name="WeightInput" Text="" FontSize="28" FontWeight="Bold"
-                                                 Width="150" TextAlignment="Center" BorderThickness="0" 
-                                                 Background="Transparent" KeyDown="WeightInput_KeyDown"
-                                                 GotFocus="WeightInput_GotFocus" LostFocus="WeightInput_LostFocus"/>
-                                        <TextBlock Text="kg" FontSize="20" Foreground="#6C757D" 
-                                                   VerticalAlignment="Bottom" Margin="10,0,0,0"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Set Target Button -->
-                            <Button x:Name="SetTargetBtn" Content="Set as Target Weight" 
-                                    Style="{StaticResource SuccessButton}" 
-                                    Click="SetTarget_Click" FontSize="14" Padding="20,10"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Current Reading Card -->
-                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
-                        <StackPanel>
-                            <TextBlock Text="Current Weight Reading" Style="{StaticResource SectionHeader}"/>
-                            
-                            <!-- Current Weight Display -->
-                            <Border x:Name="CurrentWeightBorder" Background="#E8F5E8" BorderBrush="#28A745" 
-                                    BorderThickness="2" CornerRadius="8" Padding="30" Margin="0,0,0,15">
-                                <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="Current Total Weight" FontSize="16" 
-                                               Foreground="#155724" HorizontalAlignment="Center"/>
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
-                                        <TextBlock x:Name="CurrentWeightText" Text="0.0" FontSize="48" 
-                                                   FontWeight="Bold" Foreground="#155724"/>
-                                        <TextBlock Text="kg" FontSize="24" Foreground="#155724" 
-                                                   VerticalAlignment="Bottom" Margin="10,0,0,0"/>
-                                    </StackPanel>
-                                    <TextBlock x:Name="StabilityText" Text="Waiting for data..." 
-                                               FontSize="14" FontWeight="Bold" Foreground="#28A745" 
-                                               HorizontalAlignment="Center" Margin="0,10,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Capture Button -->
-                            <Button x:Name="CapturePointBtn" Content="Capture This Point" 
-                                    Style="{StaticResource SuccessButton}" 
-                                    Click="CapturePoint_Click" FontSize="16" Padding="25,15" 
-                                    IsEnabled="False"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Load Cell Data Card -->
+                    <!-- Real-Time Data Display Card -->
                     <Border Style="{StaticResource CardStyle}">
                         <StackPanel>
-                            <TextBlock Text="Load Cell Readings" Style="{StaticResource SectionHeader}"/>
+                            <TextBlock Text="Real-Time Data Display" Style="{StaticResource SectionHeader}"/>
                             
-                            <!-- Load Cell Grid -->
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Front Left -->
-                                <Border Grid.Row="0" Grid.Column="0" Background="#F8F9FA" 
-                                        BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" 
-                                        Padding="10" Margin="2">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="Front Left" FontSize="10" FontWeight="Bold" 
-                                                   Foreground="#6C757D"/>
-                                        <TextBlock x:Name="FLWeightText" Text="0.0 kg" FontSize="12" 
-                                                   FontWeight="Bold" Foreground="#2C3E50"/>
-                                        <TextBlock x:Name="FLADCText" Text="ADC: 0" FontSize="9" 
-                                                   Foreground="#6C757D"/>
-                                        <TextBlock x:Name="FLVoltageText" Text="0.00V" FontSize="9" 
-                                                   Foreground="#6C757D"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Front Right -->
-                                <Border Grid.Row="0" Grid.Column="1" Background="#F8F9FA" 
-                                        BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" 
-                                        Padding="10" Margin="2">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="Front Right" FontSize="10" FontWeight="Bold" 
-                                                   Foreground="#6C757D"/>
-                                        <TextBlock x:Name="FRWeightText" Text="0.0 kg" FontSize="12" 
-                                                   FontWeight="Bold" Foreground="#2C3E50"/>
-                                        <TextBlock x:Name="FRADCText" Text="ADC: 0" FontSize="9" 
-                                                   Foreground="#6C757D"/>
-                                        <TextBlock x:Name="FRVoltageText" Text="0.00V" FontSize="9" 
-                                                   Foreground="#6C757D"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Rear Left -->
-                                <Border Grid.Row="1" Grid.Column="0" Background="#F8F9FA" 
-                                        BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" 
-                                        Padding="10" Margin="2">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="Rear Left" FontSize="10" FontWeight="Bold" 
-                                                   Foreground="#6C757D"/>
-                                        <TextBlock x:Name="RLWeightText" Text="0.0 kg" FontSize="12" 
-                                                   FontWeight="Bold" Foreground="#2C3E50"/>
-                                        <TextBlock x:Name="RLADCText" Text="ADC: 0" FontSize="9" 
-                                                   Foreground="#6C757D"/>
-                                        <TextBlock x:Name="RLVoltageText" Text="0.00V" FontSize="9" 
-                                                   Foreground="#6C757D"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Rear Right -->
-                                <Border Grid.Row="1" Grid.Column="1" Background="#F8F9FA" 
-                                        BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" 
-                                        Padding="10" Margin="2">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="Rear Right" FontSize="10" FontWeight="Bold" 
-                                                   Foreground="#6C757D"/>
-                                        <TextBlock x:Name="RRWeightText" Text="0.0 kg" FontSize="12" 
-                                                   FontWeight="Bold" Foreground="#2C3E50"/>
-                                        <TextBlock x:Name="RRADCText" Text="ADC: 0" FontSize="9" 
-                                                   Foreground="#6C757D"/>
-                                        <TextBlock x:Name="RRVoltageText" Text="0.00V" FontSize="9" 
-                                                   Foreground="#6C757D"/>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
+                            <!-- Placeholder for Future Graphs -->
+                            <Border Background="#F8F9FA" BorderBrush="#DEE2E6" BorderThickness="1" 
+                                    CornerRadius="4" Padding="20" Height="200">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="📊" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                    <TextBlock Text="Graphs Coming Soon" FontSize="14" FontWeight="Bold" 
+                                               Foreground="#6C757D" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Real-time charts and calibration plots will be added here" 
+                                               FontSize="10" Foreground="#6C757D" 
+                                               HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
+
                 </StackPanel>
 
                 <!-- Right Column: Progress & Status -->

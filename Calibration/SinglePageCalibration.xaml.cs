@@ -23,10 +23,6 @@ namespace SuspensionPCB_CAN_WPF
         private double _maxWeight = 1000.0;
 
         // Hardware data
-        private double _frontLeftWeight = 0.0;
-        private double _frontRightWeight = 0.0;
-        private double _rearLeftWeight = 0.0;
-        private double _rearRightWeight = 0.0;
         private int _frontLeftADC = 0;
 
         // Calibration points management
@@ -104,14 +100,8 @@ namespace SuspensionPCB_CAN_WPF
 
                 Dispatcher.Invoke(() =>
                 {
-                    // Store individual load cell weights
-                    _frontLeftWeight = e.FrontLeftWeight;
-                    _frontRightWeight = e.FrontRightWeight;
-                    _rearLeftWeight = e.RearLeftWeight;
-                    _rearRightWeight = e.RearRightWeight;
-
-                    // Calculate total weight
-                    _currentWeight = CalculateTotalWeight();
+                    // Use total weight directly from event data
+                    _currentWeight = e.TotalVehicleWeight;
 
                     // Add to stability tracking
                     AddWeightSample(_currentWeight);
@@ -696,15 +686,6 @@ namespace SuspensionPCB_CAN_WPF
             if (Ch4Check.IsChecked == true) _channelMask |= 0x08;
         }
 
-        private double CalculateTotalWeight()
-        {
-            double totalWeight = 0.0;
-            if ((_channelMask & 0x01) != 0) totalWeight += _frontLeftWeight;
-            if ((_channelMask & 0x02) != 0) totalWeight += _frontRightWeight;
-            if ((_channelMask & 0x04) != 0) totalWeight += _rearLeftWeight;
-            if ((_channelMask & 0x08) != 0) totalWeight += _rearRightWeight;
-            return totalWeight;
-        }
 
         private void AddWeightSample(double weight)
         {
@@ -763,43 +744,7 @@ namespace SuspensionPCB_CAN_WPF
                 // Update current weight display
                 CurrentWeightText.Text = _currentWeight.ToString("F1");
 
-                // Update load cell displays
-                if (_calibrationActive)
-                {
-                    // During calibration, show calibration-specific data only
-                    FLWeightText.Text = "Target: " + _targetWeight.ToString("F1") + " kg";
-                    FRWeightText.Text = "Points: " + _pointsCollected.ToString();
-                    RLWeightText.Text = "Stability: " + (_isStable ? "Ready" : "Waiting");
-                    RRWeightText.Text = "Status: Active";
-
-                    FLADCText.Text = "Mode: Weight-based";
-                    FRADCText.Text = "Protocol: v0.6";
-                    RLADCText.Text = "Next: Point " + (_pointsCollected + 1).ToString();
-                    RRADCText.Text = "Progress: " + ((double)_pointsCollected / 20.0 * 100).ToString("F0") + "%";
-
-                    FLVoltageText.Text = "Capture when stable";
-                    FRVoltageText.Text = "Click 'Capture Point'";
-                    RLVoltageText.Text = "Min: 2 points";
-                    RRVoltageText.Text = "Max: 20 points";
-                }
-                else
-                {
-                    // Normal mode - show real-time data
-                    FLWeightText.Text = $"{_frontLeftWeight:F1} kg";
-                    FRWeightText.Text = $"{_frontRightWeight:F1} kg";
-                    RLWeightText.Text = $"{_rearLeftWeight:F1} kg";
-                    RRWeightText.Text = $"{_rearRightWeight:F1} kg";
-
-                    FLADCText.Text = $"ADC: {_frontLeftADC}";
-                    FRADCText.Text = $"ADC: {_frontRightADC}";
-                    RLADCText.Text = $"ADC: {_rearLeftADC}";
-                    RRADCText.Text = $"ADC: {_rearRightADC}";
-
-                    FLVoltageText.Text = $"{_frontLeftVoltage:F2}V";
-                    FRVoltageText.Text = $"{_frontRightVoltage:F2}V";
-                    RLVoltageText.Text = $"{_rearLeftVoltage:F2}V";
-                    RRVoltageText.Text = $"{_rearRightVoltage:F2}V";
-                }
+                // Load cell data section removed - no longer needed
 
                 // Update target weight display
                 if (_targetWeight > 0)
@@ -841,17 +786,11 @@ namespace SuspensionPCB_CAN_WPF
                     ProgressText.Text = "Ready to start calibration";
                 }
 
-                // Update point management
-                CurrentPointText.Text = _pointsCollected.ToString();
-                PointCountText.Text = $"Points Collected: {_pointsCollected}";
-
                 // Update button states
-                bool canCapture = _calibrationActive && _targetWeight > 0;
+                SetTargetBtn.IsEnabled = true; // Always enabled - can set target anytime
+                
+                bool canCapture = _calibrationActive && _targetWeight > 0 && _isStable;
                 CapturePointBtn.IsEnabled = canCapture;
-
-                bool canManage = _calibrationActive && _pointsCollected > 0;
-                DeleteLastBtn.IsEnabled = canManage;
-                ResetSessionBtn.IsEnabled = _calibrationActive;
 
                 bool canComplete = _calibrationActive && _pointsCollected >= 2;
                 CompleteCalibrationBtn.IsEnabled = canComplete;
