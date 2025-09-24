@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36327.8 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuspensionPCB_CAN_WPF", "SuspensionPCB_CAN_WPF.csproj", "{4F036A03-EE59-B84B-6296-52A700196A02}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4F036A03-EE59-B84B-6296-52A700196A02}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4F036A03-EE59-B84B-6296-52A700196A02}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4F036A03-EE59-B84B-6296-52A700196A02}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4F036A03-EE59-B84B-6296-52A700196A02}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {988C3458-2A0C-435F-9BB0-CBE44CE8C271}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,45 @@
+# .NET / Visual Studio
+bin/
+obj/
+.vs/
+Debug/
+Release/
+*.user
+*.suo
+*.userprefs
+*.pidb
+*.log
+*.tlog
+*.cache
+*.ide/
+
+# Build outputs
+publish/
+**/PublishProfiles/
+
+# Package restore
+packages/
+*.nupkg
+*.snupkg
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Project-specific large artifacts
+SuspensionPCB_Portable/
+*.zip
+*.7z
+*.rar
+
+# Generated
+*.baml
+*.g.cs
+*~
+
+
