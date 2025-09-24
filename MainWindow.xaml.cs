@@ -132,14 +132,10 @@ namespace SuspensionPCB_CAN_WPF
 
         private void OpenCalibrationBtn_Click(object sender, RoutedEventArgs e)
         {
-            // CalibrationWindow ka object banate waqt 'this' pass karo
-            var calibWindow = new CalibrationWindow(this);
-
-            // Optional: Parent set karna (UX ke liye)
-            calibWindow.Owner = this;
-
-            // Modal window open karo (user jab tak close nahi karega tab tak main window block rahegi)
-            calibWindow.ShowDialog();
+            // Open single-page calibration window
+            var singlePageCalib = new SinglePageCalibration();
+            singlePageCalib.Owner = this;
+            singlePageCalib.ShowDialog();
         }
 
         // OpenCalibrationWindow method bhi isi class me hona chahiye:

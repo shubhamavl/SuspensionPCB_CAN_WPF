@@ -12,7 +12,7 @@ namespace SuspensionPCB_CAN_WPF
     public class CANService
     {
         private SerialPort? _serialPort;
-        private static CANService? _instance;
+        public static CANService? _instance;
         private readonly ConcurrentQueue<byte> _frameBuffer = new();
         public volatile bool _connected;
         private CancellationTokenSource? _cancellationTokenSource;
@@ -28,6 +28,12 @@ namespace SuspensionPCB_CAN_WPF
         private const byte FRAME_HEADER = 0xAA;
         private const byte FRAME_FOOTER = 0x55;
         private const uint MAX_CAN_ID = 0x7FF;    // 11-bit CAN ID limit
+
+        // Manage Calibration Points Operation Constants
+        public const byte MANAGE_CAL_OP_DELETE_LAST = 0x01;      // Delete last point
+        public const byte MANAGE_CAL_OP_RESET_SESSION = 0x02;    // Reset session (clear all points)
+        public const byte MANAGE_CAL_OP_GET_POINT_COUNT = 0x03;  // Get point count
+        public const byte MANAGE_CAL_OP_DELETE_SPECIFIC = 0x04;  // Delete specific point by index
 
         public event Action<CANMessage>? MessageReceived;
         public event EventHandler<string> DataTimeout;
@@ -208,15 +214,12 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        // Check if message ID belongs to suspension system protocol
+        // Check if message ID belongs to suspension system protocol (v0.6)
         private bool IsSuspensionMessage(uint canId)
-
-
         {
             // Explicitly block 0x500 messages
             if (canId == 0x500)
                 return false;
-
 
             switch (canId)
             {
@@ -228,11 +231,14 @@ namespace SuspensionPCB_CAN_WPF
                 case 0x400:  // Variable calibration data
                 case 0x401:  // Calibration quality analysis
                 case 0x402:  // Error response
-                    return true;
-                    // System status
-                    // case 0x500:  // System status summary
 
-                    // return true;
+                // v0.6: New diagnostic responses
+                case 0x403:  // Calibration coefficients response
+                case 0x404:  // Calibration points response
+
+                // System status
+                // case 0x500:  // System status summary
+                    return true;
 
                 default:
                     return false;
@@ -349,7 +355,7 @@ namespace SuspensionPCB_CAN_WPF
             return SendMessage(0x031, data);
         }
 
-        // Helper method to start weight-based variable calibration only
+        // Helper method to start weight-based variable calibration only (v0.6)
         public bool StartVariableCalibration(byte pointCount, byte polyOrder,
                                            bool autoSpacing, ushort maxWeight, byte channelMask = 0x0F)
         {
@@ -361,10 +367,10 @@ namespace SuspensionPCB_CAN_WPF
 
             byte[] data = new byte[8];
             data[0] = 0x01;  // Start Calibration
-            data[1] = pointCount;
-            data[2] = 0x01;  // FIXED: Only Weight-based mode (0x01)
-            data[3] = polyOrder;  // 1-4
-            data[4] = autoSpacing ? (byte)0x01 : (byte)0x00;
+            data[1] = 0x00;  // v0.6: Reserved (was pointCount)
+            data[2] = 0x00;  // v0.6: Reserved (was calibration_mode)
+            data[3] = 0x00;  // v0.6: Reserved (was polynomial_order)
+            data[4] = 0x00;  // v0.6: Reserved (was auto_spacing)
             data[5] = (byte)(maxWeight & 0xFF);        // Max weight low
             data[6] = (byte)((maxWeight >> 8) & 0xFF); // Max weight high
             data[7] = channelMask;
@@ -411,7 +417,7 @@ namespace SuspensionPCB_CAN_WPF
         {
             byte[] data = new byte[8];
             data[0] = 0x03; // Command Type: Set Weight Point ✓
-            data[1] = pointIndex; // Point Index (0-based) ✓
+            data[1] = 0x00; // v0.6: Reserved (point index auto-assigned by firmware)
 
             ushort weightValue = (ushort)(weight * 10); // kg × 10 ✓
             data[2] = (byte)(weightValue & 0xFF);        // Low byte ✓
@@ -423,6 +429,76 @@ namespace SuspensionPCB_CAN_WPF
             data[7] = 0x00; // Reserved ✓
 
             return SendStaticMessage(0x022, data);
+        }
+
+        // v0.6: Get Active Coefficients (0x028)
+        public static bool GetActiveCoefficients(byte channelMask)
+        {
+            byte[] data = new byte[8];
+            data[0] = 0x08; // Command Type: Get Active Coefficients
+            data[1] = channelMask; // Channel mask
+            data[2] = 0x00; // Reserved
+            data[3] = 0x00; // Reserved
+            data[4] = 0x00; // Reserved
+            data[5] = 0x00; // Reserved
+            data[6] = 0x00; // Reserved
+            data[7] = 0x00; // Reserved
+
+            return SendStaticMessage(0x028, data);
+        }
+
+        // v0.6: Get Calibration Points (0x029)
+        public static bool GetCalibrationPoints(byte channelMask)
+        {
+            byte[] data = new byte[8];
+            data[0] = 0x09; // Command Type: Get Calibration Points
+            data[1] = channelMask; // Channel mask
+            data[2] = 0x00; // Reserved
+            data[3] = 0x00; // Reserved
+            data[4] = 0x00; // Reserved
+            data[5] = 0x00; // Reserved
+            data[6] = 0x00; // Reserved
+            data[7] = 0x00; // Reserved
+
+            return SendStaticMessage(0x029, data);
+        }
+
+        // v0.6: Manage Calibration Points (0x02A)
+        public static bool ManageCalibrationPoints(byte channelMask, byte operation)
+        {
+            byte[] data = new byte[8];
+            data[0] = 0x0A; // Command Type: Manage Calibration Points
+            data[1] = channelMask; // Channel mask
+            data[2] = operation; // Operation: 0x01=Delete Last, 0x02=Reset Session, 0x03=Get Count
+            data[3] = 0x00; // Reserved
+            data[4] = 0x00; // Reserved
+            data[5] = 0x00; // Reserved
+            data[6] = 0x00; // Reserved
+            data[7] = 0x00; // Reserved
+
+            return SendStaticMessage(0x02A, data);
+        }
+
+        /// <summary>
+        /// Manage calibration points with specific point index (for Delete Specific Point operation)
+        /// </summary>
+        /// <param name="channelMask">Channel mask</param>
+        /// <param name="operation">Operation type</param>
+        /// <param name="pointIndex">1-based point index (for Delete Specific Point operation)</param>
+        /// <returns>True if message sent successfully</returns>
+        public static bool ManageCalibrationPoints(byte channelMask, byte operation, byte pointIndex)
+        {
+            byte[] data = new byte[8];
+            data[0] = 0x0A; // Command Type: Manage Calibration Points
+            data[1] = channelMask; // Channel mask
+            data[2] = operation; // Operation: 0x01=Delete Last, 0x02=Reset Session, 0x03=Get Count, 0x04=Delete Specific
+            data[3] = pointIndex; // Point index for Delete Specific Point operation
+            data[4] = 0x00; // Reserved
+            data[5] = 0x00; // Reserved
+            data[6] = 0x00; // Reserved
+            data[7] = 0x00; // Reserved
+
+            return SendStaticMessage(0x02A, data);
         }
 
         #region Event Firing Logic for WeightCalibrationPoint
@@ -505,6 +581,16 @@ namespace SuspensionPCB_CAN_WPF
                         Timestamp = DateTime.Now
                     };
                     CommunicationError?.Invoke(this, errorArgs);
+                    break;
+
+                case 0x403: // v0.6: Calibration Coefficients Response
+                    System.Diagnostics.Debug.WriteLine($"0x403 - Calibration Coefficients Response received");
+                    // TODO: Add specific event for coefficients if needed
+                    break;
+
+                case 0x404: // v0.6: Calibration Points Response
+                    System.Diagnostics.Debug.WriteLine($"0x404 - Calibration Points Response received");
+                    // TODO: Add specific event for calibration points if needed
                     break;
             }
         }
