@@ -335,7 +335,16 @@ namespace SuspensionPCB_CAN_WPF
                     _targetWeight = weight;
                     WeightInput.Text = "";
                     UpdateUI();
-                    UpdateStatusMessage($"Target weight set to {weight:F1}kg - Ready to capture");
+                    
+                    // Check if this weight is already captured
+                    if (IsDuplicateWeight(weight))
+                    {
+                        UpdateStatusMessage($"Target weight set to {weight:F1}kg - WARNING: Already captured!");
+                    }
+                    else
+                    {
+                        UpdateStatusMessage($"Target weight set to {weight:F1}kg - Ready to capture");
+                    }
                 }
                 else
                 {
@@ -363,6 +372,14 @@ namespace SuspensionPCB_CAN_WPF
             {
                 MessageBox.Show("Please set a target weight first.", "No Target Weight", 
                               MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Check for duplicate weight points
+            if (IsDuplicateWeight(_targetWeight))
+            {
+                MessageBox.Show($"A calibration point with weight {_targetWeight:F1}kg already exists.\n\nPlease use a different weight or delete the existing point first.", 
+                              "Duplicate Weight Point", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -747,26 +764,64 @@ namespace SuspensionPCB_CAN_WPF
                 CurrentWeightText.Text = _currentWeight.ToString("F1");
 
                 // Update load cell displays
-                FLWeightText.Text = $"{_frontLeftWeight:F1} kg";
-                FRWeightText.Text = $"{_frontRightWeight:F1} kg";
-                RLWeightText.Text = $"{_rearLeftWeight:F1} kg";
-                RRWeightText.Text = $"{_rearRightWeight:F1} kg";
+                if (_calibrationActive)
+                {
+                    // During calibration, show calibration-specific data only
+                    FLWeightText.Text = "Target: " + _targetWeight.ToString("F1") + " kg";
+                    FRWeightText.Text = "Points: " + _pointsCollected.ToString();
+                    RLWeightText.Text = "Stability: " + (_isStable ? "Ready" : "Waiting");
+                    RRWeightText.Text = "Status: Active";
 
-                FLADCText.Text = $"ADC: {_frontLeftADC}";
-                FRADCText.Text = $"ADC: {_frontRightADC}";
-                RLADCText.Text = $"ADC: {_rearLeftADC}";
-                RRADCText.Text = $"ADC: {_rearRightADC}";
+                    FLADCText.Text = "Mode: Weight-based";
+                    FRADCText.Text = "Protocol: v0.6";
+                    RLADCText.Text = "Next: Point " + (_pointsCollected + 1).ToString();
+                    RRADCText.Text = "Progress: " + ((double)_pointsCollected / 20.0 * 100).ToString("F0") + "%";
 
-                FLVoltageText.Text = $"{_frontLeftVoltage:F2}V";
-                FRVoltageText.Text = $"{_frontRightVoltage:F2}V";
-                RLVoltageText.Text = $"{_rearLeftVoltage:F2}V";
-                RRVoltageText.Text = $"{_rearRightVoltage:F2}V";
+                    FLVoltageText.Text = "Capture when stable";
+                    FRVoltageText.Text = "Click 'Capture Point'";
+                    RLVoltageText.Text = "Min: 2 points";
+                    RRVoltageText.Text = "Max: 20 points";
+                }
+                else
+                {
+                    // Normal mode - show real-time data
+                    FLWeightText.Text = $"{_frontLeftWeight:F1} kg";
+                    FRWeightText.Text = $"{_frontRightWeight:F1} kg";
+                    RLWeightText.Text = $"{_rearLeftWeight:F1} kg";
+                    RRWeightText.Text = $"{_rearRightWeight:F1} kg";
+
+                    FLADCText.Text = $"ADC: {_frontLeftADC}";
+                    FRADCText.Text = $"ADC: {_frontRightADC}";
+                    RLADCText.Text = $"ADC: {_rearLeftADC}";
+                    RRADCText.Text = $"ADC: {_rearRightADC}";
+
+                    FLVoltageText.Text = $"{_frontLeftVoltage:F2}V";
+                    FRVoltageText.Text = $"{_frontRightVoltage:F2}V";
+                    RLVoltageText.Text = $"{_rearLeftVoltage:F2}V";
+                    RRVoltageText.Text = $"{_rearRightVoltage:F2}V";
+                }
 
                 // Update target weight display
                 if (_targetWeight > 0)
                 {
                     TargetWeightText.Text = $"{_targetWeight:F1} kg";
                     TargetWeightBorder.Visibility = Visibility.Visible;
+                    
+                    // Check if this weight is already captured
+                    if (IsDuplicateWeight(_targetWeight))
+                    {
+                        TargetWeightBorder.Background = new SolidColorBrush(Color.FromRgb(255, 243, 205)); // Light yellow
+                        TargetWeightBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 193, 7)); // Yellow border
+                        TargetWeightText.Text = $"{_targetWeight:F1} kg (Already Captured)";
+                        TargetWeightText.Foreground = new SolidColorBrush(Color.FromRgb(133, 100, 4)); // Dark yellow text
+                    }
+                    else
+                    {
+                        TargetWeightBorder.Background = new SolidColorBrush(Color.FromRgb(232, 245, 233)); // Light green
+                        TargetWeightBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(40, 167, 69)); // Green border
+                        TargetWeightText.Text = $"{_targetWeight:F1} kg";
+                        TargetWeightText.Foreground = new SolidColorBrush(Color.FromRgb(21, 87, 36)); // Dark green text
+                    }
                 }
                 else
                 {
@@ -896,6 +951,24 @@ namespace SuspensionPCB_CAN_WPF
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error clearing calibration points: {ex.Message}");
+            }
+        }
+
+        private bool IsDuplicateWeight(double weight)
+        {
+            try
+            {
+                // Check if a point with this weight already exists
+                // Use a tolerance of 0.1kg to account for floating point precision
+                const double tolerance = 0.1;
+                
+                return _calibrationPoints.Any(point => 
+                    Math.Abs(point.Weight - weight) < tolerance);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error checking for duplicate weight: {ex.Message}");
+                return false; // If error, allow capture (fail-safe)
             }
         }
 
