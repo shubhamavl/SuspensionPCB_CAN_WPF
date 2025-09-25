@@ -375,7 +375,8 @@ namespace SuspensionPCB_CAN_WPF
             data[6] = (byte)((maxWeight >> 8) & 0xFF); // Max weight high
             data[7] = channelMask;
 
-            return SendMessage(0x020, data);
+            // Use static sender to also echo TX into UI via MessageReceived
+            return SendStaticMessage(0x020, data);
         }
 
 
@@ -386,23 +387,25 @@ namespace SuspensionPCB_CAN_WPF
             {
                 System.Diagnostics.Debug.WriteLine($"CAN TX: ID=0x{canId:X3}, Data=[{string.Join(",", Array.ConvertAll(data, b => $"0x{b:X2}"))}]");
 
-                // Use actual instance to send via hardware
-                if (_instance != null && _instance._connected)
+                if (_instance != null)
                 {
-                    bool success = _instance.SendMessage(canId, data);
+                    var message = new CANMessage(canId, data);
+                    _instance.MessageReceived?.Invoke(message);
 
-                    // Also notify MainWindow for UI display
-                    if (success)
+                    if (_instance._connected)
                     {
-                        var message = new CANMessage(canId, data);
-                        _instance.MessageReceived?.Invoke(message);
+                        bool success = _instance.SendMessage(canId, data);
+                        return success;
                     }
-
-                    return success;
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("CAN Send Error: Not connected to hardware");
+                        return false;
+                    }
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("CAN Send Error: Not connected to hardware");
+                    System.Diagnostics.Debug.WriteLine("CAN Send Error: CANService instance not available");
                     return false;
                 }
             }
@@ -467,7 +470,7 @@ namespace SuspensionPCB_CAN_WPF
         public static bool ManageCalibrationPoints(byte channelMask, byte operation)
         {
             byte[] data = new byte[8];
-            data[0] = 0x0A; // Command Type: Manage Calibration Points
+            data[0] = 0x0B; // Command Type: Manage Calibration Points (v0.6)
             data[1] = channelMask; // Channel mask
             data[2] = operation; // Operation: 0x01=Delete Last, 0x02=Reset Session, 0x03=Get Count
             data[3] = 0x00; // Reserved
@@ -489,7 +492,7 @@ namespace SuspensionPCB_CAN_WPF
         public static bool ManageCalibrationPoints(byte channelMask, byte operation, byte pointIndex)
         {
             byte[] data = new byte[8];
-            data[0] = 0x0A; // Command Type: Manage Calibration Points
+            data[0] = 0x0B; // Command Type: Manage Calibration Points (v0.6)
             data[1] = channelMask; // Channel mask
             data[2] = operation; // Operation: 0x01=Delete Last, 0x02=Reset Session, 0x03=Get Count, 0x04=Delete Specific
             data[3] = pointIndex; // Point index for Delete Specific Point operation

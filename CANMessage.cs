@@ -142,13 +142,13 @@ namespace SuspensionPCB_CAN_WPF
                     return DecodeDataRequest("Axle Weight Data", _message.Data);
 
                 case 0x020:
-                    return DecodeVariableCalibrationStart(_message.Data);
+                    return DecodeVariableCalibrationStartV06(_message.Data);
 
                 case 0x022:
                     return DecodeWeightCalibrationPoint(_message.Data);
 
                 case 0x023:
-                    return DecodePercentageCalibrationPoint(_message.Data);
+                    return "[Removed in v0.6] Percentage calibration is not supported";
 
                 case 0x024:
                     return DecodeCompleteCalibration(_message.Data);
@@ -202,47 +202,41 @@ namespace SuspensionPCB_CAN_WPF
             return $"Request {dataType}: {action} at {rate}";
         }
 
-        private string DecodeVariableCalibrationStart(byte[] data)
+        private string DecodeVariableCalibrationStartV06(byte[] data)
         {
-            if (data.Length < 7) return "Start Variable Calibration (Invalid Data)";
+            if (data.Length < 8) return "Start Variable Calibration (v0.6) [Invalid Data]";
 
-            byte pointCount = data[1];
-            string mode = data[2] == 0x01 ? "Weight-based" : data[2] == 0x02 ? "Percentage-based" : "Unknown";
-            byte polyOrder = data[3];
-            string autoSpacing = data[4] == 0x01 ? "Auto" : "Manual";
+            // v0.6 format:
+            // Byte0: 0x01, Bytes1-4: Reserved (0), Bytes5-6: MaxWeight (kg*10), Byte7: Channel Mask
             ushort maxWeight = (ushort)(data[5] | (data[6] << 8));
-
-            return $"Start Variable Calibration: {pointCount} points, {mode}, Order {polyOrder}, {autoSpacing} spacing, Max {maxWeight / 10.0:F1}kg";
+            byte channelMask = data[7];
+            return $"Start Variable Calibration (v0.6): Max {maxWeight / 10.0:F1} kg, Channels=0x{channelMask:X2}";
         }
 
         private string DecodeWeightCalibrationPoint(byte[] data)
         {
-            if (data.Length < 4) return "Set Weight Point (Invalid Data)";
+            // v0.6 format:
+            // Byte0: 0x03, Byte1: Reserved, Bytes2-3: Weight (kg*10), Byte4: Channel Mask
+            if (data.Length < 5) return "Set Weight Point (v0.6) [Invalid Data]";
 
-            byte pointIndex = data[1];
             ushort weight = (ushort)(data[2] | (data[3] << 8));
-
-            return $"Set Weight Point {pointIndex}: {weight / 10.0:F1} kg";
+            byte channelMask = data[4];
+            return $"Set Weight Point (v0.6): {weight / 10.0:F1} kg, Channels=0x{channelMask:X2}";
         }
 
-        private string DecodePercentageCalibrationPoint(byte[] data)
-        {
-            if (data.Length < 3) return "Set Percentage Point (Invalid Data)";
-
-            byte pointIndex = data[1];
-            byte percentage = data[2];
-
-            return $"Set Percentage Point {pointIndex}: {percentage}%";
-        }
+        // v0.6: Percentage calibration removed
 
         private string DecodeCompleteCalibration(byte[] data)
         {
-            if (data.Length < 4) return "Complete Calibration (Invalid Data)";
+            // v0.6 format:
+            // Byte0: 0x05, Byte1: Channel Mask, Byte2: Auto Analyze, Byte3: Auto Save
+            if (data.Length < 4) return "Complete Calibration (v0.6) [Invalid Data]";
 
             string autoAnalyze = data[2] == 0x01 ? "Auto Analyze" : "Manual";
             string autoSave = data[3] == 0x01 ? "Auto Save" : "Manual";
+            byte channelMask = data[1];
 
-            return $"Complete Calibration: {autoAnalyze}, {autoSave}";
+            return $"Complete Calibration (v0.6): {autoAnalyze}, {autoSave}, Channels=0x{channelMask:X2}";
         }
 
         private string DecodeLoadCellRating(byte[] data)
@@ -281,7 +275,9 @@ namespace SuspensionPCB_CAN_WPF
 
         private string DecodeVariableCalibrationData(byte[] data)
         {
-            if (data.Length < 6) return "Variable Calibration Data (Invalid)";
+            // v0.6 response (0x400):
+            // Byte0: Point Index, Byte1: Status, Bytes2-3: Ref Weight (kg*10), Bytes4-5: ADC
+            if (data.Length < 6) return "Variable Calibration Data (v0.6) [Invalid]";
 
             byte pointIndex = data[0];
             byte status = data[1];
@@ -291,14 +287,11 @@ namespace SuspensionPCB_CAN_WPF
             string statusText = status switch
             {
                 0x00 => "Valid",
-                0x01 => "ADC Timeout",
-                0x02 => "Hardware Failure",
-                0x03 => "Weight Exceeds Max",
-                0x04 => "ADC Out of Range",
-                0x05 => "Unstable Reading",
-                0x06 => "Invalid Point Index",
+                0x80 => "Deleted Last",
+                0x81 => "Session Reset",
+                0x82 => "Specific Point Deleted",
                 0x07 => "Calibration Not Active",
-                _ => $"Error 0x{status:X2}"
+                _ => $"Status 0x{status:X2}"
             };
 
             return $"Calibration Point {pointIndex}: {statusText}, {weight / 10.0:F1}kg, ADC={adcValue}";
@@ -306,7 +299,8 @@ namespace SuspensionPCB_CAN_WPF
 
         private string DecodeCalibrationQuality(byte[] data)
         {
-            if (data.Length < 6) return "Calibration Quality (Invalid)";
+            // v0.6 (0x401): Bytes0-1 Accuracy*10, Bytes2-3 MaxErr*10, Byte4 Grade, Byte5 Recommendation
+            if (data.Length < 6) return "Calibration Quality (v0.6) [Invalid]";
 
             ushort accuracy = BitConverter.ToUInt16(data, 0);
             ushort maxError = BitConverter.ToUInt16(data, 2);
@@ -331,7 +325,7 @@ namespace SuspensionPCB_CAN_WPF
                 _ => "None"
             };
 
-            return $"Quality: {accuracy / 10.0:F1}% accuracy, {gradeText} grade, Rec: {recText}";
+            return $"Quality (v0.6): {accuracy / 10.0:F1}% accuracy, {gradeText} grade, Rec: {recText}";
         }
 
         private string DecodeErrorResponse(byte[] data)

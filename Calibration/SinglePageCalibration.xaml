@@ -162,7 +162,7 @@
 
                             <!-- Max Weight -->
                             <TextBlock Text="Maximum Weight (kg)" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                            <TextBox x:Name="MaxWeightInput" Text="1000.0" FontSize="14" 
+                            <TextBox x:Name="MaxWeightInput" Text="2000.0" FontSize="14" 
                                      Padding="10,8" BorderBrush="#CED4DA" BorderThickness="1" 
                                      Margin="0,0,0,15"/>
 

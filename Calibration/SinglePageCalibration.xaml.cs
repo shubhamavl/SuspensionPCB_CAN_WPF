@@ -19,6 +19,7 @@ namespace SuspensionPCB_CAN_WPF
         private double _targetWeight = 0.0;
         private double _currentWeight = 0.0;
         private bool _isStable = false;
+        private bool _receivedCalibrationResponse = false; // Track 0x400 response
         private byte _channelMask = 0x0F; // All 4 channels by default
         private double _maxWeight = 1000.0;
 
@@ -35,8 +36,7 @@ namespace SuspensionPCB_CAN_WPF
         private double _rearLeftVoltage = 0.0;
         private double _rearRightVoltage = 0.0;
 
-        // Stability tracking
-        private Queue<double> _weightHistory = new Queue<double>();
+        // Communication tracking
         private DateTime _lastDataReceived = DateTime.Now;
         private const int COMMUNICATION_TIMEOUT_MS = 5000;
 
@@ -103,8 +103,7 @@ namespace SuspensionPCB_CAN_WPF
                     // Use total weight directly from event data
                     _currentWeight = e.TotalVehicleWeight;
 
-                    // Add to stability tracking
-                    AddWeightSample(_currentWeight);
+                    // Check stability (simplified)
                     CheckStability();
 
                     UpdateUI();
@@ -150,6 +149,7 @@ namespace SuspensionPCB_CAN_WPF
                 // Handle 0x400 response - calibration point confirmation
                 if (e.PointStatus == 0x00) // Valid point
                 {
+                    _receivedCalibrationResponse = true; // Mark that we received a valid 0x400 response
                     _pointsCollected++;
                     _currentPoint = e.PointIndex;
                     
@@ -271,7 +271,6 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                // Check connection first
                 if (!IsConnected())
                 {
                     MessageBox.Show("Device is disconnected. Please connect to hardware first.", 
@@ -297,17 +296,34 @@ namespace SuspensionPCB_CAN_WPF
                     return;
                 }
 
+                // Send 0x020 - Start Variable Calibration (v0.6)
+                // Note: pointCount is ignored by v0.6 payload but validated (2-20). Use 10.
+                ushort maxWeightDeciKg = (ushort)Math.Max(0, (int)(_maxWeight * 10));
+                bool started = CANService._instance?.StartVariableCalibration(
+                                    pointCount: 10,
+                                    polyOrder: 1,
+                                    autoSpacing: false,
+                                    maxWeight: maxWeightDeciKg,
+                                    channelMask: _channelMask) ?? false;
+
+                if (!started)
+                {
+                    MessageBox.Show("Failed to start calibration (0x020). Please check connection and try again.",
+                                    "Start Calibration Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
                 // Start calibration session
                 _calibrationActive = true;
                 _currentPoint = 0;
                 _pointsCollected = 0;
                 _targetWeight = 0.0;
+                _receivedCalibrationResponse = false; // Reset response flag
 
                 UpdateUI();
                 UpdateStatusMessage("Calibration started - Enter target weight and capture points");
 
-                // Request weight data
-                RequestWeightData();
+                
             }
             catch (Exception ex)
             {
@@ -530,7 +546,6 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     try
                     {
-                        // Check connection first
                         if (!IsConnected())
                         {
                             MessageBox.Show("Device is disconnected. Please connect to hardware first.", 
@@ -590,7 +605,6 @@ namespace SuspensionPCB_CAN_WPF
 
         private void SendSetWeightPointCommand(double weight)
         {
-            // Check connection before sending
             if (!IsConnected())
             {
                 throw new Exception("Device is disconnected. Please connect to hardware first.");
@@ -630,7 +644,7 @@ namespace SuspensionPCB_CAN_WPF
             {
                 // 0x02A - Manage Calibration Points
                 byte[] data = new byte[8];
-                data[0] = 0x0A; // Command Type: Manage Calibration Points
+                data[0] = 0x0B; // Command Type: Manage Calibration Points (v0.6)
                 data[1] = _channelMask; // Channel mask
                 data[2] = operation; // Operation: 0x01=Delete Last, 0x02=Reset Session, 0x03=Get Count
                 data[3] = 0x00; // Reserved
@@ -687,31 +701,21 @@ namespace SuspensionPCB_CAN_WPF
         }
 
 
-        private void AddWeightSample(double weight)
-        {
-            _weightHistory.Enqueue(weight);
-            if (_weightHistory.Count > 20)
-            {
-                _weightHistory.Dequeue();
-            }
-        }
 
         private void CheckStability()
         {
-            if (_weightHistory.Count < 10)
+            // [CALIBRATION MODE] When calibration is active, check for 0x400 response
+            // according to CAN protocol v0.6 - we should receive 0x400 with status 0x00 (Valid)
+            if (_calibrationActive)
             {
-                _isStable = false;
+                // Check if we received a valid 0x400 response after starting calibration
+                // Status 0x00 = Valid point data is ready
+                _isStable = _receivedCalibrationResponse;
                 return;
             }
 
-            // Calculate standard deviation
-            double[] samples = _weightHistory.ToArray();
-            double average = samples.Average();
-            double variance = samples.Select(s => Math.Pow(s - average, 2)).Average();
-            double stdDev = Math.Sqrt(variance);
-
-            // Check if readings are stable
-            _isStable = stdDev < 0.1; // 0.1kg stability threshold
+            // [NORMAL MODE] Always stable when not in calibration mode
+            _isStable = true;
         }
 
         private void UpdateConnectionStatus()
@@ -798,7 +802,24 @@ namespace SuspensionPCB_CAN_WPF
                 CancelCalibrationBtn.IsEnabled = _calibrationActive;
 
                 // Update stability indicator
-                if (_isStable)
+                if (_calibrationActive)
+                {
+                    if (_receivedCalibrationResponse)
+                    {
+                        StabilityText.Text = "● Calibration Mode - Ready to Capture";
+                        StabilityText.Foreground = new SolidColorBrush(Color.FromRgb(40, 167, 69));
+                        CurrentWeightBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(40, 167, 69));
+                        CurrentWeightBorder.Background = new SolidColorBrush(Color.FromRgb(232, 245, 233));
+                    }
+                    else
+                    {
+                        StabilityText.Text = "● Calibration Mode - Waiting for 0x400 Response";
+                        StabilityText.Foreground = new SolidColorBrush(Color.FromRgb(255, 193, 7));
+                        CurrentWeightBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 193, 7));
+                        CurrentWeightBorder.Background = new SolidColorBrush(Color.FromRgb(255, 243, 205));
+                    }
+                }
+                else if (_isStable)
                 {
                     StabilityText.Text = "● Ready to Capture";
                     StabilityText.Foreground = new SolidColorBrush(Color.FromRgb(40, 167, 69));
@@ -951,8 +972,8 @@ namespace SuspensionPCB_CAN_WPF
             _currentPoint = 0;
             _pointsCollected = 0;
             _targetWeight = 0.0;
-            _weightHistory.Clear();
             _isStable = false;
+            _receivedCalibrationResponse = false; // Reset response flag
 
             // Reset quality metrics
             _accuracyPercentage = 0.0;
