@@ -379,6 +379,24 @@ namespace SuspensionPCB_CAN_WPF
             return SendStaticMessage(0x020, data);
         }
 
+        // Get active calibration coefficients for verification
+        public bool GetActiveCalibrationCoefficients(byte channelMask = 0x0F)
+        {
+            byte[] data = new byte[8];
+            data[0] = 0x09;  // Get Active Coefficients command
+            data[1] = channelMask;  // Channel mask (0x0F = all channels)
+            data[2] = 0x00;  // Reserved
+            data[3] = 0x00;  // Reserved
+            data[4] = 0x00;  // Reserved
+            data[5] = 0x00;  // Reserved
+            data[6] = 0x00;  // Reserved
+            data[7] = 0x00;  // Reserved
+
+            return SendStaticMessage(0x028, data);
+        }
+
+        // Get calibration points for verification (removed duplicate - using static method below)
+
 
         // Static methods for easy access from all windows
         public static bool SendStaticMessage(uint canId, byte[] data)
@@ -665,6 +683,28 @@ namespace SuspensionPCB_CAN_WPF
         public double MaxErrorKg { get; set; }
         public byte QualityGrade { get; set; }
         public byte Recommendation { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    // Calibration verification data structure
+    public class CalibrationVerificationData
+    {
+        public double CalibratedWeight { get; set; }  // Weight from calibration
+        public double RawADCWeight { get; set; }      // Weight from raw ADC conversion
+        public int RawADCValue { get; set; }         // Raw ADC reading
+        public double ErrorPercentage { get; set; }    // Calibration error percentage
+        public bool IsAccurate { get; set; }         // Within acceptable error range
+        public DateTime Timestamp { get; set; }
+    }
+
+    // Calibration coefficients data structure
+    public class CalibrationCoefficientsData
+    {
+        public byte Channel { get; set; }            // Channel number (0-7)
+        public byte Order { get; set; }              // Polynomial order (1-4)
+        public byte Segment { get; set; }            // Segment index (0-2)
+        public double CoefficientA { get; set; }    // Coefficient A (scaled by 1000)
+        public double CoefficientB { get; set; }    // Coefficient B (scaled by 1000)
         public DateTime Timestamp { get; set; }
     }
 

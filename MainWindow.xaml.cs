@@ -148,6 +148,21 @@ namespace SuspensionPCB_CAN_WPF
             calibWindow.ShowDialog();      // modal open
         }
 
+        // Open Calibration Verification Window
+        private void OpenCalibrationVerificationWindow()
+        {
+            try
+            {
+                var verificationWindow = new CalibrationVerificationWindow();
+                verificationWindow.Owner = this;
+                verificationWindow.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error opening calibration verification window: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void InitializeApplication()
         {
             if (MessageGrid != null)
@@ -264,7 +279,8 @@ namespace SuspensionPCB_CAN_WPF
                             PointIndex = message.Data[0],
                             PointStatus = message.Data[1],
                             ReferenceWeight = BitConverter.ToUInt16(message.Data, 2) / 10.0,
-                            ADCValue = BitConverter.ToUInt16(message.Data, 4)
+                            ADCValue = BitConverter.ToUInt16(message.Data, 4),
+                            Timestamp = DateTime.Now
                         };
 
                         // Check if this is auto-generated point response (after 0x020)
@@ -374,6 +390,22 @@ namespace SuspensionPCB_CAN_WPF
                         }
                     }
                     break;
+                    
+                case 0x405: // Calibration Debug Response (for debugging)
+                    if (message.Data?.Length >= 8)
+                    {
+                        var debugData = new CalibrationPointData
+                        {
+                            PointIndex = message.Data[0],
+                            PointStatus = message.Data[1],
+                            ReferenceWeight = BitConverter.ToUInt16(message.Data, 2) / 10.0,
+                            ADCValue = BitConverter.ToUInt16(message.Data, 4),
+                            Timestamp = DateTime.Now
+                        };
+                        
+                        System.Diagnostics.Debug.WriteLine($"*** DEBUG RESPONSE (0x405): Point={debugData.PointIndex}, Status=0x{debugData.PointStatus:X2}, RefWeight={debugData.ReferenceWeight:F1}kg, ADC={debugData.ADCValue}, CurrentWeight={BitConverter.ToUInt16(message.Data, 6) / 10.0:F1}kg ***");
+                    }
+                    break;
 
                 case 0x500: // System Status Summary
                     if (message.Data?.Length >= 3)
@@ -385,6 +417,28 @@ namespace SuspensionPCB_CAN_WPF
                         System.Diagnostics.Debug.WriteLine($"System Status: {systemStatus}, Error Flags: 0x{errorFlags:X2}, Nodes: {nodeCount}");
                     }
                     break;
+            }
+        }
+
+        private void OpenWeightCalibrationWindowImmediately(int totalPoints, double maxWeight, byte channelMask, byte polyOrder)
+        {
+            try
+            {
+                _activeCalibrationWindow = new WeightCalibrationPoint(
+                    totalPoints,    // totalPoints
+                    maxWeight,      // maxKg  
+                    channelMask,    // channels
+                    polyOrder       // polyOrder
+                );
+
+                _activeCalibrationWindow.Owner = this;
+                _activeCalibrationWindow.Show();
+
+                System.Diagnostics.Debug.WriteLine($"WeightCalibrationPoint opened immediately - waiting for 0x400 response with status 0x80");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error opening calibration window: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -795,7 +849,12 @@ namespace SuspensionPCB_CAN_WPF
 
                     OnCANMessageReceived(new CANMessage(0x020, logData));
 
-                    System.Diagnostics.Debug.WriteLine($"Calibration started, waiting for {pointCount} auto-generated points (0x400 responses)...");
+                    System.Diagnostics.Debug.WriteLine($"Calibration started, opening WeightCalibrationPoint window...");
+                    
+                    // Open WeightCalibrationPoint window immediately (v0.6 protocol)
+                    Dispatcher.BeginInvoke(new Action(() => {
+                        OpenWeightCalibrationWindowImmediately(pointCount, maxWeight, channelMask, polyOrder);
+                    }));
                 }
 
                 return success;
@@ -955,6 +1014,7 @@ namespace SuspensionPCB_CAN_WPF
         public byte PointStatus { get; set; }
         public double ReferenceWeight { get; set; }
         public int ADCValue { get; set; }
+        public DateTime Timestamp { get; set; } = DateTime.Now;
     }
 
     // Data structures for protocol v0.5
@@ -1005,6 +1065,18 @@ namespace SuspensionPCB_CAN_WPF
                 0x05 => "Unstable Reading",
                 0x06 => "Invalid Point Index",
                 0x07 => "Calibration Not Active",
+                0x80 => "Calibration Started",
+                0x81 => "Session Reset",
+                0x82 => "Calibration Completed",
+                0x83 => "Calibration Saved",
+                0x84 => "Calibration Loaded",
+                0x85 => "Point Deleted",
+                0x86 => "Session Reset",
+                0x87 => "Point Count",
+                0x88 => "Specific Point Deleted",
+                0x90 => "Calibrated Weight Verification", // After calibration complete
+                0x91 => "Raw ADC Conversion (During Calibration)", // During calibration
+                0x92 => "Current Weight at Start", // Average weight of selected channels
                 _ => $"Unknown Error (0x{PointStatus:X2})"
             };
         }
@@ -1031,6 +1103,119 @@ namespace SuspensionPCB_CAN_WPF
                 0x03 => "Add More Points",
                 _ => "No Recommendation"
             };
+        }
+    }
+
+    // Calibration Verification Window
+    public class CalibrationVerificationWindow : Window
+    {
+        private CANService? _canService;
+        private Dictionary<byte, CalibrationCoefficientsData> _coefficients = new Dictionary<byte, CalibrationCoefficientsData>();
+        private Dictionary<byte, CalibrationVerificationData> _verificationData = new Dictionary<byte, CalibrationVerificationData>();
+        
+        public CalibrationVerificationWindow()
+        {
+            // Initialize basic window properties
+            Title = "Calibration Verification";
+            Width = 600;
+            Height = 400;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            
+            _canService = CANService._instance;
+            
+            if (_canService != null)
+            {
+                // Subscribe to calibration data events
+                CANService.CalibrationDataReceived += OnCalibrationDataReceived;
+                
+                // Request calibration coefficients
+                _canService.GetActiveCalibrationCoefficients(0x0F); // All channels
+            }
+        }
+        
+        private void OnCalibrationDataReceived(object sender, CalibrationDataEventArgs e)
+        {
+            Dispatcher.Invoke(() => {
+                System.Diagnostics.Debug.WriteLine($"Calibration verification data received: Channel={e.PointIndex}, Status=0x{e.PointStatus:X2}, Weight={e.ReferenceWeight:F1}kg, ADC={e.ADCValue}");
+                
+                // Process calibration data for verification
+                if (e.PointStatus == 0x00) // Valid point (reference weight)
+                {
+                    // Store reference weight for comparison
+                    var verificationData = new CalibrationVerificationData
+                    {
+                        CalibratedWeight = e.ReferenceWeight, // This is the reference weight from 0x022
+                        RawADCWeight = e.ADCValue / 10.0, // Simple raw ADC conversion
+                        RawADCValue = e.ADCValue,
+                        ErrorPercentage = 0.0, // Will be calculated when we get calibrated weight
+                        IsAccurate = false, // Will be updated when we get calibrated weight
+                        Timestamp = e.Timestamp
+                    };
+                    
+                    _verificationData[(byte)e.PointIndex] = verificationData;
+                    UpdateVerificationDisplay();
+                }
+                else if (e.PointStatus == 0x90) // Calibrated weight verification (after calibration complete)
+                {
+                    // This is the calibrated weight from g_suspension_weight_data
+                    if (_verificationData.ContainsKey((byte)e.PointIndex))
+                    {
+                        var data = _verificationData[(byte)e.PointIndex];
+                        
+                        // Calculate error percentage between reference and calibrated weights
+                        double errorPercentage = Math.Abs(data.CalibratedWeight - e.ReferenceWeight) / data.CalibratedWeight * 100.0;
+                        
+                        // Update verification data
+                        data.CalibratedWeight = e.ReferenceWeight; // This is now the calibrated weight
+                        data.ErrorPercentage = errorPercentage;
+                        data.IsAccurate = errorPercentage < 5.0; // Within 5% is considered accurate
+                        data.Timestamp = e.Timestamp;
+                        
+                        System.Diagnostics.Debug.WriteLine($"Calibration verification (COMPLETE): Reference={data.CalibratedWeight:F1}kg, Calibrated={e.ReferenceWeight:F1}kg, Error={errorPercentage:F2}%, Accurate={data.IsAccurate}");
+                        UpdateVerificationDisplay();
+                    }
+                }
+                else if (e.PointStatus == 0x91) // Raw ADC conversion (during calibration)
+                {
+                    // This is the raw ADC conversion during calibration
+                    if (_verificationData.ContainsKey((byte)e.PointIndex))
+                    {
+                        var data = _verificationData[(byte)e.PointIndex];
+                        
+                        // Calculate error percentage between reference and raw ADC conversion
+                        double errorPercentage = Math.Abs(data.CalibratedWeight - e.ReferenceWeight) / data.CalibratedWeight * 100.0;
+                        
+                        // Update verification data
+                        data.RawADCWeight = e.ReferenceWeight; // This is the raw ADC conversion
+                        data.ErrorPercentage = errorPercentage;
+                        data.IsAccurate = false; // Raw conversion is not calibrated
+                        data.Timestamp = e.Timestamp;
+                        
+                        System.Diagnostics.Debug.WriteLine($"Calibration verification (DURING): Reference={data.CalibratedWeight:F1}kg, Raw ADC={e.ReferenceWeight:F1}kg, Error={errorPercentage:F2}%, Note: Raw conversion during calibration");
+                        UpdateVerificationDisplay();
+                    }
+                }
+                else if (e.PointStatus == 0x92) // Current weight at calibration start
+                {
+                    // This is the current weight at the start of calibration
+                    System.Diagnostics.Debug.WriteLine($"Calibration start weight: Current={e.ReferenceWeight:F1}kg, ADC={e.ADCValue}, Note: Average weight of selected channels");
+                    UpdateVerificationDisplay();
+                }
+            });
+        }
+        
+        private void UpdateVerificationDisplay()
+        {
+            // Update UI with verification data
+            // This would be implemented with actual UI controls
+            System.Diagnostics.Debug.WriteLine($"Verification data updated: {_verificationData.Count} channels");
+        }
+        
+        protected override void OnClosed(EventArgs e)
+        {
+            // Unsubscribe from events
+            CANService.CalibrationDataReceived -= OnCalibrationDataReceived;
+            base.OnClosed(e);
         }
     }
 }

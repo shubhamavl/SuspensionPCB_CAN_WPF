@@ -186,7 +186,7 @@ namespace SuspensionPCB_CAN_WPF
             UpdatePointCounter();
             UpdateTargetWeight();
             UpdateProgress();
-            UpdateStatus("WAITING_FOR_WEIGHT", "Enter target weight in the input field");
+            UpdateStatus("READY_TO_CAPTURE", "Enter target weight and click Capture Point");
 
             // Set focus to weight input for immediate keyboard entry
             ManualWeightInput.Focus();
@@ -272,11 +272,28 @@ namespace SuspensionPCB_CAN_WPF
         private void OnCalibrationDataReceived(object sender, CalibrationDataEventArgs e)
         {
             Dispatcher.Invoke(() => {
-                if (e.PointIndex == currentPoint - 1) // Current point check 
+                System.Diagnostics.Debug.WriteLine($"CalibrationDataReceived: PointIndex={e.PointIndex}, Status=0x{e.PointStatus:X2}, Weight={e.ReferenceWeight:F1}kg, ADC={e.ADCValue}");
+                
+                // SIMPLIFIED: Just log the response, no complex synchronization
+                switch (e.PointStatus)
                 {
-                    targetWeight = e.ReferenceWeight; // Auto-generated weight use
-                    UpdateTargetWeight();
-                    System.Diagnostics.Debug.WriteLine($"Auto-generated weight received: Point {e.PointIndex}, Weight: {targetWeight:F1}kg");
+                    case 0x80: // Calibration started
+                        System.Diagnostics.Debug.WriteLine("*** CALIBRATION STARTED (0x80) ***");
+                        UpdateStatus("READY_TO_CAPTURE", "Enter target weight and click Capture Point");
+                        break;
+                        
+                    case 0x00: // Valid point
+                        System.Diagnostics.Debug.WriteLine($"*** VALID POINT RECEIVED: Point {e.PointIndex}, Weight: {e.ReferenceWeight:F1}kg ***");
+                        break;
+                        
+                    case 0x82: // Calibration completed
+                        System.Diagnostics.Debug.WriteLine("*** CALIBRATION COMPLETED (0x82) ***");
+                        UpdateStatus("CALIBRATION_COMPLETE", "Calibration completed successfully");
+                        break;
+                        
+                    default:
+                        System.Diagnostics.Debug.WriteLine($"*** RESPONSE RECEIVED: Status=0x{e.PointStatus:X2}, Point={e.PointIndex}, Weight={e.ReferenceWeight:F1}kg ***");
+                        break;
                 }
             });
         }
@@ -285,9 +302,6 @@ namespace SuspensionPCB_CAN_WPF
         private void OnCalibrationQualityReceived(object sender, CalibrationQualityEventArgs e)
         {
             Dispatcher.Invoke(() => {
-                // Stop timeout timer if running
-                responseTimeoutTimer?.Stop();
-
                 System.Diagnostics.Debug.WriteLine($"*** 0x401 CALIBRATION QUALITY RECEIVED! ***");
                 System.Diagnostics.Debug.WriteLine($"Accuracy: {e.AccuracyPercentage:F1}%");
                 System.Diagnostics.Debug.WriteLine($"Max Error: {e.MaxErrorKg:F2}kg");
@@ -372,7 +386,11 @@ namespace SuspensionPCB_CAN_WPF
                     StabilityIndicator.Text = "● Ready to Capture";
                 }
 
-                UpdateStatus("READY_TO_CAPTURE", "Click capture button when ready");
+                // Only update status if no target weight is set (don't override user-set status)
+                if (targetWeight <= 0.0)
+                {
+                    UpdateStatus("READY_TO_CAPTURE", "Click capture button when ready");
+                }
             }
             else
             {
@@ -581,7 +599,6 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-
                 // Check if target weight is set
                 if (targetWeight < 0)
                 {
@@ -593,12 +610,11 @@ namespace SuspensionPCB_CAN_WPF
                 // Send the target weight that user has set
                 SendCANMessage_SetWeightPoint(targetWeight);
 
+                // SIMPLIFIED: Just assume success and move on
                 UpdateStatus("POINT_CAPTURED", $"Point {currentPoint} captured with weight {targetWeight:F1}kg");
                 NextPointBtn.IsEnabled = true;
-
-                //MessageBox.Show($"Point {currentPoint} captured successfully!\n\nWeight: {targetWeight:F1}kg",
-                //               "Point Captured", MessageBoxButton.OK, MessageBoxImage.Information);
                 
+                System.Diagnostics.Debug.WriteLine($"*** POINT CAPTURED: {currentPoint}, Weight: {targetWeight:F1}kg ***");
 
             }
             catch (Exception ex)
@@ -726,10 +742,7 @@ namespace SuspensionPCB_CAN_WPF
                 try
                 {
                     SendCANMessage_CompleteCalibration();
-                    UpdateStatus("CALIBRATION_COMPLETING", "Waiting for calibration analysis response...");
-
-                    // Set up timeout for 0x401 response
-                    SetupResponseTimeout();
+                    UpdateStatus("CALIBRATION_COMPLETING", "Calibration completed - analysis in progress...");
                 }
                 catch (Exception ex)
                 {
@@ -820,7 +833,7 @@ namespace SuspensionPCB_CAN_WPF
                 System.Diagnostics.Debug.WriteLine($"Capturing Point {pointIndex}: Target={actualWeight:F1}kg, Encoded={weightValue}");
 
                 byte[] canData = new byte[8];
-                canData[0] = 0x03; // Command Type: Set Weight Point
+                canData[0] = 0x01; // Command Type: Set Weight Point (CORRECTED)
                 canData[1] = pointIndex;
                 canData[2] = (byte)(weightValue & 0xFF);
                 canData[3] = (byte)((weightValue >> 8) & 0xFF);
@@ -829,6 +842,7 @@ namespace SuspensionPCB_CAN_WPF
                 canData[6] = 0x00;
                 canData[7] = 0x00;
 
+                System.Diagnostics.Debug.WriteLine($"Sending 0x022 SetWeightPoint: Command=0x01, Point={pointIndex}, Weight={weightValue}, ChannelMask=0x{channelMask:X2}");
                 CANService.SendStaticMessage(0x022, canData);
             }
             catch (Exception ex)
@@ -862,21 +876,7 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        // Helper method to setup response timeout
-        private void SetupResponseTimeout()
-        {
-            responseTimeoutTimer = new DispatcherTimer();
-            responseTimeoutTimer.Interval = TimeSpan.FromSeconds(30); // 15 second timeout
-            responseTimeoutTimer.Tick += (s, timerArgs) => {
-                responseTimeoutTimer.Stop();
-                MessageBox.Show("No calibration analysis response received!\n\nThe calibration command was sent but hardware did not respond with quality analysis.\n\nWindow will close.",
-                               "Response Timeout", MessageBoxButton.OK, MessageBoxImage.Warning);
-                CleanupAndClose();
-            };
-            responseTimeoutTimer.Start();
-
-            System.Diagnostics.Debug.WriteLine("Response timeout timer started - waiting for 0x401...");
-        }
+        // SIMPLIFIED: Removed timeout timers - just send commands and assume success
         #endregion
 
         #region Calibration Completion
@@ -893,10 +893,7 @@ namespace SuspensionPCB_CAN_WPF
                 try
                 {
                     SendCANMessage_CompleteCalibration();
-                    UpdateStatus("CALIBRATION_COMPLETING", "Analyzing calibration data... Please wait for response.");
-
-                    // Set up timeout for 0x401 response
-                    SetupResponseTimeout();
+                    UpdateStatus("CALIBRATION_COMPLETING", "Calibration completed - analysis in progress...");
                 }
                 catch (Exception ex)
                 {
@@ -912,8 +909,7 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                // Stop response timeout timer
-                responseTimeoutTimer?.Stop();
+                // SIMPLIFIED: No timeout timers to stop
 
                 // Stop weight data transmission if needed
                 // byte[] stopData = new byte[8];

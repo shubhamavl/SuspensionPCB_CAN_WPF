@@ -287,9 +287,18 @@ namespace SuspensionPCB_CAN_WPF
             string statusText = status switch
             {
                 0x00 => "Valid",
-                0x80 => "Deleted Last",
+                0x80 => "Calibration Started",
                 0x81 => "Session Reset",
-                0x82 => "Specific Point Deleted",
+                0x82 => "Calibration Completed",
+                0x83 => "Calibration Saved",
+                0x84 => "Calibration Loaded",
+                0x85 => "Point Deleted",
+                0x86 => "Session Reset",
+                0x87 => "Point Count",
+                0x88 => "Specific Point Deleted",
+                0x90 => "Calibrated Weight Verification",
+                0x91 => "Raw ADC Conversion",
+                0x92 => "Current Weight at Start",
                 0x07 => "Calibration Not Active",
                 _ => $"Status 0x{status:X2}"
             };

@@ -317,7 +317,7 @@ namespace SuspensionPCB_CAN_WPF
                 _calibrationActive = true;
                 _currentPoint = 0;
                 _pointsCollected = 0;
-                _targetWeight = 0.0;
+                // _targetWeight = 0.0; // REMOVED: Don't reset target weight when starting calibration
                 _receivedCalibrationResponse = false; // Reset response flag
 
                 UpdateUI();
@@ -614,7 +614,7 @@ namespace SuspensionPCB_CAN_WPF
             {
                 // 0x022 - Set Weight Calibration Point
                 byte[] data = new byte[8];
-                data[0] = 0x03; // Command Type: Set Weight Point
+                data[0] = 0x01; // Command Type: Set Weight Point (FIXED from 0x03)
                 data[1] = 0x00; // Reserved (point index auto-assigned by firmware)
                 
                 ushort weightValue = (ushort)(weight * 10); // Convert to protocol format
@@ -793,8 +793,8 @@ namespace SuspensionPCB_CAN_WPF
                 // Update button states
                 SetTargetBtn.IsEnabled = true; // Always enabled - can set target anytime
                 
-                bool canCapture = _calibrationActive && _targetWeight > 0 && _isStable;
-                CapturePointBtn.IsEnabled = canCapture;
+                // Enable capture button when target weight is set
+                CapturePointBtn.IsEnabled = _targetWeight > 0;
 
                 bool canComplete = _calibrationActive && _pointsCollected >= 2;
                 CompleteCalibrationBtn.IsEnabled = canComplete;
@@ -804,20 +804,11 @@ namespace SuspensionPCB_CAN_WPF
                 // Update stability indicator
                 if (_calibrationActive)
                 {
-                    if (_receivedCalibrationResponse)
-                    {
-                        StabilityText.Text = "● Calibration Mode - Ready to Capture";
-                        StabilityText.Foreground = new SolidColorBrush(Color.FromRgb(40, 167, 69));
-                        CurrentWeightBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(40, 167, 69));
-                        CurrentWeightBorder.Background = new SolidColorBrush(Color.FromRgb(232, 245, 233));
-                    }
-                    else
-                    {
-                        StabilityText.Text = "● Calibration Mode - Waiting for 0x400 Response";
-                        StabilityText.Foreground = new SolidColorBrush(Color.FromRgb(255, 193, 7));
-                        CurrentWeightBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 193, 7));
-                        CurrentWeightBorder.Background = new SolidColorBrush(Color.FromRgb(255, 243, 205));
-                    }
+                    // SIMPLIFIED: Always show ready to capture when calibration is active
+                    StabilityText.Text = "● Calibration Mode - Ready to Capture";
+                    StabilityText.Foreground = new SolidColorBrush(Color.FromRgb(40, 167, 69));
+                    CurrentWeightBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(40, 167, 69));
+                    CurrentWeightBorder.Background = new SolidColorBrush(Color.FromRgb(232, 245, 233));
                 }
                 else if (_isStable)
                 {

@@ -229,8 +229,7 @@
                             <!-- Capture Button -->
                             <Button x:Name="CapturePointBtn" Content="Capture This Point" 
                                     Style="{StaticResource SuccessButton}" 
-                                    Click="CapturePoint_Click" FontSize="12" Padding="15,8" 
-                                    IsEnabled="False"/>
+                                    Click="CapturePoint_Click" FontSize="12" Padding="15,8"/>
                         </StackPanel>
                     </Border>
 
