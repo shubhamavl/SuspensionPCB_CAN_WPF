@@ -52,12 +52,7 @@
 
                 <!-- Connection -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <ComboBox x:Name="BaudRateCombo" Width="100" Margin="5" SelectedIndex="1">
-                        <ComboBoxItem>500 kbps</ComboBoxItem>
-                        <ComboBoxItem>250 kbps</ComboBoxItem>
-                        <ComboBoxItem>125 kbps</ComboBoxItem>
-                        <ComboBoxItem>1 Mbps</ComboBoxItem>
-                    </ComboBox>
+                    <TextBlock Text="250 kbps" VerticalAlignment="Center" Margin="5" FontWeight="Bold" Foreground="#FF1B5E96"/>
                     <Button x:Name="ConnectBtn" Content="Connect" 
                             Style="{StaticResource ModernButton}" 
                             Click="ConnectBtn_Click"/>
@@ -69,14 +64,29 @@
 
                 <!-- Test Messages -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="RequestSuspensionBtn" Content="Req Suspension" 
-                            Style="{StaticResource ModernButton}" 
-                            Background="#FF28A745" Click="RequestSuspensionBtn_Click" 
-                            IsEnabled="False" ToolTip="Send 0x030 request for Suspension Weight Data"/>
-                    <Button x:Name="RequestAxleBtn" Content="Req Axle" 
-                            Style="{StaticResource ModernButton}" 
-                            Background="#FF28A745" Click="RequestAxleBtn_Click" 
-                            IsEnabled="False" ToolTip="Send 0x031 request for Axle Weight Data"/>
+                    <StackPanel Orientation="Vertical" Margin="0,0,10,0">
+                        <ComboBox x:Name="DataTypeCombo" Width="100" Margin="0,0,0,5" SelectedIndex="0">
+                            <ComboBoxItem Content="Calibrated"/>
+                            <ComboBoxItem Content="Uncalibrated"/>
+                        </ComboBox>
+                        <ComboBox x:Name="TransmissionRateCombo" Width="80" Margin="0,0,0,5" SelectedIndex="1">
+                            <ComboBoxItem Content="100 Hz"/>
+                            <ComboBoxItem Content="500 Hz"/>
+                            <ComboBoxItem Content="1024 Hz"/>
+                            <ComboBoxItem Content="2000 Hz"/>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Orientation="Vertical" Margin="0,0,10,0">
+                        <Button x:Name="RequestSuspensionBtn" Content="Req Suspension" 
+                                Style="{StaticResource ModernButton}" 
+                                Background="#FF28A745" Click="RequestSuspensionBtn_Click" 
+                                IsEnabled="False" ToolTip="Send request for Suspension Weight Data"/>
+                        <Button x:Name="RequestAxleBtn" Content="Req Axle" 
+                                Style="{StaticResource ModernButton}" 
+                                Background="#FF28A745" Click="RequestAxleBtn_Click" 
+                                IsEnabled="False" ToolTip="Send request for Axle Weight Data"
+                                Margin="0,5,0,0"/>
+                    </StackPanel>
 
                     <Button x:Name="OpenCalibrationBtn"
                             Content="Calibrate"
@@ -89,16 +99,6 @@
 
                 </StackPanel>
 
-                <!-- Auto Request -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <CheckBox x:Name="AutoRequestChk" Content="Auto Request" 
-                              VerticalAlignment="Center" Margin="10,0"
-                              Checked="AutoRequestChk_Checked" 
-                              Unchecked="AutoRequestChk_Unchecked"/>
-                    <TextBox x:Name="IntervalTxt" Text="1000" Width="60" 
-                             VerticalAlignment="Center" TextAlignment="Center"/>
-                    <TextBlock Text="ms" VerticalAlignment="Center" Margin="5,0"/>
-                </StackPanel>
 
                 <!-- Clear and Stop All -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
@@ -171,7 +171,7 @@
                     <Border Background="#FFF8F9FA" BorderBrush="#FF1B5E96" BorderThickness="1" 
                             CornerRadius="5" Padding="10" Margin="0,0,0,10">
                         <StackPanel>
-                            <TextBlock Text="Suspension Weights (kg)" FontWeight="Bold" 
+                            <TextBlock x:Name="SuspensionTitleTxt" Text="Suspension Weights (kg)" FontWeight="Bold" 
                                        Foreground="#FF1B5E96" HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
                             <Grid>
@@ -247,7 +247,7 @@
                     <Border Background="#FFF8F9FA" BorderBrush="#FF28A745" BorderThickness="1" 
                             CornerRadius="5" Padding="10" Margin="0,0,0,10">
                         <StackPanel>
-                            <TextBlock Text="Axle Weights (kg)" FontWeight="Bold" 
+                            <TextBlock x:Name="AxleTitleTxt" Text="Axle Weights (kg)" FontWeight="Bold" 
                                        Foreground="#FF28A745" HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
                             <Grid>
@@ -318,6 +318,7 @@
                             </Grid>
                         </StackPanel>
                     </Border>
+
 
                     <!-- System Status -->
                     <Border Background="#FFF8F9FA" BorderBrush="#FF6C757D" BorderThickness="1" 

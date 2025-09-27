@@ -302,11 +302,17 @@ namespace SuspensionPCB_CAN_WPF
         }
 
         // Helper method to send suspension weight data request
-        public bool RequestSuspensionData(bool start, byte transmissionRate = 0x02)
+        public bool RequestSuspensionData(bool start, byte transmissionRate = 0x02, byte dataType = 0x01)
         {
             byte[] data = new byte[8];
             data[0] = start ? (byte)0x01 : (byte)0x00;  // Start/Stop
-            data[1] = transmissionRate;  // 0x01=100Hz, 0x02=500Hz, 0x03=1024Hz, 0x04=2048Hz
+            data[1] = transmissionRate;  // 0x01=100Hz, 0x02=500Hz, 0x03=1024Hz, 0x04=2000Hz
+            data[2] = dataType;          // 0x01=Calibrated, 0x02=Uncalibrated
+            data[3] = 0x00;              // Reserved
+            data[4] = 0x00;              // Reserved
+            data[5] = 0x00;              // Reserved
+            data[6] = 0x00;              // Reserved
+            data[7] = 0x00;              // Reserved
 
             if (start)
             {
@@ -322,11 +328,17 @@ namespace SuspensionPCB_CAN_WPF
         }
 
         // Helper method to send axle weight data request
-        public bool RequestAxleData(bool start, byte transmissionRate = 0x02)
+        public bool RequestAxleData(bool start, byte transmissionRate = 0x02, byte dataType = 0x01)
         {
             byte[] data = new byte[8];
             data[0] = start ? (byte)0x01 : (byte)0x00;  // Start/Stop
-            data[1] = transmissionRate;  // 0x01=100Hz, 0x02=500Hz, 0x03=1024Hz, 0x04=2048Hz
+            data[1] = transmissionRate;  // 0x01=100Hz, 0x02=500Hz, 0x03=1024Hz, 0x04=2000Hz
+            data[2] = dataType;          // 0x01=Calibrated, 0x02=Uncalibrated
+            data[3] = 0x00;              // Reserved
+            data[4] = 0x00;              // Reserved
+            data[5] = 0x00;              // Reserved
+            data[6] = 0x00;              // Reserved
+            data[7] = 0x00;              // Reserved
 
             if (start)
             {
@@ -354,6 +366,7 @@ namespace SuspensionPCB_CAN_WPF
             byte[] data = new byte[8]; // All zeros: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
             return SendMessage(0x031, data);
         }
+
 
         // Helper method to start weight-based variable calibration only (v0.6)
         public bool StartVariableCalibration(byte pointCount, byte polyOrder,

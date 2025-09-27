@@ -37,16 +37,17 @@ namespace SuspensionPCB_CAN_WPF
         private SuspensionWeightData _suspensionWeights = new SuspensionWeightData();
         private AxleWeightData _axleWeights = new AxleWeightData();
         private CalibrationData _calibrationData = new CalibrationData();
+        
 
         // Thread-safe collections for better performance
         private readonly ConcurrentQueue<CANMessageViewModel> _messageQueue = new ConcurrentQueue<CANMessageViewModel>();
         public ObservableCollection<CANMessageViewModel> Messages { get; set; } = new ObservableCollection<CANMessageViewModel>();
         public ObservableCollection<CANMessageViewModel> FilteredMessages { get; set; } = new ObservableCollection<CANMessageViewModel>();
 
-        // Updated message IDs according to CAN Protocol Specification v0.5 - Suspension System Only
+        // Updated message IDs according to CAN Protocol Specification v0.6 - Suspension System Only
         private readonly HashSet<uint> _rxMessageIds = new HashSet<uint> {
-            0x200,  // Suspension weight data response
-            0x201,  // Axle weight data response
+            0x200,  // Suspension weight data response (calibrated/uncalibrated)
+            0x201,  // Axle weight data response (calibrated/uncalibrated)
             0x400,  // Variable calibration data response
             0x401,  // Calibration quality analysis response
             0x402,  // Error response system
@@ -247,27 +248,49 @@ namespace SuspensionPCB_CAN_WPF
         {
             switch (message.ID)
             {
-                case 0x200: // Suspension Weight Data Response
+                case 0x200: // Suspension Weight Data Response (Calibrated/Uncalibrated)
                     if (message.Data?.Length >= 8)
                     {
+                        // Always update the main suspension weights display
                         _suspensionWeights.FrontLeft = BitConverter.ToUInt16(message.Data, 0) / 10.0;
                         _suspensionWeights.FrontRight = BitConverter.ToUInt16(message.Data, 2) / 10.0;
                         _suspensionWeights.RearLeft = BitConverter.ToUInt16(message.Data, 4) / 10.0;
                         _suspensionWeights.RearRight = BitConverter.ToUInt16(message.Data, 6) / 10.0;
 
-                        System.Diagnostics.Debug.WriteLine($"Suspension Weights - FL:{_suspensionWeights.FrontLeft:F1} FR:{_suspensionWeights.FrontRight:F1} RL:{_suspensionWeights.RearLeft:F1} RR:{_suspensionWeights.RearRight:F1} kg");
+                        // Check if this is calibrated or uncalibrated data based on current request
+                        bool isUncalibrated = DataTypeCombo.SelectedIndex == 1;
+                        string dataType = isUncalibrated ? "Uncalibrated" : "Calibrated";
+                        
+                        // Update display title to show current data type
+                        if (SuspensionTitleTxt != null)
+                        {
+                            SuspensionTitleTxt.Text = $"Suspension Weights ({dataType}) (kg)";
+                        }
+                        
+                        System.Diagnostics.Debug.WriteLine($"Suspension Weights ({dataType}) - FL:{_suspensionWeights.FrontLeft:F1} FR:{_suspensionWeights.FrontRight:F1} RL:{_suspensionWeights.RearLeft:F1} RR:{_suspensionWeights.RearRight:F1} kg");
                     }
                     break;
 
-                case 0x201: // Axle Weight Data Response
+                case 0x201: // Axle Weight Data Response (Calibrated/Uncalibrated)
                     if (message.Data?.Length >= 8)
                     {
+                        // Always update the main axle weights display
                         _axleWeights.FrontLeft = BitConverter.ToUInt16(message.Data, 0) / 10.0;
                         _axleWeights.FrontRight = BitConverter.ToUInt16(message.Data, 2) / 10.0;
                         _axleWeights.RearLeft = BitConverter.ToUInt16(message.Data, 4) / 10.0;
                         _axleWeights.RearRight = BitConverter.ToUInt16(message.Data, 6) / 10.0;
 
-                        System.Diagnostics.Debug.WriteLine($"Axle Weights - FL:{_axleWeights.FrontLeft:F1} FR:{_axleWeights.FrontRight:F1} RL:{_axleWeights.RearLeft:F1} RR:{_axleWeights.RearRight:F1} kg");
+                        // Check if this is calibrated or uncalibrated data based on current request
+                        bool isUncalibrated = DataTypeCombo.SelectedIndex == 1;
+                        string dataType = isUncalibrated ? "Uncalibrated" : "Calibrated";
+                        
+                        // Update display title to show current data type
+                        if (AxleTitleTxt != null)
+                        {
+                            AxleTitleTxt.Text = $"Axle Weights ({dataType}) (kg)";
+                        }
+                        
+                        System.Diagnostics.Debug.WriteLine($"Axle Weights ({dataType}) - FL:{_axleWeights.FrontLeft:F1} FR:{_axleWeights.FrontRight:F1} RL:{_axleWeights.RearLeft:F1} RR:{_axleWeights.RearRight:F1} kg");
                     }
                     break;
 
@@ -566,12 +589,13 @@ namespace SuspensionPCB_CAN_WPF
             {
                 try
                 {
-                    // Update Suspension Weight Display  
+                    // Update Suspension Weight Display (Calibrated)
                     if (SuspensionFLTxt != null) SuspensionFLTxt.Text = _suspensionWeights.FrontLeft.ToString("F1");
                     if (SuspensionFRTxt != null) SuspensionFRTxt.Text = _suspensionWeights.FrontRight.ToString("F1");
                     if (SuspensionRLTxt != null) SuspensionRLTxt.Text = _suspensionWeights.RearLeft.ToString("F1");
                     if (SuspensionRRTxt != null) SuspensionRRTxt.Text = _suspensionWeights.RearRight.ToString("F1");
                     if (SuspensionTotalTxt != null) SuspensionTotalTxt.Text = _suspensionWeights.TotalWeight.ToString("F1");
+
 
                     // Update Axle Weight Display
                     if (AxleFLTxt != null) AxleFLTxt.Text = _axleWeights.FrontLeft.ToString("F1");
@@ -648,14 +672,8 @@ namespace SuspensionPCB_CAN_WPF
 
         private string GetSelectedBaudRate()
         {
-            try
-            {
-                return (BaudRateCombo?.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "250 kbps";
-            }
-            catch
-            {
-                return "250 kbps";
-            }
+            // Fixed at 250 kbps - no longer user selectable
+            return "250 kbps";
         }
 
         private ushort GetBaudRateValue()
@@ -681,13 +699,16 @@ namespace SuspensionPCB_CAN_WPF
                     return;
                 }
 
-                bool connected = _canService.Connect(0, GetBaudRateValue());
+                // Get selected transmission rate
+                _currentTransmissionRate = (byte)(TransmissionRateCombo.SelectedIndex + 1); // 0x01-0x04
+
+                bool connected = _canService.Connect(0, 250); // Fixed 250 kbps
                 if (connected)
                 {
                     UpdateConnectionStatus(true);
                     ResetStatistics();
                     _isConnected = true;
-                    MessageBox.Show("USB-CAN Connected Successfully.\n\nProtocol: CAN v0.5\nExpected responses:\n• 0x200 (Suspension weights)\n• 0x201 (Axle weights)\n• 0x400/0x401 (Calibration)\n• 0x402 (Errors)",
+                    MessageBox.Show($"USB-CAN Connected Successfully.\n\nProtocol: CAN v0.6\nTransmission Rate: {GetTransmissionRateText()}\nExpected responses:\n• 0x200 (Suspension weights)\n• 0x201 (Axle weights)\n• 0x400/0x401 (Calibration)\n• 0x402 (Errors)",
                                   "Connected", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else
@@ -699,6 +720,18 @@ namespace SuspensionPCB_CAN_WPF
             {
                 MessageBox.Show($"Connection Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private string GetTransmissionRateText()
+        {
+            return TransmissionRateCombo.SelectedIndex switch
+            {
+                0 => "100 Hz",
+                1 => "500 Hz", 
+                2 => "1024 Hz",
+                3 => "2000 Hz",
+                _ => "Unknown"
+            };
         }
 
         private void ResetStatistics()
@@ -740,12 +773,32 @@ namespace SuspensionPCB_CAN_WPF
             {
                 if (_canService?.IsConnected == true)
                 {
-                    // Simple start request - no toggle logic
-                    bool success = _canService.RequestSuspensionData(true, _currentTransmissionRate);
+                    // Check dropdown selection for data type
+                    bool isUncalibrated = DataTypeCombo.SelectedIndex == 1; // 0=Calibrated, 1=Uncalibrated
+                    
+                    bool success;
+                    uint messageId;
+                    byte[] data;
+                    
+                    if (isUncalibrated)
+                    {
+                        // Request uncalibrated weight data using data byte approach
+                        success = _canService.RequestSuspensionData(true, _currentTransmissionRate, 0x02); // 0x02 = Uncalibrated
+                        messageId = 0x030; // Suspension weight request command
+                        data = new byte[] { 0x01, _currentTransmissionRate, 0x02, 0, 0, 0, 0, 0 }; // Byte 2 = 0x02 (Uncalibrated)
+                    }
+                    else
+                    {
+                        // Request calibrated weight data using data byte approach
+                        success = _canService.RequestSuspensionData(true, _currentTransmissionRate, 0x01); // 0x01 = Calibrated
+                        messageId = 0x030; // Suspension weight request command
+                        data = new byte[] { 0x01, _currentTransmissionRate, 0x01, 0, 0, 0, 0, 0 }; // Byte 2 = 0x01 (Calibrated)
+                    }
+                    
                     if (success)
                     {
-                        // Only log the actual sent message
-                        OnCANMessageReceived(new CANMessage(0x030, new byte[] { 0x01, _currentTransmissionRate, 0, 0, 0, 0, 0, 0 }));
+                        // Log the actual sent message
+                        OnCANMessageReceived(new CANMessage(messageId, data));
                     }
                 }
                 else
@@ -765,12 +818,32 @@ namespace SuspensionPCB_CAN_WPF
             {
                 if (_canService?.IsConnected == true)
                 {
-                    // Simple start request - no toggle logic
-                    bool success = _canService.RequestAxleData(true, _currentTransmissionRate);
+                    // Check dropdown selection for data type
+                    bool isUncalibrated = DataTypeCombo.SelectedIndex == 1; // 0=Calibrated, 1=Uncalibrated
+                    
+                    bool success;
+                    uint messageId;
+                    byte[] data;
+                    
+                    if (isUncalibrated)
+                    {
+                        // Request uncalibrated axle data using data byte approach
+                        success = _canService.RequestAxleData(true, _currentTransmissionRate, 0x02); // 0x02 = Uncalibrated
+                        messageId = 0x031; // Axle weight request command
+                        data = new byte[] { 0x01, _currentTransmissionRate, 0x02, 0, 0, 0, 0, 0 }; // Byte 2 = 0x02 (Uncalibrated)
+                    }
+                    else
+                    {
+                        // Request calibrated axle data using data byte approach
+                        success = _canService.RequestAxleData(true, _currentTransmissionRate, 0x01); // 0x01 = Calibrated
+                        messageId = 0x031; // Axle weight request command
+                        data = new byte[] { 0x01, _currentTransmissionRate, 0x01, 0, 0, 0, 0, 0 }; // Byte 2 = 0x01 (Calibrated)
+                    }
+                    
                     if (success)
                     {
-                        // Only log the actual sent message
-                        OnCANMessageReceived(new CANMessage(0x031, new byte[] { 0x01, _currentTransmissionRate, 0, 0, 0, 0, 0, 0 }));
+                        // Log the actual sent message
+                        OnCANMessageReceived(new CANMessage(messageId, data));
                     }
                 }
             }
@@ -866,46 +939,6 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        private void AutoRequestChk_Checked(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (IntervalTxt != null && int.TryParse(IntervalTxt.Text, out int interval) && interval > 0)
-                {
-                    _autoRequestTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(interval) };
-                    _autoRequestTimer.Tick += (s, args) =>
-                    {
-                        if (_autoRequestTimer?.Tag == null)
-                        {
-                            RequestSuspensionBtn_Click(this, new RoutedEventArgs());
-                            _autoRequestTimer.Tag = "axle";
-                        }
-                        else
-                        {
-                            RequestAxleBtn_Click(this, new RoutedEventArgs());
-                            _autoRequestTimer.Tag = null;
-                        }
-                    };
-                    _autoRequestTimer.Start();
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Auto request timer error: {ex.Message}");
-            }
-        }
-
-        private void AutoRequestChk_Unchecked(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                _autoRequestTimer?.Stop();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Auto request stop error: {ex.Message}");
-            }
-        }
 
         private void ClearLogBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -956,10 +989,6 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     string jsonString = File.ReadAllText(configPath);
                     var config = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(jsonString);
-                    if (config != null && config.ContainsKey("AutoRequestInterval") && IntervalTxt != null)
-                    {
-                        IntervalTxt.Text = config["AutoRequestInterval"].ToString();
-                    }
                     if (config != null && config.ContainsKey("TransmissionRate"))
                     {
                         _currentTransmissionRate = byte.Parse(config["TransmissionRate"].ToString() ?? "2");

@@ -751,7 +751,7 @@ namespace SuspensionPCB_CAN_WPF
                 // Load cell data section removed - no longer needed
 
                 // Update target weight display
-                if (_targetWeight > 0)
+                if (_targetWeight >= 0)
                 {
                     TargetWeightText.Text = $"{_targetWeight:F1} kg";
                     TargetWeightBorder.Visibility = Visibility.Visible;
@@ -794,7 +794,7 @@ namespace SuspensionPCB_CAN_WPF
                 SetTargetBtn.IsEnabled = true; // Always enabled - can set target anytime
                 
                 // Enable capture button when target weight is set
-                CapturePointBtn.IsEnabled = _targetWeight > 0;
+                CapturePointBtn.IsEnabled = _targetWeight >= 0;
 
                 bool canComplete = _calibrationActive && _pointsCollected >= 2;
                 CompleteCalibrationBtn.IsEnabled = canComplete;
