@@ -63,7 +63,7 @@ namespace SuspensionPCB_CAN_WPF
         // Current transmission state
         private bool _suspensionTransmissionActive = false;
         private bool _axleTransmissionActive = false;
-        private byte _currentTransmissionRate = 0x02; // Default 500Hz
+        private byte _currentTransmissionRate = 3; // Default 500Hz
 
         public MainWindow()
         {
