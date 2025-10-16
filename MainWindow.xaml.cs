@@ -65,6 +65,16 @@ namespace SuspensionPCB_CAN_WPF
         private bool _axleTransmissionActive = false;
         private byte _currentTransmissionRate = 3; // Default 500Hz
 
+        // v0.7 Calibration and Tare functionality
+        private LinearCalibration? _leftCalibration;
+        private LinearCalibration? _rightCalibration;
+        private TareManager _tareManager = new TareManager();
+        private DataLogger _dataLogger = new DataLogger();
+        
+        // Current raw ADC data (from STM32)
+        private int _leftRawADC = 0;
+        private int _rightRawADC = 0;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -132,10 +142,15 @@ namespace SuspensionPCB_CAN_WPF
 
         private void OpenCalibrationBtn_Click(object sender, RoutedEventArgs e)
         {
-            // Open single-page calibration window
-            var singlePageCalib = new SinglePageCalibration();
-            singlePageCalib.Owner = this;
-            singlePageCalib.ShowDialog();
+            // Open new v0.7 calibration dialog
+            var calibrationDialog = new CalibrationDialog("Left");
+            calibrationDialog.Owner = this;
+            if (calibrationDialog.ShowDialog() == true)
+            {
+                // Reload calibrations after successful calibration
+                LoadCalibrations();
+                UpdateWeightDisplays();
+            }
         }
 
         // OpenCalibrationWindow method bhi isi class me hona chahiye:
@@ -169,11 +184,16 @@ namespace SuspensionPCB_CAN_WPF
                 MessageGrid.ItemsSource = FilteredMessages;
 
             LoadConfiguration();
+            
+            // Load existing calibrations and tare settings
+            LoadCalibrations();
+            _tareManager.LoadFromFile();
 
             try
             {
                 _canService = new CANService();  // Use new CANService
                 _canService.MessageReceived += OnCANMessageReceived;
+                _canService.RawDataReceived += OnRawDataReceived;
                 System.Diagnostics.Debug.WriteLine("CAN Service initialized successfully");
             }
             catch (Exception ex)
@@ -204,6 +224,30 @@ namespace SuspensionPCB_CAN_WPF
 
             UpdateConnectionStatus(false);
             System.Diagnostics.Debug.WriteLine("Suspension Application initialized - Protocol v0.5");
+        }
+
+        private void OnRawDataReceived(object? sender, RawDataEventArgs e)
+        {
+            try
+            {
+                lock (_dataLock)
+                {
+                    if (e.Side == 0) // Left side
+                    {
+                        _leftRawADC = e.RawADCSum;
+                    }
+                    else if (e.Side == 1) // Right side
+                    {
+                        _rightRawADC = e.RawADCSum;
+                    }
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"Raw data received: Side={e.Side}, Raw={e.RawADCSum}, Mode={e.ADCMode}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Raw data received error: {ex.Message}");
+            }
         }
 
         private void OnCANMessageReceived(CANMessage message)
@@ -566,22 +610,77 @@ namespace SuspensionPCB_CAN_WPF
             {
                 try
                 {
-                    // Update Suspension Weight Display  
-                    if (SuspensionFLTxt != null) SuspensionFLTxt.Text = _suspensionWeights.FrontLeft.ToString("F1");
-                    if (SuspensionFRTxt != null) SuspensionFRTxt.Text = _suspensionWeights.FrontRight.ToString("F1");
-                    if (SuspensionRLTxt != null) SuspensionRLTxt.Text = _suspensionWeights.RearLeft.ToString("F1");
-                    if (SuspensionRRTxt != null) SuspensionRRTxt.Text = _suspensionWeights.RearRight.ToString("F1");
-                    if (SuspensionTotalTxt != null) SuspensionTotalTxt.Text = _suspensionWeights.TotalWeight.ToString("F1");
-
-                    // Update Axle Weight Display
-                    if (AxleFLTxt != null) AxleFLTxt.Text = _axleWeights.FrontLeft.ToString("F1");
-                    if (AxleFRTxt != null) AxleFRTxt.Text = _axleWeights.FrontRight.ToString("F1");
-                    if (AxleRLTxt != null) AxleRLTxt.Text = _axleWeights.RearLeft.ToString("F1");
-                    if (AxleRRTxt != null) AxleRRTxt.Text = _axleWeights.RearRight.ToString("F1");
-                    if (AxleTotalTxt != null) AxleTotalTxt.Text = _axleWeights.TotalWeight.ToString("F1");
+                    // Update Left Side Display
+                    if (LeftRawTxt != null) LeftRawTxt.Text = _leftRawADC.ToString();
+                    
+                    double leftCalibratedKg = 0.0;
+                    double leftCalSlope = 0.0;
+                    double leftCalIntercept = 0.0;
+                    if (_leftCalibration != null && _leftCalibration.IsValid)
+                    {
+                        leftCalibratedKg = _leftCalibration.RawToKg(_leftRawADC);
+                        leftCalSlope = _leftCalibration.Slope;
+                        leftCalIntercept = _leftCalibration.Intercept;
+                    }
+                    if (LeftCalibratedTxt != null) LeftCalibratedTxt.Text = $"{leftCalibratedKg:F1} kg";
+                    
+                    double leftDisplayKg = _tareManager.ApplyTare(leftCalibratedKg, true);
+                    if (LeftDisplayTxt != null) LeftDisplayTxt.Text = $"{leftDisplayKg:F1} kg";
+                    
+                    if (LeftTareStatusTxt != null) LeftTareStatusTxt.Text = _tareManager.GetTareStatusText(true);
+                    
+                    // Log left side data
+                    if (_dataLogger.IsLogging)
+                    {
+                        double leftTareBaseline = _tareManager.LeftIsTared ? _tareManager.LeftBaselineKg : 0.0;
+                        _dataLogger.LogDataPoint("Left", _leftRawADC, leftCalibratedKg, leftDisplayKg, 
+                                               leftTareBaseline, leftCalSlope, leftCalIntercept, 0);
+                    }
+                    
+                    // Update Right Side Display
+                    if (RightRawTxt != null) RightRawTxt.Text = _rightRawADC.ToString();
+                    
+                    double rightCalibratedKg = 0.0;
+                    double rightCalSlope = 0.0;
+                    double rightCalIntercept = 0.0;
+                    if (_rightCalibration != null && _rightCalibration.IsValid)
+                    {
+                        rightCalibratedKg = _rightCalibration.RawToKg(_rightRawADC);
+                        rightCalSlope = _rightCalibration.Slope;
+                        rightCalIntercept = _rightCalibration.Intercept;
+                    }
+                    if (RightCalibratedTxt != null) RightCalibratedTxt.Text = $"{rightCalibratedKg:F1} kg";
+                    
+                    double rightDisplayKg = _tareManager.ApplyTare(rightCalibratedKg, false);
+                    if (RightDisplayTxt != null) RightDisplayTxt.Text = $"{rightDisplayKg:F1} kg";
+                    
+                    if (RightTareStatusTxt != null) RightTareStatusTxt.Text = _tareManager.GetTareStatusText(false);
+                    
+                    // Log right side data
+                    if (_dataLogger.IsLogging)
+                    {
+                        double rightTareBaseline = _tareManager.RightIsTared ? _tareManager.RightBaselineKg : 0.0;
+                        _dataLogger.LogDataPoint("Right", _rightRawADC, rightCalibratedKg, rightDisplayKg, 
+                                               rightTareBaseline, rightCalSlope, rightCalIntercept, 0);
+                    }
+                    
+                    // Update Total and Balance
+                    double totalWeight = leftDisplayKg + rightDisplayKg;
+                    if (TotalWeightTxt != null) TotalWeightTxt.Text = $"{totalWeight:F1} kg";
+                    
+                    if (totalWeight > 0)
+                    {
+                        double leftPercent = (leftDisplayKg / totalWeight) * 100.0;
+                        double rightPercent = (rightDisplayKg / totalWeight) * 100.0;
+                        if (BalanceTxt != null) BalanceTxt.Text = $"{leftPercent:F0}% L / {rightPercent:F0}% R";
+                    }
+                    else
+                    {
+                        if (BalanceTxt != null) BalanceTxt.Text = "50% L / 50% R";
+                    }
 
                     // Update System Status
-                    if (DataRateTxt != null) DataRateTxt.Text = "Data Rate: 500Hz";
+                    if (DataRateTxt != null) DataRateTxt.Text = "Data Rate: 1kHz";
                     if (LastUpdateTxt != null) LastUpdateTxt.Text = $"Last Update: {DateTime.Now:HH:mm:ss}";
                 }
                 catch (Exception ex)
@@ -969,6 +1068,177 @@ namespace SuspensionPCB_CAN_WPF
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Could not load configuration: {ex.Message}");
+            }
+        }
+
+        // v0.7 Calibration and Tare Methods
+        private void LoadCalibrations()
+        {
+            _leftCalibration = LinearCalibration.LoadFromFile("Left");
+            _rightCalibration = LinearCalibration.LoadFromFile("Right");
+        }
+        
+        private void TareLeft_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_leftCalibration == null || !_leftCalibration.IsValid)
+                {
+                    MessageBox.Show("Please calibrate the Left side first before taring.", "Calibration Required", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                
+                double currentCalibratedKg = _leftCalibration.RawToKg(_leftRawADC);
+                _tareManager.TareLeft(currentCalibratedKg);
+                _tareManager.SaveToFile();
+                
+                UpdateWeightDisplays();
+                MessageBox.Show($"Left side tared successfully.\nBaseline: {currentCalibratedKg:F1} kg", 
+                              "Tare Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error taring Left side: {ex.Message}", "Tare Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        private void TareRight_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_rightCalibration == null || !_rightCalibration.IsValid)
+                {
+                    MessageBox.Show("Please calibrate the Right side first before taring.", "Calibration Required", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                
+                double currentCalibratedKg = _rightCalibration.RawToKg(_rightRawADC);
+                _tareManager.TareRight(currentCalibratedKg);
+                _tareManager.SaveToFile();
+                
+                UpdateWeightDisplays();
+                MessageBox.Show($"Right side tared successfully.\nBaseline: {currentCalibratedKg:F1} kg", 
+                              "Tare Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error taring Right side: {ex.Message}", "Tare Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        private void ResetTares_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _tareManager.ResetBoth();
+                _tareManager.SaveToFile();
+                UpdateWeightDisplays();
+                MessageBox.Show("All tares reset successfully.", "Reset Complete", 
+                              MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error resetting tares: {ex.Message}", "Reset Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        private void CalibrateLeft_Click(object sender, RoutedEventArgs e)
+        {
+            var calibrationDialog = new CalibrationDialog("Left");
+            calibrationDialog.Owner = this;
+            if (calibrationDialog.ShowDialog() == true)
+            {
+                LoadCalibrations();
+                UpdateWeightDisplays();
+            }
+        }
+        
+        private void CalibrateRight_Click(object sender, RoutedEventArgs e)
+        {
+            var calibrationDialog = new CalibrationDialog("Right");
+            calibrationDialog.Owner = this;
+            if (calibrationDialog.ShowDialog() == true)
+            {
+                LoadCalibrations();
+                UpdateWeightDisplays();
+            }
+        }
+        
+        private void StartLogging_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_dataLogger.StartLogging())
+                {
+                    StartLoggingBtn.IsEnabled = false;
+                    StopLoggingBtn.IsEnabled = true;
+                    LoggingStatusTxt.Text = $"Logging to: {_dataLogger.GetLogFilePath()}";
+                    LoggingStatusTxt.Foreground = System.Windows.Media.Brushes.Green;
+                }
+                else
+                {
+                    MessageBox.Show("Failed to start data logging.", "Logging Error", 
+                                  MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error starting logging: {ex.Message}", "Logging Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        private void StopLogging_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _dataLogger.StopLogging();
+                StartLoggingBtn.IsEnabled = true;
+                StopLoggingBtn.IsEnabled = false;
+                LoggingStatusTxt.Text = $"Stopped. Logged {_dataLogger.GetLogLineCount()} lines.";
+                LoggingStatusTxt.Foreground = System.Windows.Media.Brushes.Orange;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error stopping logging: {ex.Message}", "Logging Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        private void ExportLog_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var saveDialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+                    DefaultExt = "csv",
+                    FileName = $"suspension_export_{DateTime.Now:yyyyMMdd_HHmmss}.csv"
+                };
+                
+                if (saveDialog.ShowDialog() == true)
+                {
+                    if (_dataLogger.ExportToCSV(saveDialog.FileName))
+                    {
+                        MessageBox.Show($"Data exported successfully to:\n{saveDialog.FileName}", 
+                                      "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show("Failed to export data. No log file found.", "Export Error", 
+                                      MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error exporting data: {ex.Message}", "Export Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

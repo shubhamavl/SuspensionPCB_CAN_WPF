@@ -11,6 +11,8 @@ namespace SuspensionPCB_CAN_WPF
     // USB-CAN-A Binary Protocol Implementation for Suspension System
     public class CANService
     {
+        private const uint MAX_CAN_ID = 0x7FF; // 11-bit standard CAN ID maximum
+        
         private SerialPort? _serialPort;
         public static CANService? _instance;
         private readonly ConcurrentQueue<byte> _frameBuffer = new();
@@ -24,10 +26,10 @@ namespace SuspensionPCB_CAN_WPF
         private bool _suspensionRequestActive = false;
         private bool _axleRequestActive = false;
 
-        // Protocol constants
-        private const byte FRAME_HEADER = 0xAA;
-        private const byte FRAME_FOOTER = 0x55;
-        private const uint MAX_CAN_ID = 0x7FF;    // 11-bit CAN ID limit
+        // v0.7 Protocol constants
+        private const uint CAN_MSG_ID_STREAM_CONTROL = 0x040;  // Stream control command
+        private const uint CAN_MSG_ID_RAW_DATA = 0x200;        // Raw ADC data response
+        private const uint CAN_MSG_ID_STATUS = 0x201;          // System status response
 
         // Manage Calibration Points Operation Constants
         public const byte MANAGE_CAL_OP_DELETE_LAST = 0x01;      // Delete last point
@@ -37,6 +39,9 @@ namespace SuspensionPCB_CAN_WPF
 
         public event Action<CANMessage>? MessageReceived;
         public event EventHandler<string> DataTimeout;
+        
+        // v0.7 Events
+        public event EventHandler<RawDataEventArgs>? RawDataReceived;
 
         // ADDED: Static events for WeightCalibrationPoint
         public static event EventHandler<WeightDataEventArgs> WeightDataReceived;
@@ -214,30 +219,15 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        // Check if message ID belongs to suspension system protocol (v0.6)
+        // Check if message ID belongs to suspension system protocol (v0.7)
         private bool IsSuspensionMessage(uint canId)
         {
-            // Explicitly block 0x500 messages
-            if (canId == 0x500)
-                return false;
-
             switch (canId)
             {
-                // Weight data responses
-                case 0x200:  // Suspension weight data
-                case 0x201:  // Axle weight data
-
-                // Calibration responses
-                case 0x400:  // Variable calibration data
-                case 0x401:  // Calibration quality analysis
-                case 0x402:  // Error response
-
-                // v0.6: New diagnostic responses
-                case 0x403:  // Calibration coefficients response
-                case 0x404:  // Calibration points response
-
-                // System status
-                // case 0x500:  // System status summary
+                // v0.7 Protocol messages
+                case CAN_MSG_ID_RAW_DATA:    // 0x200 - Raw ADC data
+                case CAN_MSG_ID_STATUS:      // 0x201 - System status
+                case CAN_MSG_ID_STREAM_CONTROL: // 0x040 - Stream control (TX only)
                     return true;
 
                 default:
@@ -353,6 +343,37 @@ namespace SuspensionPCB_CAN_WPF
         {
             byte[] data = new byte[8]; // All zeros: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
             return SendMessage(0x031, data);
+        }
+
+        // v0.7 Stream Control Methods
+        public bool StartStream(byte side, byte rate)
+        {
+            byte[] data = new byte[8];
+            data[0] = 0x01;  // Start command
+            data[1] = side;  // 0=Left, 1=Right
+            data[2] = rate;  // 0x01=100Hz, 0x02=500Hz, 0x03=1kHz, 0x04=1Hz
+            data[3] = 0x00;  // Reserved
+            data[4] = 0x00;  // Reserved
+            data[5] = 0x00;  // Reserved
+            data[6] = 0x00;  // Reserved
+            data[7] = 0x00;  // Reserved
+            
+            return SendMessage(CAN_MSG_ID_STREAM_CONTROL, data);
+        }
+        
+        public bool StopStream(byte side)
+        {
+            byte[] data = new byte[8];
+            data[0] = 0x00;  // Stop command
+            data[1] = side;  // 0=Left, 1=Right
+            data[2] = 0x00;  // Reserved
+            data[3] = 0x00;  // Reserved
+            data[4] = 0x00;  // Reserved
+            data[5] = 0x00;  // Reserved
+            data[6] = 0x00;  // Reserved
+            data[7] = 0x00;  // Reserved
+            
+            return SendMessage(CAN_MSG_ID_STREAM_CONTROL, data);
         }
 
         // Helper method to start weight-based variable calibration only (v0.6)
@@ -522,107 +543,41 @@ namespace SuspensionPCB_CAN_WPF
             return SendStaticMessage(0x02A, data);
         }
 
-        #region Event Firing Logic for WeightCalibrationPoint
+        #region Event Firing Logic for v0.7 Protocol
         private void FireSpecificEvents(uint canId, byte[] canData)
         {
             switch (canId)
             {
-                case 0x200: // Suspension weight data - Protocol Section 3.6.1
-                case 0x201: // Axle weight data - Protocol Section 3.6.2
-                    var weightArgs = new WeightDataEventArgs
+                case CAN_MSG_ID_RAW_DATA: // 0x200 - Raw ADC data
+                    if (canData.Length >= 8)
                     {
-                        ChannelMask = 0x0F, // All 4 channels
-                        FrontLeftWeight = DecodeWeightFromProtocol(canData, 0),   // Bytes 0-1
-                        FrontRightWeight = DecodeWeightFromProtocol(canData, 2),  // Bytes 2-3
-                        RearLeftWeight = DecodeWeightFromProtocol(canData, 4),    // Bytes 4-5
-                        RearRightWeight = DecodeWeightFromProtocol(canData, 6),   // Bytes 6-7
-                        TotalVehicleWeight = DecodeWeightFromProtocol(canData, 0) + DecodeWeightFromProtocol(canData, 2) +
-                                           DecodeWeightFromProtocol(canData, 4) + DecodeWeightFromProtocol(canData, 6),
-                        Timestamp = DateTime.Now
-                    };
-                    WeightDataReceived?.Invoke(this, weightArgs);
-                    break;
-
-                case 0x400: // Variable Calibration Data Response - Protocol Section 3.7.1
-                    var calibrationArgs = new CalibrationDataEventArgs
-                    {
-                        PointIndex = canData[0],  // Protocol: Byte 0
-                        PointStatus = canData[1], // Protocol: Byte 1
-                        ReferenceWeight = BitConverter.ToUInt16(canData, 2) / 10.0, // Bytes 2-3, convert to kg
-                        ADCValue = BitConverter.ToUInt16(canData, 4), // Bytes 4-5
-                        Timestamp = DateTime.Now
-                    };
-                    CalibrationDataReceived?.Invoke(this, calibrationArgs);
-                    break;
-
-                case 0x401: // Calibration Quality Analysis Response - ENHANCED
-                    System.Diagnostics.Debug.WriteLine("Processing 0x401 - Calibration Quality Analysis");
-
-                    if (canData.Length >= 6)
-                    {
-                        var accuracyScore = BitConverter.ToUInt16(canData, 0) / 10.0;
-                        var maxError = BitConverter.ToUInt16(canData, 2) / 10.0;
-                        var qualityGrade = canData[4];
-                        var recommendation = canData[5];
-
-                        System.Diagnostics.Debug.WriteLine($"Quality Analysis: {accuracyScore:F1}% accuracy, Grade: {qualityGrade}, Rec: {recommendation}");
-
-                        // Fire calibration complete event
-                        var qualityArgs = new CalibrationQualityEventArgs
+                        var rawDataArgs = new RawDataEventArgs
                         {
-                            AccuracyPercentage = accuracyScore,
-                            MaxErrorKg = maxError,
-                            QualityGrade = qualityGrade,
-                            Recommendation = recommendation,
-                            Timestamp = DateTime.Now
+                            Side = canData[0],  // 0=Left, 1=Right
+                            RawADCSum = BitConverter.ToUInt16(canData, 1), // Raw ADC sum
+                            ADCMode = canData[3], // 0=Internal, 1=ADS1115
+                            Timestamp = BitConverter.ToUInt16(canData, 4), // Milliseconds
+                            TimestampFull = DateTime.Now
                         };
-
-                        CalibrationQualityReceived?.Invoke(this, qualityArgs);
+                        RawDataReceived?.Invoke(this, rawDataArgs);
                     }
                     break;
 
-                case 0x402: // Error Response System - Protocol Section 3.9.1
-                    ushort errorCode = (ushort)(canData[0] | (canData[1] << 8));
-                    byte severity = canData[2];
-
-                    string severityText = severity switch
+                case CAN_MSG_ID_STATUS: // 0x201 - System status
+                    if (canData.Length >= 8)
                     {
-                        0x01 => "INFO",
-                        0x02 => "WARNING",
-                        0x03 => "ERROR",
-                        0x04 => "CRITICAL",
-                        0x05 => "FATAL",
-                        _ => "UNKNOWN"
-                    };
-
-                    var errorArgs = new CANErrorEventArgs
-                    {
-                        ErrorMessage = $"[{severityText}] Hardware Error Code: 0x{errorCode:X4}",
-                        ErrorCode = errorCode,
-                        Timestamp = DateTime.Now
-                    };
-                    CommunicationError?.Invoke(this, errorArgs);
-                    break;
-
-                case 0x403: // v0.6: Calibration Coefficients Response
-                    System.Diagnostics.Debug.WriteLine($"0x403 - Calibration Coefficients Response received");
-                    // TODO: Add specific event for coefficients if needed
-                    break;
-
-                case 0x404: // v0.6: Calibration Points Response
-                    System.Diagnostics.Debug.WriteLine($"0x404 - Calibration Points Response received");
-                    // TODO: Add specific event for calibration points if needed
+                        var statusArgs = new SystemStatusEventArgs
+                        {
+                            SystemStatus = canData[0], // 0=OK, 1=Warning, 2=Error
+                            ErrorFlags = canData[1],    // Error flags
+                            ADCMode = canData[2],       // Current ADC mode
+                            UptimeSeconds = BitConverter.ToUInt32(canData, 4), // System uptime
+                            Timestamp = DateTime.Now
+                        };
+                        // TODO: Add SystemStatusReceived event if needed
+                    }
                     break;
             }
-        }
-
-        private double DecodeWeightFromProtocol(byte[] data, int startIndex)
-        {
-            if (startIndex + 1 >= data.Length) return 0.0;
-
-            // Protocol format: 16-bit, kg × 10 (0.1kg resolution)
-            ushort rawValue = (ushort)(data[startIndex] | (data[startIndex + 1] << 8));
-            return rawValue / 10.0; // Convert from protocol format to kg
         }
         #endregion
 
@@ -708,7 +663,24 @@ namespace SuspensionPCB_CAN_WPF
         public DateTime Timestamp { get; set; }
     }
 
+    // v0.7 Protocol Event Args
+    public class RawDataEventArgs : EventArgs
+    {
+        public byte Side { get; set; }              // 0=Left, 1=Right
+        public ushort RawADCSum { get; set; }       // Raw ADC sum (0-8192 or 0-65535)
+        public byte ADCMode { get; set; }           // 0=Internal, 1=ADS1115
+        public ushort Timestamp { get; set; }       // Milliseconds
+        public DateTime TimestampFull { get; set; } // Full timestamp
+    }
 
+    public class SystemStatusEventArgs : EventArgs
+    {
+        public byte SystemStatus { get; set; }      // 0=OK, 1=Warning, 2=Error
+        public byte ErrorFlags { get; set; }        // Error flags
+        public byte ADCMode { get; set; }           // Current ADC mode
+        public uint UptimeSeconds { get; set; }     // System uptime in seconds
+        public DateTime Timestamp { get; set; }
+    }
 
     #endregion
 

@@ -78,14 +78,14 @@
                             Background="#FF28A745" Click="RequestAxleBtn_Click" 
                             IsEnabled="False" ToolTip="Send 0x031 request for Axle Weight Data"/>
 
-                    <Button x:Name="OpenCalibrationBtn"
-                            Content="Calibrate"
+                    <Button x:Name="CalibrateLeftBtn"
+                            Content="Calibrate Left"
                             Width="100"
                             Height="30"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
                             Margin="10,0,0,0"
-                            Click="OpenCalibrationBtn_Click"/>
+                            Click="CalibrateLeft_Click"/>
 
                 </StackPanel>
 
@@ -167,155 +167,132 @@
             <!-- Weight Data Display -->
             <GroupBox Grid.Column="1" Header="Live Weight Data" Padding="10">
                 <StackPanel>
-                    <!-- Suspension Weights -->
+                    <!-- Left Side -->
                     <Border Background="#FFF8F9FA" BorderBrush="#FF1B5E96" BorderThickness="1" 
                             CornerRadius="5" Padding="10" Margin="0,0,0,10">
                         <StackPanel>
-                            <TextBlock Text="Suspension Weights (kg)" FontWeight="Bold" 
+                            <TextBlock Text="LEFT SIDE" FontWeight="Bold" 
                                        Foreground="#FF1B5E96" HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
                             <Grid>
                                 <Grid.RowDefinitions>
-                                    <RowDefinition/>
-                                    <RowDefinition/>
-                                    <RowDefinition/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition/>
-                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Front Left -->
-                                <Border Grid.Row="0" Grid.Column="0" Background="#FFE7F3FF" 
-                                        BorderBrush="#FF1B5E96" BorderThickness="1" 
-                                        CornerRadius="3" Margin="2" Padding="5">
-                                    <StackPanel>
-                                        <TextBlock Text="FL" FontSize="10" HorizontalAlignment="Center"/>
-                                        <TextBlock x:Name="SuspensionFLTxt" Text="0.0" FontSize="14" 
-                                                   FontWeight="Bold" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
+                                <!-- Raw ADC -->
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw ADC:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LeftRawTxt" Text="0" FontWeight="Bold" Margin="5,0,0,5"/>
 
-                                <!-- Front Right -->
-                                <Border Grid.Row="0" Grid.Column="1" Background="#FFE7F3FF" 
-                                        BorderBrush="#FF1B5E96" BorderThickness="1" 
-                                        CornerRadius="3" Margin="2" Padding="5">
-                                    <StackPanel>
-                                        <TextBlock Text="FR" FontSize="10" HorizontalAlignment="Center"/>
-                                        <TextBlock x:Name="SuspensionFRTxt" Text="0.0" FontSize="14" 
-                                                   FontWeight="Bold" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
+                                <!-- Calibrated Weight -->
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Calibrated:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="LeftCalibratedTxt" Text="0.0 kg" FontWeight="Bold" Margin="5,0,0,5"/>
 
-                                <!-- Rear Left -->
-                                <Border Grid.Row="1" Grid.Column="0" Background="#FFE7F3FF" 
-                                        BorderBrush="#FF1B5E96" BorderThickness="1" 
-                                        CornerRadius="3" Margin="2" Padding="5">
-                                    <StackPanel>
-                                        <TextBlock Text="RL" FontSize="10" HorizontalAlignment="Center"/>
-                                        <TextBlock x:Name="SuspensionRLTxt" Text="0.0" FontSize="14" 
-                                                   FontWeight="Bold" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
+                                <!-- Display Weight (after tare) -->
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Display:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="LeftDisplayTxt" Text="0.0 kg" FontWeight="Bold" 
+                                           Foreground="#FF28A745" Margin="5,0,0,5"/>
 
-                                <!-- Rear Right -->
-                                <Border Grid.Row="1" Grid.Column="1" Background="#FFE7F3FF" 
-                                        BorderBrush="#FF1B5E96" BorderThickness="1" 
-                                        CornerRadius="3" Margin="2" Padding="5">
-                                    <StackPanel>
-                                        <TextBlock Text="RR" FontSize="10" HorizontalAlignment="Center"/>
-                                        <TextBlock x:Name="SuspensionRRTxt" Text="0.0" FontSize="14" 
-                                                   FontWeight="Bold" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Total -->
-                                <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#FF28A745" 
-                                        BorderBrush="#FF1B5E96" BorderThickness="1" 
-                                        CornerRadius="3" Margin="2" Padding="5">
-                                    <StackPanel>
-                                        <TextBlock Text="Total" FontSize="10" HorizontalAlignment="Center" Foreground="White"/>
-                                        <TextBlock x:Name="SuspensionTotalTxt" Text="0.0" FontSize="16" 
-                                                   FontWeight="Bold" HorizontalAlignment="Center" Foreground="White"/>
-                                    </StackPanel>
-                                </Border>
+                                <!-- Tare Status -->
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Tare:" FontWeight="Bold" Margin="0,0,5,0"/>
+                                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="LeftTareStatusTxt" Text="- Not Tared" FontSize="10" Margin="5,0,0,0"/>
                             </Grid>
+
+                            <!-- Left Side Buttons -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                                <Button Content="Tare Left" Style="{StaticResource ModernButton}" 
+                                        Background="#FF17A2B8" Click="TareLeft_Click" Margin="5"/>
+                                <Button Content="Calibrate Left" Style="{StaticResource ModernButton}" 
+                                        Background="#FF28A745" Click="CalibrateLeft_Click" Margin="5"/>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
-                    <!-- Axle Weights -->
+                    <!-- Right Side -->
                     <Border Background="#FFF8F9FA" BorderBrush="#FF28A745" BorderThickness="1" 
                             CornerRadius="5" Padding="10" Margin="0,0,0,10">
                         <StackPanel>
-                            <TextBlock Text="Axle Weights (kg)" FontWeight="Bold" 
+                            <TextBlock Text="RIGHT SIDE" FontWeight="Bold" 
                                        Foreground="#FF28A745" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Raw ADC -->
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw ADC:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="RightRawTxt" Text="0" FontWeight="Bold" Margin="5,0,0,5"/>
+
+                                <!-- Calibrated Weight -->
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Calibrated:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="RightCalibratedTxt" Text="0.0 kg" FontWeight="Bold" Margin="5,0,0,5"/>
+
+                                <!-- Display Weight (after tare) -->
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Display:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="RightDisplayTxt" Text="0.0 kg" FontWeight="Bold" 
+                                           Foreground="#FF28A745" Margin="5,0,0,5"/>
+
+                                <!-- Tare Status -->
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Tare:" FontWeight="Bold" Margin="0,0,5,0"/>
+                                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="RightTareStatusTxt" Text="- Not Tared" FontSize="10" Margin="5,0,0,0"/>
+                            </Grid>
+
+                            <!-- Right Side Buttons -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                                <Button Content="Tare Right" Style="{StaticResource ModernButton}" 
+                                        Background="#FF17A2B8" Click="TareRight_Click" Margin="5"/>
+                                <Button Content="Calibrate Right" Style="{StaticResource ModernButton}" 
+                                        Background="#FF28A745" Click="CalibrateRight_Click" Margin="5"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Total and Balance -->
+                    <Border Background="#FFF8F9FA" BorderBrush="#FF6C757D" BorderThickness="1" 
+                            CornerRadius="5" Padding="10" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="SUMMARY" FontWeight="Bold" 
+                                       Foreground="#FF6C757D" HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition/>
                                     <RowDefinition/>
-                                    <RowDefinition/>
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition/>
                                     <ColumnDefinition/>
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Front Left -->
-                                <Border Grid.Row="0" Grid.Column="0" Background="#FFE8F5E8" 
-                                        BorderBrush="#FF28A745" BorderThickness="1" 
-                                        CornerRadius="3" Margin="2" Padding="5">
-                                    <StackPanel>
-                                        <TextBlock Text="FL" FontSize="10" HorizontalAlignment="Center"/>
-                                        <TextBlock x:Name="AxleFLTxt" Text="0.0" FontSize="14" 
-                                                   FontWeight="Bold" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
+                                <!-- Total Weight -->
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Total:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TotalWeightTxt" Text="0.0 kg" FontWeight="Bold" 
+                                           Foreground="#FF28A745" Margin="5,0,0,5"/>
 
-                                <!-- Front Right -->
-                                <Border Grid.Row="0" Grid.Column="1" Background="#FFE8F5E8" 
-                                        BorderBrush="#FF28A745" BorderThickness="1" 
-                                        CornerRadius="3" Margin="2" Padding="5">
-                                    <StackPanel>
-                                        <TextBlock Text="FR" FontSize="10" HorizontalAlignment="Center"/>
-                                        <TextBlock x:Name="AxleFRTxt" Text="0.0" FontSize="14" 
-                                                   FontWeight="Bold" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Rear Left -->
-                                <Border Grid.Row="1" Grid.Column="0" Background="#FFE8F5E8" 
-                                        BorderBrush="#FF28A745" BorderThickness="1" 
-                                        CornerRadius="3" Margin="2" Padding="5">
-                                    <StackPanel>
-                                        <TextBlock Text="RL" FontSize="10" HorizontalAlignment="Center"/>
-                                        <TextBlock x:Name="AxleRLTxt" Text="0.0" FontSize="14" 
-                                                   FontWeight="Bold" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Rear Right -->
-                                <Border Grid.Row="1" Grid.Column="1" Background="#FFE8F5E8" 
-                                        BorderBrush="#FF28A745" BorderThickness="1" 
-                                        CornerRadius="3" Margin="2" Padding="5">
-                                    <StackPanel>
-                                        <TextBlock Text="RR" FontSize="10" HorizontalAlignment="Center"/>
-                                        <TextBlock x:Name="AxleRRTxt" Text="0.0" FontSize="14" 
-                                                   FontWeight="Bold" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Total -->
-                                <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#FF17A2B8" 
-                                        BorderBrush="#FF28A745" BorderThickness="1" 
-                                        CornerRadius="3" Margin="2" Padding="5">
-                                    <StackPanel>
-                                        <TextBlock Text="Total" FontSize="10" HorizontalAlignment="Center" Foreground="White"/>
-                                        <TextBlock x:Name="AxleTotalTxt" Text="0.0" FontSize="16" 
-                                                   FontWeight="Bold" HorizontalAlignment="Center" Foreground="White"/>
-                                    </StackPanel>
-                                </Border>
+                                <!-- Balance -->
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Balance:" FontWeight="Bold" Margin="0,0,5,0"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="BalanceTxt" Text="50% L / 50% R" FontWeight="Bold" 
+                                           Foreground="#FF6C757D" Margin="5,0,0,0"/>
                             </Grid>
+
+                            <!-- Reset Tares Button -->
+                            <Button Content="Reset All Tares" Style="{StaticResource ModernButton}" 
+                                    Background="#FFDC3545" Click="ResetTares_Click" 
+                                    HorizontalAlignment="Center" Margin="0,10,0,0"/>
                         </StackPanel>
                     </Border>
 
@@ -327,6 +304,27 @@
                                        Foreground="#FF6C757D" HorizontalAlignment="Center" Margin="0,0,0,5"/>
                             <TextBlock x:Name="DataRateTxt" Text="Data Rate: --" FontSize="12" HorizontalAlignment="Center"/>
                             <TextBlock x:Name="LastUpdateTxt" Text="Last Update: --" FontSize="12" HorizontalAlignment="Center"/>
+                            
+                            <!-- Data Logging Controls -->
+                            <Separator Margin="0,10,0,10"/>
+                            <TextBlock Text="Data Logging" FontWeight="Bold" 
+                                       Foreground="#FF6C757D" HorizontalAlignment="Center" Margin="0,0,0,5"/>
+                            
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
+                                <Button x:Name="StartLoggingBtn" Content="Start Logging" 
+                                        Style="{StaticResource ModernButton}" Background="#FF28A745" 
+                                        Click="StartLogging_Click" Margin="5"/>
+                                <Button x:Name="StopLoggingBtn" Content="Stop Logging" 
+                                        Style="{StaticResource ModernButton}" Background="#FFDC3545" 
+                                        Click="StopLogging_Click" Margin="5" IsEnabled="False"/>
+                            </StackPanel>
+                            
+                            <TextBlock x:Name="LoggingStatusTxt" Text="Not logging" FontSize="10" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,5"/>
+                            
+                            <Button x:Name="ExportLogBtn" Content="Export CSV" 
+                                    Style="{StaticResource ModernButton}" Background="#FF17A2B8" 
+                                    Click="ExportLog_Click" HorizontalAlignment="Center" Margin="5"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
