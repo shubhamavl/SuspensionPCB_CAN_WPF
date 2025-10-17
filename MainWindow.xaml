@@ -210,7 +210,7 @@
                                         Background="#FF17A2B8" Click="TareLeft_Click" Margin="5"/>
                                 <Button Content="Calibrate Left" Style="{StaticResource ModernButton}" 
                                         Background="#FF28A745" Click="CalibrateLeft_Click" Margin="5"/>
-                            </StackPanel>
+                                    </StackPanel>
                         </StackPanel>
                     </Border>
 

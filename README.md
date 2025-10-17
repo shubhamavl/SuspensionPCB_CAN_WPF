@@ -1,59 +1,149 @@
-# SuspensionPCB CAN WPF
+# Suspension PCB CAN WPF Application
 
-A WPF (.NET 8) desktop tool for monitoring and calibrating the LMV Suspension PCB over a USB–CAN adapter. Implements CAN Protocol v0.5 with variable multi‑point calibration workflow.
+## Overview
+
+This is a PC3 application for the LMV Suspension System that communicates with an STM32 microcontroller via CAN bus. The application handles calibration, tare functionality, real-time data display, and data logging.
 
 ## Features
-- Live CAN message log with filters (TX/RX, ID filter)
-- Suspension and axle weight visualization (FL/FR/RL/RR, totals)
-- Variable multi‑point calibration (2–20 points), auto/ manual spacing
-- Calibration quality analysis display (accuracy, max error, grade, recommendation)
-- USB–CAN (CH341/USB‑CAN‑A) serial framing with stable decode/encode
 
-## Project Structure
-- `MainWindow.xaml(.cs)`: Primary UI and high‑level flow
-- `CANService.cs`: USB‑CAN serial framing, decode/encode, helpers for messages
-- `CANMessage.cs`: Message and decoding helpers for UI
-- `Calibration/CalibrationWindow.xaml(.cs)`: Calibration setup UI (point count, poly order, spacing, channels, max weight)
-- `Calibration/WeightCalibrationPoint.xaml(.cs)`: Point capture UI and protocol integration
+### Core Functionality
+- **Real-time Data Display**: Shows raw ADC values, calibrated weights, and tare-adjusted weights for both left and right sides
+- **2-Point Calibration**: Linear calibration system for converting raw ADC values to weight measurements
+- **Tare Management**: Zero-offset functionality for both sides independently
+- **Data Logging**: CSV export with timestamp, raw, calibrated, and tared values
+- **CAN Communication**: Ultra-minimal protocol with semantic CAN IDs
 
-## Build
-Prereqs: .NET SDK 8.0+, Windows.
+### Protocol (v0.7)
+- **Raw Data**: 2-byte messages (75% bandwidth reduction)
+- **Stream Control**: 1-byte start commands, 0-byte stop commands
+- **Semantic IDs**: Message type encoded in CAN ID for maximum efficiency
+- **On-demand Status**: No periodic overhead
 
-Open `SuspensionPCB_CAN_WPF.sln` in Visual Studio 2022 (17.10+) or run:
+## Quick Start Guide
+
+### 1. Hardware Setup
+1. Connect STM32 suspension board to PC via USB-CAN adapter
+2. Ensure load cells are properly connected to ADC channels
+3. Power on the STM32 board
+
+### 2. Software Setup
+1. Run `SuspensionPCB_CAN_WPF.exe`
+2. Select COM port and connect to CAN bus
+3. Verify connection status
+
+### 3. Calibration Process
+1. **Calibrate Left Side**:
+   - Click "Calibrate Left" button
+   - Place known weight on left side (covers Ch0+Ch1)
+   - Capture Point 1: Enter known weight
+   - Capture Point 2: Add more weight, enter total weight
+   - Click "Calculate" and "Save"
+
+2. **Calibrate Right Side**:
+   - Click "Calibrate Right" button
+   - Place known weight on right side (covers Ch2+Ch3)
+   - Follow same process as left side
+
+### 4. Tare Process
+1. **Tare Left**: Click "Tare Left" to zero the left side
+2. **Tare Right**: Click "Tare Right" to zero the right side
+3. **Reset Tares**: Click "Reset All Tares" to clear all tare offsets
+
+### 5. Data Streaming
+1. Select transmission rate (100Hz, 500Hz, 1kHz, 1Hz)
+2. Click "Request Suspension" to start left side streaming
+3. Click "Request Axle" to start right side streaming
+4. Click "Stop All" to stop all streams
+
+### 6. Data Logging
+1. Click "Start Logging" to begin data recording
+2. Click "Stop Logging" to end recording
+3. Click "Export CSV" to save logged data
+
+## File Structure
+
+### Calibration Files
+- `Left_calibration.json`: Left side calibration coefficients
+- `Right_calibration.json`: Right side calibration coefficients
+
+### Tare Files
+- `tare_settings.json`: Tare baseline values for both sides
+
+### Log Files
+- `suspension_log_YYYYMMDD_HHMMSS.csv`: Data logging output
+
+## CSV Log Format
+
+```csv
+Timestamp,Side,RawADC,CalibratedKg,TaredKg,TareBaselineKg,CalSlope,CalIntercept,ADCMode
+2025-01-15 10:30:15.123,Left,2048,25.5,0.0,25.5,0.0125,0.0,0
+2025-01-15 10:30:15.124,Right,1984,24.8,0.0,24.8,0.0125,0.0,0
 ```
-dotnet restore
-dotnet build -c Release
-```
 
-## Run
-```
-dotnet run --project SuspensionPCB_CAN_WPF.csproj
-```
+## CAN Protocol Details
 
-## USB–CAN Notes
-- App auto‑selects the last available COM port
-- Serial default: 2,000,000 baud, 8‑N‑1
-- CAN IDs used (subset):
-  - TX: `0x020, 0x022, 0x024, 0x025, 0x026, 0x027, 0x030, 0x031`
-  - RX: `0x200, 0x201, 0x400, 0x401, 0x402`
+### Message IDs
+- `0x200`: Left side raw ADC data (2 bytes)
+- `0x201`: Right side raw ADC data (2 bytes)
+- `0x040`: Start left side streaming (1 byte rate)
+- `0x041`: Start right side streaming (1 byte rate)
+- `0x044`: Stop all streams (0 bytes)
+- `0x300`: System status (3 bytes, on-demand)
+- `0x030`: Switch to Internal ADC mode (0 bytes)
+- `0x031`: Switch to ADS1115 mode (0 bytes)
 
-## Protocol v0.5 Quick Reference
-- Data requests: `0x030` (susp), `0x031` (axle)
-- Calibration: `0x020` start, `0x022` set weight point, `0x024` complete
-- Responses: `0x200/0x201` weights, `0x400` cal point, `0x401` quality, `0x402` errors
+### Rate Codes
+- `0x01`: 100Hz
+- `0x02`: 500Hz
+- `0x03`: 1kHz
+- `0x05`: 1Hz
 
-## Configuration
-Optional `Suspension_Config.json` (placed next to exe):
-```
-{
-  "AutoRequestInterval": 1000,
-  "TransmissionRate": 2
-}
-```
+## Troubleshooting
 
-## Development
-- TargetFramework: `net8.0-windows`, `UseWPF=true`
-- NuGet: `System.IO.Ports`, `System.Management`
+### Common Issues
 
-## License
-Proprietary – internal use. Update this section before public release.
+1. **"Calibration Required" Message**
+   - Solution: Perform 2-point calibration for the side you want to stream
+
+2. **CAN Connection Failed**
+   - Check COM port selection
+   - Verify USB-CAN adapter is working
+   - Ensure STM32 is powered and responding
+
+3. **No Data Received**
+   - Verify STM32 is sending data
+   - Check CAN bus termination (120Ω)
+   - Confirm baud rate (250 kbps)
+
+4. **Inaccurate Weight Readings**
+   - Recalibrate with known weights
+   - Check load cell connections
+   - Verify tare is properly set
+
+### Error Messages
+- **"Left/Right side calibration is required"**: Calibrate before streaming
+- **"CAN service not connected"**: Check connection and COM port
+- **"Send Error"**: CAN transmission failed, check hardware
+
+## Technical Specifications
+
+- **CAN Baud Rate**: 250 kbps
+- **ADC Resolution**: 12-bit (Internal), 16-bit (ADS1115)
+- **Channel Mapping**: Ch0=Front-Left, Ch1=Rear-Left, Ch2=Front-Right, Ch3=Rear-Right
+- **Side Grouping**: Left=Ch0+Ch1, Right=Ch2+Ch3
+- **Least Count**: 1kg (handled by calibration)
+- **Bandwidth**: ~3KB/sec (81% reduction from original)
+
+## Support
+
+For technical support or questions:
+- Check this README first
+- Review CAN protocol specification
+- Verify hardware connections
+- Test with known weights
+
+---
+
+**Version**: v0.7  
+**Last Updated**: January 2025  
+**Status**: Production Ready

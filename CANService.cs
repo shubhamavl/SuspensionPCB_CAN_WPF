@@ -23,32 +23,33 @@ namespace SuspensionPCB_CAN_WPF
         private readonly TimeSpan _timeout = TimeSpan.FromSeconds(5);
         private bool _timeoutNotified = false;
 
-        private bool _suspensionRequestActive = false;
-        private bool _axleRequestActive = false;
+        // v0.7 Ultra-Minimal CAN Protocol - Semantic IDs & Maximum Efficiency
+        // Raw Data: 2 bytes only (75% reduction from 8 bytes)
+        // Stream Control: 1 byte only (87.5% reduction from 8 bytes)
+        // System Status: 3 bytes only (62.5% reduction from 8 bytes)
 
-        // v0.7 Protocol constants
-        private const uint CAN_MSG_ID_STREAM_CONTROL = 0x040;  // Stream control command
-        private const uint CAN_MSG_ID_RAW_DATA = 0x200;        // Raw ADC data response
-        private const uint CAN_MSG_ID_STATUS = 0x201;          // System status response
+        // CAN Message IDs - Semantic IDs (message type encoded in ID)
+        private const uint CAN_MSG_ID_LEFT_RAW_DATA = 0x200;      // Left side raw ADC data (Ch0+Ch1)
+        private const uint CAN_MSG_ID_RIGHT_RAW_DATA = 0x201;     // Right side raw ADC data (Ch2+Ch3)
+        private const uint CAN_MSG_ID_START_LEFT_STREAM = 0x040;  // Start left side streaming
+        private const uint CAN_MSG_ID_START_RIGHT_STREAM = 0x041; // Start right side streaming
+        private const uint CAN_MSG_ID_STOP_ALL_STREAMS = 0x044;   // Stop all streaming (empty message)
+        private const uint CAN_MSG_ID_SYSTEM_STATUS = 0x300;      // System status (on-demand only)
+        private const uint CAN_MSG_ID_MODE_INTERNAL = 0x030;      // Switch to Internal ADC mode (empty message)
+        private const uint CAN_MSG_ID_MODE_ADS1115 = 0x031;       // Switch to ADS1115 mode (empty message)
 
-        // Manage Calibration Points Operation Constants
-        public const byte MANAGE_CAL_OP_DELETE_LAST = 0x01;      // Delete last point
-        public const byte MANAGE_CAL_OP_RESET_SESSION = 0x02;    // Reset session (clear all points)
-        public const byte MANAGE_CAL_OP_GET_POINT_COUNT = 0x03;  // Get point count
-        public const byte MANAGE_CAL_OP_DELETE_SPECIFIC = 0x04;  // Delete specific point by index
+        // Rate Selection Codes
+        private const byte CAN_RATE_100HZ = 0x01;  // 100Hz (10ms interval)
+        private const byte CAN_RATE_500HZ = 0x02;  // 500Hz (2ms interval)
+        private const byte CAN_RATE_1KHZ = 0x03;   // 1kHz (1ms interval)
+        private const byte CAN_RATE_1HZ = 0x05;    // 1Hz (1000ms interval)
 
         public event Action<CANMessage>? MessageReceived;
-        public event EventHandler<string> DataTimeout;
+        public event EventHandler<string>? DataTimeout;
         
         // v0.7 Events
         public event EventHandler<RawDataEventArgs>? RawDataReceived;
-
-        // ADDED: Static events for WeightCalibrationPoint
-        public static event EventHandler<WeightDataEventArgs> WeightDataReceived;
-        public static event EventHandler<ADCDataEventArgs> ADCDataReceived;
-        public static event EventHandler<CANErrorEventArgs> CommunicationError;
-        public static event EventHandler<CalibrationDataEventArgs> CalibrationDataReceived;
-        public static event EventHandler<CalibrationQualityEventArgs> CalibrationQualityReceived;
+        public event EventHandler<SystemStatusEventArgs>? SystemStatusReceived;
 
         public bool IsConnected => _connected;
 
@@ -219,15 +220,20 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        // Check if message ID belongs to suspension system protocol (v0.7)
+        // Check if message ID belongs to suspension system protocol (v0.7 - Semantic IDs)
         private bool IsSuspensionMessage(uint canId)
         {
             switch (canId)
             {
-                // v0.7 Protocol messages
-                case CAN_MSG_ID_RAW_DATA:    // 0x200 - Raw ADC data
-                case CAN_MSG_ID_STATUS:      // 0x201 - System status
-                case CAN_MSG_ID_STREAM_CONTROL: // 0x040 - Stream control (TX only)
+                // v0.7 Ultra-Minimal Protocol - Semantic IDs
+                case CAN_MSG_ID_LEFT_RAW_DATA:      // 0x200 - Left side raw ADC data
+                case CAN_MSG_ID_RIGHT_RAW_DATA:     // 0x201 - Right side raw ADC data
+                case CAN_MSG_ID_START_LEFT_STREAM:  // 0x040 - Start left side streaming
+                case CAN_MSG_ID_START_RIGHT_STREAM: // 0x041 - Start right side streaming
+                case CAN_MSG_ID_STOP_ALL_STREAMS:   // 0x044 - Stop all streaming
+                case CAN_MSG_ID_SYSTEM_STATUS:      // 0x300 - System status
+                case CAN_MSG_ID_MODE_INTERNAL:      // 0x030 - Switch to Internal ADC mode
+                case CAN_MSG_ID_MODE_ADS1115:       // 0x031 - Switch to ADS1115 mode
                     return true;
 
                 default:
@@ -252,6 +258,12 @@ namespace SuspensionPCB_CAN_WPF
                 if (data != null && data.Length > 8)
                 {
                     System.Diagnostics.Debug.WriteLine($"Invalid data length: {data.Length} (max 8 bytes)");
+                    return false;
+                }
+
+                if (data == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("Cannot send message: data is null");
                     return false;
                 }
 
@@ -291,133 +303,40 @@ namespace SuspensionPCB_CAN_WPF
             return frame.ToArray();
         }
 
-        // Helper method to send suspension weight data request
-        public bool RequestSuspensionData(bool start, byte transmissionRate = 0x02)
+        // v0.7 Stream Control Methods - Semantic IDs
+        public bool StartLeftStream(byte rate)
         {
-            byte[] data = new byte[8];
-            data[0] = start ? (byte)0x01 : (byte)0x00;  // Start/Stop
-            data[1] = transmissionRate;  // 0x01=100Hz, 0x02=500Hz, 0x03=1024Hz, 0x04=2048Hz
-
-            if (start)
-            {
-                _suspensionRequestActive = true;
-                _axleRequestActive = false;
-            }
-            else
-            {
-                _suspensionRequestActive = false;
-            }
-
-            return SendMessage(0x030, data);
-        }
-
-        // Helper method to send axle weight data request
-        public bool RequestAxleData(bool start, byte transmissionRate = 0x02)
-        {
-            byte[] data = new byte[8];
-            data[0] = start ? (byte)0x01 : (byte)0x00;  // Start/Stop
-            data[1] = transmissionRate;  // 0x01=100Hz, 0x02=500Hz, 0x03=1024Hz, 0x04=2048Hz
-
-            if (start)
-            {
-                _axleRequestActive = true;
-                _suspensionRequestActive = false;
-            }
-            else
-            {
-                _axleRequestActive = false;
-            }
-
-            return SendMessage(0x031, data);
-        }
-
-        // Stop Suspension Data Transmission
-        public bool StopSuspensionData()
-        {
-            byte[] data = new byte[8]; // All zeros: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-            return SendMessage(0x030, data);
-        }
-
-        // Stop Axle Data Transmission  
-        public bool StopAxleData()
-        {
-            byte[] data = new byte[8]; // All zeros: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-            return SendMessage(0x031, data);
-        }
-
-        // v0.7 Stream Control Methods
-        public bool StartStream(byte side, byte rate)
-        {
-            byte[] data = new byte[8];
-            data[0] = 0x01;  // Start command
-            data[1] = side;  // 0=Left, 1=Right
-            data[2] = rate;  // 0x01=100Hz, 0x02=500Hz, 0x03=1kHz, 0x04=1Hz
-            data[3] = 0x00;  // Reserved
-            data[4] = 0x00;  // Reserved
-            data[5] = 0x00;  // Reserved
-            data[6] = 0x00;  // Reserved
-            data[7] = 0x00;  // Reserved
+            byte[] data = new byte[1];
+            data[0] = rate;  // Rate selection
             
-            return SendMessage(CAN_MSG_ID_STREAM_CONTROL, data);
+            return SendMessage(CAN_MSG_ID_START_LEFT_STREAM, data);
         }
-        
-        public bool StopStream(byte side)
+
+        public bool StartRightStream(byte rate)
         {
-            byte[] data = new byte[8];
-            data[0] = 0x00;  // Stop command
-            data[1] = side;  // 0=Left, 1=Right
-            data[2] = 0x00;  // Reserved
-            data[3] = 0x00;  // Reserved
-            data[4] = 0x00;  // Reserved
-            data[5] = 0x00;  // Reserved
-            data[6] = 0x00;  // Reserved
-            data[7] = 0x00;  // Reserved
+            byte[] data = new byte[1];
+            data[0] = rate;  // Rate selection
             
-            return SendMessage(CAN_MSG_ID_STREAM_CONTROL, data);
+            return SendMessage(CAN_MSG_ID_START_RIGHT_STREAM, data);
         }
 
-        // Helper method to start weight-based variable calibration only (v0.6)
-        public bool StartVariableCalibration(byte pointCount, byte polyOrder,
-                                           bool autoSpacing, ushort maxWeight, byte channelMask = 0x0F)
+        public bool StopAllStreams()
         {
-            if (pointCount < 2 || pointCount > 20)
-            {
-                System.Diagnostics.Debug.WriteLine("Invalid point count: must be 2-20");
-                return false;
-            }
-
-            byte[] data = new byte[8];
-            data[0] = 0x01;  // Start Calibration
-            data[1] = 0x00;  // v0.6: Reserved (was pointCount)
-            data[2] = 0x00;  // v0.6: Reserved (was calibration_mode)
-            data[3] = 0x00;  // v0.6: Reserved (was polynomial_order)
-            data[4] = 0x00;  // v0.6: Reserved (was auto_spacing)
-            data[5] = (byte)(maxWeight & 0xFF);        // Max weight low
-            data[6] = (byte)((maxWeight >> 8) & 0xFF); // Max weight high
-            data[7] = channelMask;
-
-            // Use static sender to also echo TX into UI via MessageReceived
-            return SendStaticMessage(0x020, data);
+            // Empty message (0 bytes) for stop all streams
+            return SendMessage(CAN_MSG_ID_STOP_ALL_STREAMS, new byte[0]);
         }
 
-        // Get active calibration coefficients for verification
-        public bool GetActiveCalibrationCoefficients(byte channelMask = 0x0F)
+        public bool SwitchToInternalADC()
         {
-            byte[] data = new byte[8];
-            data[0] = 0x09;  // Get Active Coefficients command
-            data[1] = channelMask;  // Channel mask (0x0F = all channels)
-            data[2] = 0x00;  // Reserved
-            data[3] = 0x00;  // Reserved
-            data[4] = 0x00;  // Reserved
-            data[5] = 0x00;  // Reserved
-            data[6] = 0x00;  // Reserved
-            data[7] = 0x00;  // Reserved
-
-            return SendStaticMessage(0x028, data);
+            // Empty message (0 bytes) for mode switch
+            return SendMessage(CAN_MSG_ID_MODE_INTERNAL, new byte[0]);
         }
 
-        // Get calibration points for verification (removed duplicate - using static method below)
-
+        public bool SwitchToADS1115()
+        {
+            // Empty message (0 bytes) for mode switch
+            return SendMessage(CAN_MSG_ID_MODE_ADS1115, new byte[0]);
+        }
 
         // Static methods for easy access from all windows
         public static bool SendStaticMessage(uint canId, byte[] data)
@@ -455,126 +374,47 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        public static bool SendWeightCalibrationPoint(byte pointIndex, double weight, byte channelMask)
-        {
-            byte[] data = new byte[8];
-            data[0] = 0x03; // Command Type: Set Weight Point ✓
-            data[1] = 0x00; // v0.6: Reserved (point index auto-assigned by firmware)
-
-            ushort weightValue = (ushort)(weight * 10); // kg × 10 ✓
-            data[2] = (byte)(weightValue & 0xFF);        // Low byte ✓
-            data[3] = (byte)((weightValue >> 8) & 0xFF); // High byte ✓
-
-            data[4] = channelMask; // Channel Mask ✓
-            data[5] = 0x00; // Reserved ✓
-            data[6] = 0x00; // Reserved ✓
-            data[7] = 0x00; // Reserved ✓
-
-            return SendStaticMessage(0x022, data);
-        }
-
-        // v0.6: Get Active Coefficients (0x028)
-        public static bool GetActiveCoefficients(byte channelMask)
-        {
-            byte[] data = new byte[8];
-            data[0] = 0x08; // Command Type: Get Active Coefficients
-            data[1] = channelMask; // Channel mask
-            data[2] = 0x00; // Reserved
-            data[3] = 0x00; // Reserved
-            data[4] = 0x00; // Reserved
-            data[5] = 0x00; // Reserved
-            data[6] = 0x00; // Reserved
-            data[7] = 0x00; // Reserved
-
-            return SendStaticMessage(0x028, data);
-        }
-
-        // v0.6: Get Calibration Points (0x029)
-        public static bool GetCalibrationPoints(byte channelMask)
-        {
-            byte[] data = new byte[8];
-            data[0] = 0x09; // Command Type: Get Calibration Points
-            data[1] = channelMask; // Channel mask
-            data[2] = 0x00; // Reserved
-            data[3] = 0x00; // Reserved
-            data[4] = 0x00; // Reserved
-            data[5] = 0x00; // Reserved
-            data[6] = 0x00; // Reserved
-            data[7] = 0x00; // Reserved
-
-            return SendStaticMessage(0x029, data);
-        }
-
-        // v0.6: Manage Calibration Points (0x02A)
-        public static bool ManageCalibrationPoints(byte channelMask, byte operation)
-        {
-            byte[] data = new byte[8];
-            data[0] = 0x0B; // Command Type: Manage Calibration Points (v0.6)
-            data[1] = channelMask; // Channel mask
-            data[2] = operation; // Operation: 0x01=Delete Last, 0x02=Reset Session, 0x03=Get Count
-            data[3] = 0x00; // Reserved
-            data[4] = 0x00; // Reserved
-            data[5] = 0x00; // Reserved
-            data[6] = 0x00; // Reserved
-            data[7] = 0x00; // Reserved
-
-            return SendStaticMessage(0x02A, data);
-        }
-
-        /// <summary>
-        /// Manage calibration points with specific point index (for Delete Specific Point operation)
-        /// </summary>
-        /// <param name="channelMask">Channel mask</param>
-        /// <param name="operation">Operation type</param>
-        /// <param name="pointIndex">1-based point index (for Delete Specific Point operation)</param>
-        /// <returns>True if message sent successfully</returns>
-        public static bool ManageCalibrationPoints(byte channelMask, byte operation, byte pointIndex)
-        {
-            byte[] data = new byte[8];
-            data[0] = 0x0B; // Command Type: Manage Calibration Points (v0.6)
-            data[1] = channelMask; // Channel mask
-            data[2] = operation; // Operation: 0x01=Delete Last, 0x02=Reset Session, 0x03=Get Count, 0x04=Delete Specific
-            data[3] = pointIndex; // Point index for Delete Specific Point operation
-            data[4] = 0x00; // Reserved
-            data[5] = 0x00; // Reserved
-            data[6] = 0x00; // Reserved
-            data[7] = 0x00; // Reserved
-
-            return SendStaticMessage(0x02A, data);
-        }
-
-        #region Event Firing Logic for v0.7 Protocol
+        #region Event Firing Logic for v0.7 Protocol - Semantic IDs
         private void FireSpecificEvents(uint canId, byte[] canData)
         {
             switch (canId)
             {
-                case CAN_MSG_ID_RAW_DATA: // 0x200 - Raw ADC data
-                    if (canData.Length >= 8)
+                case CAN_MSG_ID_LEFT_RAW_DATA: // 0x200 - Left side raw ADC data
+                    if (canData.Length >= 2)
                     {
-                        var rawDataArgs = new RawDataEventArgs
+                        ushort rawADC = (ushort)(canData[0] | (canData[1] << 8));
+                        RawDataReceived?.Invoke(this, new RawDataEventArgs
                         {
-                            Side = canData[0],  // 0=Left, 1=Right
-                            RawADCSum = BitConverter.ToUInt16(canData, 1), // Raw ADC sum
-                            ADCMode = canData[3], // 0=Internal, 1=ADS1115
-                            Timestamp = BitConverter.ToUInt16(canData, 4), // Milliseconds
+                            Side = 0,  // Left side
+                            RawADCSum = rawADC,
                             TimestampFull = DateTime.Now
-                        };
-                        RawDataReceived?.Invoke(this, rawDataArgs);
+                        });
                     }
                     break;
 
-                case CAN_MSG_ID_STATUS: // 0x201 - System status
-                    if (canData.Length >= 8)
+                case CAN_MSG_ID_RIGHT_RAW_DATA: // 0x201 - Right side raw ADC data
+                    if (canData.Length >= 2)
                     {
-                        var statusArgs = new SystemStatusEventArgs
+                        ushort rawADC = (ushort)(canData[0] | (canData[1] << 8));
+                        RawDataReceived?.Invoke(this, new RawDataEventArgs
                         {
-                            SystemStatus = canData[0], // 0=OK, 1=Warning, 2=Error
-                            ErrorFlags = canData[1],    // Error flags
-                            ADCMode = canData[2],       // Current ADC mode
-                            UptimeSeconds = BitConverter.ToUInt32(canData, 4), // System uptime
+                            Side = 1,  // Right side
+                            RawADCSum = rawADC,
+                            TimestampFull = DateTime.Now
+                        });
+                    }
+                    break;
+
+                case CAN_MSG_ID_SYSTEM_STATUS: // 0x300 - System status
+                    if (canData.Length >= 3)
+                    {
+                        SystemStatusReceived?.Invoke(this, new SystemStatusEventArgs
+                        {
+                            SystemStatus = canData[0],
+                            ErrorFlags = canData[1],
+                            ADCMode = canData[2],
                             Timestamp = DateTime.Now
-                        };
-                        // TODO: Add SystemStatusReceived event if needed
+                        });
                     }
                     break;
             }
@@ -589,100 +429,27 @@ namespace SuspensionPCB_CAN_WPF
 
     }  // Class closing brace
 
-    #region Event Args Classes for WeightCalibrationPoint
-    public class WeightDataEventArgs : EventArgs
-    {
-        public byte ChannelMask { get; set; }
-        // 4 Load Cells - Standard Configuration
-        public double FrontLeftWeight { get; set; }   // STM32 ADC Channel 0
-        public double FrontRightWeight { get; set; }  // STM32 ADC Channel 1
-        public double RearLeftWeight { get; set; }    // STM32 ADC Channel 2
-        public double RearRightWeight { get; set; }   // STM32 ADC Channel 3
-        public double TotalVehicleWeight { get; set; } // Sum of all 4
-        public DateTime Timestamp { get; set; }
-    }
-
-    public class ADCDataEventArgs : EventArgs
-    {
-        // ADC values for all 4 channels
-        public int FrontLeftADC { get; set; }     // STM32 ADC Channel 0 (12-bit: 0-4095)
-        public int FrontRightADC { get; set; }    // STM32 ADC Channel 1 (12-bit: 0-4095)
-        public int RearLeftADC { get; set; }      // STM32 ADC Channel 2 (12-bit: 0-4095)
-        public int RearRightADC { get; set; }     // STM32 ADC Channel 3 (12-bit: 0-4095)
-        public double FrontLeftVoltage { get; set; }
-        public double FrontRightVoltage { get; set; }
-        public double RearLeftVoltage { get; set; }
-        public double RearRightVoltage { get; set; }
-        public DateTime Timestamp { get; set; }
-    }
-
-    public class CANErrorEventArgs : EventArgs
-    {
-        public string ErrorMessage { get; set; }
-        public int ErrorCode { get; set; }
-        public DateTime Timestamp { get; set; }
-    }
-
-    public class CalibrationDataEventArgs : EventArgs
-    {
-        public byte PointIndex { get; set; }        // Protocol: Byte 0 (Point Index 0-19)
-        public byte PointStatus { get; set; }       // Protocol: Byte 1 (Status Code 0x00-0xFF)
-        public double ReferenceWeight { get; set; } // Protocol: Bytes 2-3 converted to kg
-        public int ADCValue { get; set; }           // Protocol: Bytes 4-5 (Raw ADC value)
-        public DateTime Timestamp { get; set; }
-    }
-
-    public class CalibrationQualityEventArgs : EventArgs
-    {
-        public double AccuracyPercentage { get; set; }
-        public double MaxErrorKg { get; set; }
-        public byte QualityGrade { get; set; }
-        public byte Recommendation { get; set; }
-        public DateTime Timestamp { get; set; }
-    }
-
-    // Calibration verification data structure
-    public class CalibrationVerificationData
-    {
-        public double CalibratedWeight { get; set; }  // Weight from calibration
-        public double RawADCWeight { get; set; }      // Weight from raw ADC conversion
-        public int RawADCValue { get; set; }         // Raw ADC reading
-        public double ErrorPercentage { get; set; }    // Calibration error percentage
-        public bool IsAccurate { get; set; }         // Within acceptable error range
-        public DateTime Timestamp { get; set; }
-    }
-
-    // Calibration coefficients data structure
-    public class CalibrationCoefficientsData
-    {
-        public byte Channel { get; set; }            // Channel number (0-7)
-        public byte Order { get; set; }              // Polynomial order (1-4)
-        public byte Segment { get; set; }            // Segment index (0-2)
-        public double CoefficientA { get; set; }    // Coefficient A (scaled by 1000)
-        public double CoefficientB { get; set; }    // Coefficient B (scaled by 1000)
-        public DateTime Timestamp { get; set; }
-    }
-
-    // v0.7 Protocol Event Args
+    // v0.7 Event Args Classes - Ultra-Minimal
     public class RawDataEventArgs : EventArgs
     {
         public byte Side { get; set; }              // 0=Left, 1=Right
-        public ushort RawADCSum { get; set; }       // Raw ADC sum (0-8192 or 0-65535)
-        public byte ADCMode { get; set; }           // 0=Internal, 1=ADS1115
-        public ushort Timestamp { get; set; }       // Milliseconds
-        public DateTime TimestampFull { get; set; } // Full timestamp
+        public ushort RawADCSum { get; set; }       // Raw ADC sum (Ch0+Ch1 or Ch2+Ch3)
+        public DateTime TimestampFull { get; set; } // PC3 reception timestamp
     }
 
     public class SystemStatusEventArgs : EventArgs
     {
         public byte SystemStatus { get; set; }      // 0=OK, 1=Warning, 2=Error
         public byte ErrorFlags { get; set; }        // Error flags
-        public byte ADCMode { get; set; }           // Current ADC mode
-        public uint UptimeSeconds { get; set; }     // System uptime in seconds
-        public DateTime Timestamp { get; set; }
+        public byte ADCMode { get; set; }           // Current ADC mode (0=Internal, 1=ADS1115)
+        public DateTime Timestamp { get; set; }     // PC3 reception timestamp
     }
 
-    #endregion
-
+    public class CANErrorEventArgs : EventArgs
+    {
+        public string? ErrorMessage { get; set; }
+        public int ErrorCode { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
 
 }  // Namespace closing brace
