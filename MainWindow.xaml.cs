@@ -78,47 +78,44 @@ namespace SuspensionPCB_CAN_WPF
                 StopAllBtn.Content = "Stopping...";
 
                 // Use v0.7 semantic stream control to stop all streams
-                bool stopped = _canService?.StopAllStreams() ?? false;  // Stop all streams
+                bool stopped = _canService?.StopAllStreams() ?? false;
 
                 if (stopped)
                 {
-                    OnCANMessageReceived(new CANMessage(0x044, new byte[0]));
-                }
-
-                if (stopped)
-                {
+                    _logger.LogInfo("Stopped all streams", "CAN");
                     // Success state - Green
                     StopAllBtn.Background = new SolidColorBrush(Color.FromRgb(40, 167, 69));
                     StopAllBtn.Content = "Stopped ✓";
-
-                    // Reset to default after 2 seconds
-                    Task.Delay(2000).ContinueWith(_ =>
-                    {
-                        Dispatcher.Invoke(() => {
-                            StopAllBtn.Background = new SolidColorBrush(Color.FromRgb(108, 117, 125));
-                            StopAllBtn.Content = "Stop All";
-                        });
-                    });
+                    MessageBox.Show("All streams stopped successfully.", "Streams Stopped", 
+                                  MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else
                 {
+                    _logger.LogError("Failed to stop all streams", "CAN");
                     // Error state - Red
                     StopAllBtn.Background = new SolidColorBrush(Color.FromRgb(220, 53, 69));
                     StopAllBtn.Content = "Failed ✗";
+                    MessageBox.Show("Failed to stop all streams.", "Stream Error", 
+                                  MessageBoxButton.OK, MessageBoxImage.Error);
+                }
 
-                    // Reset after 2 seconds
+                // Reset to default after 2 seconds
                     Task.Delay(2000).ContinueWith(_ =>
                     {
                         Dispatcher.Invoke(() => {
                             StopAllBtn.Background = new SolidColorBrush(Color.FromRgb(108, 117, 125));
-                            StopAllBtn.Content = "Stop All";
+                        StopAllBtn.Content = "Stop All Streams";
                         });
                     });
-                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Stop All Error: {ex.Message}");
+                _logger.LogError($"Stop streams error: {ex.Message}", "CAN");
+                MessageBox.Show($"Stream Error: {ex.Message}", "CAN Transmission Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                
+                // Reset button state on error
+                StopAllBtn.Background = new SolidColorBrush(Color.FromRgb(108, 117, 125));
+                StopAllBtn.Content = "Stop All Streams";
             }
         }
 
@@ -589,11 +586,19 @@ namespace SuspensionPCB_CAN_WPF
                         return;
                     }
                     
-                    // Start streaming left side at current rate using semantic ID
+                    // Start streaming left side at current rate using v0.7 semantic ID
                     bool success = _canService.StartLeftStream(_currentTransmissionRate);
                     if (success)
                     {
-                        OnCANMessageReceived(new CANMessage(0x040, new byte[] { _currentTransmissionRate }));
+                        _logger.LogInfo($"Started left side streaming at rate {_currentTransmissionRate}", "CAN");
+                        MessageBox.Show($"Left side streaming started at {GetRateText(_currentTransmissionRate)}", 
+                                      "Stream Started", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        _logger.LogError("Failed to start left side streaming", "CAN");
+                        MessageBox.Show("Failed to start left side streaming.", "Stream Error", 
+                                      MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                 }
                 else
@@ -603,7 +608,8 @@ namespace SuspensionPCB_CAN_WPF
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Send Error: {ex.Message}", "CAN Transmission Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                _logger.LogError($"Left stream start error: {ex.Message}", "CAN");
+                MessageBox.Show($"Stream Error: {ex.Message}", "CAN Transmission Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -621,18 +627,43 @@ namespace SuspensionPCB_CAN_WPF
                         return;
                     }
                     
-                    // Start streaming right side at current rate using semantic ID
+                    // Start streaming right side at current rate using v0.7 semantic ID
                     bool success = _canService.StartRightStream(_currentTransmissionRate);
                     if (success)
                     {
-                        OnCANMessageReceived(new CANMessage(0x041, new byte[] { _currentTransmissionRate }));
+                        _logger.LogInfo($"Started right side streaming at rate {_currentTransmissionRate}", "CAN");
+                        MessageBox.Show($"Right side streaming started at {GetRateText(_currentTransmissionRate)}", 
+                                      "Stream Started", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
+                    else
+                    {
+                        _logger.LogError("Failed to start right side streaming", "CAN");
+                        MessageBox.Show("Failed to start right side streaming.", "Stream Error", 
+                                      MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("CAN service not connected.", "Connection Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Send Error: {ex.Message}", "CAN Transmission Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                _logger.LogError($"Right stream start error: {ex.Message}", "CAN");
+                MessageBox.Show($"Stream Error: {ex.Message}", "CAN Transmission Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private string GetRateText(byte rate)
+        {
+            return rate switch
+            {
+                0x01 => "100Hz",
+                0x02 => "500Hz",
+                0x03 => "1kHz",
+                0x05 => "1Hz",
+                _ => $"Unknown Rate (0x{rate:X2})"
+            };
         }
 
         // Old calibration system removed - now using CalibrationDialog

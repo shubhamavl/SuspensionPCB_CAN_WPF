@@ -69,14 +69,14 @@
 
                 <!-- Test Messages -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="RequestSuspensionBtn" Content="Req Suspension" 
+                    <Button x:Name="RequestSuspensionBtn" Content="Start Left Stream" 
                             Style="{StaticResource ModernButton}" 
                             Background="#FF28A745" Click="RequestSuspensionBtn_Click" 
-                            IsEnabled="False" ToolTip="Send 0x030 request for Suspension Weight Data"/>
-                    <Button x:Name="RequestAxleBtn" Content="Req Axle" 
+                            IsEnabled="False" ToolTip="Start left side raw ADC data streaming"/>
+                    <Button x:Name="RequestAxleBtn" Content="Start Right Stream" 
                             Style="{StaticResource ModernButton}" 
                             Background="#FF28A745" Click="RequestAxleBtn_Click" 
-                            IsEnabled="False" ToolTip="Send 0x031 request for Axle Weight Data"/>
+                            IsEnabled="False" ToolTip="Start right side raw ADC data streaming"/>
 
                     <Button x:Name="CalibrateLeftBtn"
                             Content="Calibrate Left"
