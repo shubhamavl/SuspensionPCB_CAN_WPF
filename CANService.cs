@@ -71,13 +71,13 @@ namespace SuspensionPCB_CAN_WPF
                 _cancellationTokenSource = new CancellationTokenSource();
                 Task.Run(() => ReadMessagesAsync(_cancellationTokenSource.Token));
 
-                System.Diagnostics.Debug.WriteLine($"USB-CAN-A Connected on {portName}");
+                ProductionLogger.Instance.LogInfo($"USB-CAN-A Connected on {portName}", "CANService");
                 return true;
             }
             catch (Exception ex)
             {
                 message = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-                System.Diagnostics.Debug.WriteLine($"USB-CAN-A connection error: {ex.Message}");
+                ProductionLogger.Instance.LogError($"USB-CAN-A connection error: {ex.Message}", "CANService");
                 return false;
             }
         }
@@ -107,7 +107,7 @@ namespace SuspensionPCB_CAN_WPF
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"USB-CAN-A connection error: {ex.Message}");
+                ProductionLogger.Instance.LogError($"USB-CAN-A connection error: {ex.Message}", "CANService");
                 return false;
             }
         }
@@ -122,7 +122,7 @@ namespace SuspensionPCB_CAN_WPF
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = null;
 
-            System.Diagnostics.Debug.WriteLine("USB-CAN-A Disconnected");
+            ProductionLogger.Instance.LogInfo("USB-CAN-A Disconnected", "CANService");
         }
 
         private async Task ReadMessagesAsync(CancellationToken token)
@@ -211,12 +211,12 @@ namespace SuspensionPCB_CAN_WPF
                     // Fire specific events for WeightCalibrationPoint
                     FireSpecificEvents(canId, canData);
 
-                    System.Diagnostics.Debug.WriteLine($"Processed: ID=0x{canId:X3}, Data={BitConverter.ToString(canData)}");
+                    ProductionLogger.Instance.LogInfo($"Processed: ID=0x{canId:X3}, Data={BitConverter.ToString(canData)}", "CANService");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Decode error: {ex.Message}");
+                ProductionLogger.Instance.LogError($"Decode error: {ex.Message}", "CANService");
             }
         }
 
@@ -250,20 +250,20 @@ namespace SuspensionPCB_CAN_WPF
                 // Validate CAN ID (11-bit max for standard frame)
                 if (id > MAX_CAN_ID)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Invalid CAN ID: 0x{id:X3} (max 0x{MAX_CAN_ID:X3} for standard frame)");
+                    ProductionLogger.Instance.LogWarning($"Invalid CAN ID: 0x{id:X3} (max 0x{MAX_CAN_ID:X3} for standard frame)", "CANService");
                     return false;
                 }
 
                 // Validate data length
                 if (data != null && data.Length > 8)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Invalid data length: {data.Length} (max 8 bytes)");
+                    ProductionLogger.Instance.LogWarning($"Invalid data length: {data.Length} (max 8 bytes)", "CANService");
                     return false;
                 }
 
                 if (data == null)
                 {
-                    System.Diagnostics.Debug.WriteLine("Cannot send message: data is null");
+                    ProductionLogger.Instance.LogWarning("Cannot send message: data is null", "CANService");
                     return false;
                 }
 
@@ -274,12 +274,12 @@ namespace SuspensionPCB_CAN_WPF
                     _serialPort.Write(frame, 0, frame.Length);
                 }
 
-                System.Diagnostics.Debug.WriteLine($"USB-CAN-A: Sent CAN frame ID=0x{id:X3}, Data={BitConverter.ToString(data ?? new byte[0])}");
+                ProductionLogger.Instance.LogInfo($"USB-CAN-A: Sent CAN frame ID=0x{id:X3}, Data={BitConverter.ToString(data ?? new byte[0])}", "CANService");
                 return true;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Send message error: {ex.Message}");
+                ProductionLogger.Instance.LogError($"Send message error: {ex.Message}", "CANService");
                 return false;
             }
         }
@@ -343,7 +343,7 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"CAN TX: ID=0x{canId:X3}, Data=[{string.Join(",", Array.ConvertAll(data, b => $"0x{b:X2}"))}]");
+                ProductionLogger.Instance.LogInfo($"CAN TX: ID=0x{canId:X3}, Data=[{string.Join(",", Array.ConvertAll(data, b => $"0x{b:X2}"))}]", "CANService");
 
                 if (_instance != null)
                 {
@@ -357,19 +357,19 @@ namespace SuspensionPCB_CAN_WPF
                     }
                     else
                     {
-                        System.Diagnostics.Debug.WriteLine("CAN Send Error: Not connected to hardware");
+                        ProductionLogger.Instance.LogWarning("CAN Send Error: Not connected to hardware", "CANService");
                         return false;
                     }
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("CAN Send Error: CANService instance not available");
+                    ProductionLogger.Instance.LogWarning("CAN Send Error: CANService instance not available", "CANService");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"CAN Send Error: {ex.Message}");
+                ProductionLogger.Instance.LogError($"CAN Send Error: {ex.Message}", "CANService");
                 return false;
             }
         }

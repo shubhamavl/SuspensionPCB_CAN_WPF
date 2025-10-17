@@ -12,6 +12,8 @@ namespace SuspensionPCB_CAN_WPF
         private int _currentRawADC = 0;
         private bool _point1Captured = false;
         private bool _point2Captured = false;
+        private CANService? _canService;
+        private ProductionLogger _logger = ProductionLogger.Instance;
         
         // Properties for data binding
         private string _side = "";
@@ -55,6 +57,18 @@ namespace SuspensionPCB_CAN_WPF
             DataContext = this;
             Side = side;
             
+            // Get CAN service instance
+            _canService = CANService._instance;
+            if (_canService != null)
+            {
+                _canService.RawDataReceived += OnRawDataReceived;
+                _logger.LogInfo($"Calibration dialog opened for {side} side", "CalibrationDialog");
+            }
+            else
+            {
+                _logger.LogWarning("CAN service not available for calibration", "CalibrationDialog");
+            }
+            
             // Start refresh timer to update current raw ADC
             _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _refreshTimer.Tick += RefreshTimer_Tick;
@@ -65,11 +79,25 @@ namespace SuspensionPCB_CAN_WPF
         
         private void RefreshTimer_Tick(object? sender, EventArgs e)
         {
-            // TODO: Get current raw ADC from CAN service
-            // For now, simulate with random values
-            var random = new Random();
-            _currentRawADC = random.Next(1500, 2500);
+            // Update current raw ADC display
             CurrentRawTxt.Text = _currentRawADC.ToString();
+        }
+        
+        private void OnRawDataReceived(object? sender, RawDataEventArgs e)
+        {
+            try
+            {
+                // Update ADC value based on side
+                if ((Side == "Left" && e.Side == 0) || (Side == "Right" && e.Side == 1))
+                {
+                    _currentRawADC = e.RawADCSum;
+                    _logger.LogInfo($"Raw ADC updated for {Side} side: {_currentRawADC}", "CalibrationDialog");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error processing raw data: {ex.Message}", "CalibrationDialog");
+            }
         }
         
         private void CapturePoint1_Click(object sender, RoutedEventArgs e)
@@ -238,6 +266,13 @@ namespace SuspensionPCB_CAN_WPF
         protected override void OnClosed(EventArgs e)
         {
             _refreshTimer?.Stop();
+            
+            // Unsubscribe from CAN service events
+            if (_canService != null)
+            {
+                _canService.RawDataReceived -= OnRawDataReceived;
+            }
+            
             base.OnClosed(e);
         }
         

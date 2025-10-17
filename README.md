@@ -1,8 +1,8 @@
-# Suspension PCB CAN WPF Application
+# Suspension System Monitor
 
 ## Overview
 
-This is a PC3 application for the LMV Suspension System that communicates with an STM32 microcontroller via CAN bus. The application handles calibration, tare functionality, real-time data display, and data logging.
+This is a production-ready PC3 application for the LMV Suspension System that communicates with an STM32 microcontroller via CAN bus. The application handles calibration, tare functionality, real-time data display, and data logging with comprehensive logging capabilities.
 
 ## Features
 
@@ -11,7 +11,8 @@ This is a PC3 application for the LMV Suspension System that communicates with a
 - **2-Point Calibration**: Linear calibration system for converting raw ADC values to weight measurements
 - **Tare Management**: Zero-offset functionality for both sides independently
 - **Data Logging**: CSV export with timestamp, raw, calibrated, and tared values
-- **CAN Communication**: Ultra-minimal protocol with semantic CAN IDs
+- **CAN Communication**: Ultra-minimal v0.7 protocol with semantic CAN IDs
+- **Production Logging**: Configurable logging system with severity levels and UI visibility control
 
 ### Protocol (v0.7)
 - **Raw Data**: 2-byte messages (75% bandwidth reduction)
@@ -60,6 +61,13 @@ This is a PC3 application for the LMV Suspension System that communicates with a
 2. Click "Stop Logging" to end recording
 3. Click "Export CSV" to save logged data
 
+### 7. Production Logging System
+1. Switch to "Logs" tab to view system logs
+2. Use checkboxes to filter by severity (Info, Warning, Error, Critical)
+3. Adjust minimum log level to control verbosity
+4. Click "Clear Logs" to reset log display
+5. Click "Export Logs" to save logs to file
+
 ## File Structure
 
 ### Calibration Files
@@ -71,6 +79,7 @@ This is a PC3 application for the LMV Suspension System that communicates with a
 
 ### Log Files
 - `suspension_log_YYYYMMDD_HHMMSS.csv`: Data logging output
+- `suspension_log_YYYYMMDD_HHMMSS.txt`: Production logging output
 
 ## CSV Log Format
 
@@ -80,7 +89,7 @@ Timestamp,Side,RawADC,CalibratedKg,TaredKg,TareBaselineKg,CalSlope,CalIntercept,
 2025-01-15 10:30:15.124,Right,1984,24.8,0.0,24.8,0.0125,0.0,0
 ```
 
-## CAN Protocol Details
+## CAN Protocol Details (v0.7)
 
 ### Message IDs
 - `0x200`: Left side raw ADC data (2 bytes)
@@ -144,6 +153,6 @@ For technical support or questions:
 
 ---
 
-**Version**: v0.7  
+**Version**: v0.7 Production  
 **Last Updated**: January 2025  
-**Status**: Production Ready
+**Status**: Production Ready - Clean Codebase
