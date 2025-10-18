@@ -69,14 +69,14 @@
 
                 <!-- Test Messages -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="RequestSuspensionBtn" Content="Start Left Stream" 
+                    <Button x:Name="RequestSuspensionBtn" Content="Start Left Raw Data Stream" 
                             Style="{StaticResource ModernButton}" 
                             Background="#FF28A745" Click="RequestSuspensionBtn_Click" 
-                            IsEnabled="False" ToolTip="Start left side raw ADC data streaming"/>
-                    <Button x:Name="RequestAxleBtn" Content="Start Right Stream" 
+                            IsEnabled="False" ToolTip="Start left side raw ADC data streaming (no calibration required)"/>
+                    <Button x:Name="RequestAxleBtn" Content="Start Right Raw Data Stream" 
                             Style="{StaticResource ModernButton}" 
                             Background="#FF28A745" Click="RequestAxleBtn_Click" 
-                            IsEnabled="False" ToolTip="Start right side raw ADC data streaming"/>
+                            IsEnabled="False" ToolTip="Start right side raw ADC data streaming (no calibration required)"/>
 
                     <Button x:Name="CalibrateLeftBtn"
                             Content="Calibrate Left"
@@ -120,157 +120,121 @@
 
         <!-- Main Content -->
         <Grid Grid.Row="2" Margin="15">
-            <TabControl>
-                <TabItem Header="Monitor">
+            <StackPanel>
+                <!-- Weight Data Display -->
+                <GroupBox Header="Live Weight Data" Padding="10" Margin="0,0,0,20">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-            <!-- Message Log -->
-            <GroupBox Grid.Column="0" Header="CAN Message Log" Padding="10" Margin="0,0,10,0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+                        <!-- Left Side -->
+                        <Border Grid.Column="0" Background="#FFF8F9FA" BorderBrush="#FF1B5E96" BorderThickness="1" 
+                                CornerRadius="5" Padding="10" Margin="0,0,10,0">
+                            <StackPanel>
+                                <TextBlock Text="LEFT SIDE" FontWeight="Bold" 
+                                           Foreground="#FF1B5E96" HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
-                    <!-- Filters -->
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                        <TextBlock Text="Filter ID:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                        <TextBox x:Name="FilterIdTxt" Width="80" 
-                             TextChanged="FilterIdTxt_TextChanged"/>
-                        <CheckBox x:Name="ShowTxChk" Content="TX" IsChecked="True" 
-                              Margin="15,0,5,0" Checked="FilterChanged" 
-                              Unchecked="FilterChanged"/>
-                        <CheckBox x:Name="ShowRxChk" Content="RX" IsChecked="True" 
-                              Margin="5,0,15,0" Checked="FilterChanged" 
-                              Unchecked="FilterChanged"/>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="Count:" Margin="10,0,5,0"/>
-                        <TextBlock x:Name="MessageCountTxt" Text="0" FontWeight="Bold"/>
-                    </StackPanel>
+                                    <!-- Raw ADC -->
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw ADC:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LeftRawTxt" Text="0" FontWeight="Bold" Margin="5,0,0,5"/>
 
-                    <!-- Message Grid - FIXED BINDING PROPERTIES -->
-                    <DataGrid Grid.Row="1" x:Name="MessageGrid" 
-                          AutoGenerateColumns="False" IsReadOnly="True"
-                          ItemsSource="{Binding FilteredMessages}">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="90"/>
-                            <DataGridTextColumn Header="ID" Binding="{Binding ID}" Width="60"/>
-                            <DataGridTextColumn Header="Dir" Binding="{Binding Direction}" Width="40"/>
-                            <DataGridTextColumn Header="Data" Binding="{Binding Data}" Width="200"/>
-                            <DataGridTextColumn Header="Decoded" Binding="{Binding Decoded}" Width="*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </Grid>
-            </GroupBox>
+                                    <!-- Calibrated Weight -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Calibrated:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="LeftCalibratedTxt" Text="0.0 kg" FontWeight="Bold" Margin="5,0,0,5"/>
 
-            <!-- Weight Data Display -->
-            <GroupBox Grid.Column="1" Header="Live Weight Data" Padding="10">
-                <StackPanel>
-                    <!-- Left Side -->
-                    <Border Background="#FFF8F9FA" BorderBrush="#FF1B5E96" BorderThickness="1" 
-                            CornerRadius="5" Padding="10" Margin="0,0,0,10">
-                        <StackPanel>
-                            <TextBlock Text="LEFT SIDE" FontWeight="Bold" 
-                                       Foreground="#FF1B5E96" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                    <!-- Display Weight (after tare) -->
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Display:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="LeftDisplayTxt" Text="0.0 kg" FontWeight="Bold" 
+                                               Foreground="#FF28A745" Margin="5,0,0,5"/>
 
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
+                                    <!-- Tare Status -->
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Tare:" FontWeight="Bold" Margin="0,0,5,0"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="LeftTareStatusTxt" Text="- Not Tared" FontSize="10" Margin="5,0,0,0"/>
+                                </Grid>
 
-                                <!-- Raw ADC -->
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw ADC:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LeftRawTxt" Text="0" FontWeight="Bold" Margin="5,0,0,5"/>
-
-                                <!-- Calibrated Weight -->
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Calibrated:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="LeftCalibratedTxt" Text="0.0 kg" FontWeight="Bold" Margin="5,0,0,5"/>
-
-                                <!-- Display Weight (after tare) -->
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Display:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="LeftDisplayTxt" Text="0.0 kg" FontWeight="Bold" 
-                                           Foreground="#FF28A745" Margin="5,0,0,5"/>
-
-                                <!-- Tare Status -->
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Tare:" FontWeight="Bold" Margin="0,0,5,0"/>
-                                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="LeftTareStatusTxt" Text="- Not Tared" FontSize="10" Margin="5,0,0,0"/>
-                            </Grid>
-
-                            <!-- Left Side Buttons -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
-                                <Button Content="Tare Left" Style="{StaticResource ModernButton}" 
-                                        Background="#FF17A2B8" Click="TareLeft_Click" Margin="5"/>
-                                <Button Content="Calibrate Left" Style="{StaticResource ModernButton}" 
-                                        Background="#FF28A745" Click="CalibrateLeft_Click" Margin="5"/>
-                                    </StackPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Right Side -->
-                    <Border Background="#FFF8F9FA" BorderBrush="#FF28A745" BorderThickness="1" 
-                            CornerRadius="5" Padding="10" Margin="0,0,0,10">
-                        <StackPanel>
-                            <TextBlock Text="RIGHT SIDE" FontWeight="Bold" 
-                                       Foreground="#FF28A745" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Raw ADC -->
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw ADC:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="RightRawTxt" Text="0" FontWeight="Bold" Margin="5,0,0,5"/>
-
-                                <!-- Calibrated Weight -->
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Calibrated:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="RightCalibratedTxt" Text="0.0 kg" FontWeight="Bold" Margin="5,0,0,5"/>
-
-                                <!-- Display Weight (after tare) -->
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Display:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="RightDisplayTxt" Text="0.0 kg" FontWeight="Bold" 
-                                           Foreground="#FF28A745" Margin="5,0,0,5"/>
-
-                                <!-- Tare Status -->
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Tare:" FontWeight="Bold" Margin="0,0,5,0"/>
-                                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="RightTareStatusTxt" Text="- Not Tared" FontSize="10" Margin="5,0,0,0"/>
-                            </Grid>
-
-                            <!-- Right Side Buttons -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
-                                <Button Content="Tare Right" Style="{StaticResource ModernButton}" 
-                                        Background="#FF17A2B8" Click="TareRight_Click" Margin="5"/>
-                                <Button Content="Calibrate Right" Style="{StaticResource ModernButton}" 
-                                        Background="#FF28A745" Click="CalibrateRight_Click" Margin="5"/>
+                                <!-- Left Side Buttons -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                                    <Button Content="Tare Left" Style="{StaticResource ModernButton}" 
+                                            Background="#FF17A2B8" Click="TareLeft_Click" Margin="5"/>
+                                    <Button Content="Calibrate Left" Style="{StaticResource ModernButton}" 
+                                            Background="#FF28A745" Click="CalibrateLeft_Click" Margin="5"/>
+                                </StackPanel>
                             </StackPanel>
-                        </StackPanel>
-                    </Border>
+                        </Border>
+
+                        <!-- Right Side -->
+                        <Border Grid.Column="1" Background="#FFF8F9FA" BorderBrush="#FF28A745" BorderThickness="1" 
+                                CornerRadius="5" Padding="10" Margin="10,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="RIGHT SIDE" FontWeight="Bold" 
+                                           Foreground="#FF28A745" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Raw ADC -->
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw ADC:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="RightRawTxt" Text="0" FontWeight="Bold" Margin="5,0,0,5"/>
+
+                                    <!-- Calibrated Weight -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Calibrated:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="RightCalibratedTxt" Text="0.0 kg" FontWeight="Bold" Margin="5,0,0,5"/>
+
+                                    <!-- Display Weight (after tare) -->
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Display:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="RightDisplayTxt" Text="0.0 kg" FontWeight="Bold" 
+                                               Foreground="#FF28A745" Margin="5,0,0,5"/>
+
+                                    <!-- Tare Status -->
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Tare:" FontWeight="Bold" Margin="0,0,5,0"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="RightTareStatusTxt" Text="- Not Tared" FontSize="10" Margin="5,0,0,0"/>
+                                </Grid>
+
+                                <!-- Right Side Buttons -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                                    <Button Content="Tare Right" Style="{StaticResource ModernButton}" 
+                                            Background="#FF17A2B8" Click="TareRight_Click" Margin="5"/>
+                                    <Button Content="Calibrate Right" Style="{StaticResource ModernButton}" 
+                                            Background="#FF28A745" Click="CalibrateRight_Click" Margin="5"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </GroupBox>
+
+                <!-- Summary and System Status -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
                     <!-- Total and Balance -->
-                    <Border Background="#FFF8F9FA" BorderBrush="#FF6C757D" BorderThickness="1" 
-                            CornerRadius="5" Padding="10" Margin="0,0,0,10">
+                    <GroupBox Grid.Column="0" Header="Summary" Padding="10" Margin="0,0,10,0">
                         <StackPanel>
-                            <TextBlock Text="SUMMARY" FontWeight="Bold" 
-                                       Foreground="#FF6C757D" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition/>
@@ -297,19 +261,16 @@
                                     Background="#FFDC3545" Click="ResetTares_Click" 
                                     HorizontalAlignment="Center" Margin="0,10,0,0"/>
                         </StackPanel>
-                    </Border>
+                    </GroupBox>
 
                     <!-- System Status -->
-                    <Border Background="#FFF8F9FA" BorderBrush="#FF6C757D" BorderThickness="1" 
-                            CornerRadius="5" Padding="10">
+                    <GroupBox Grid.Column="1" Header="System Status" Padding="10" Margin="10,0,0,0">
                         <StackPanel>
-                            <TextBlock Text="System Status" FontWeight="Bold" 
-                                       Foreground="#FF6C757D" HorizontalAlignment="Center" Margin="0,0,0,5"/>
-                            <TextBlock x:Name="DataRateTxt" Text="Data Rate: --" FontSize="12" HorizontalAlignment="Center"/>
-                            <TextBlock x:Name="LastUpdateTxt" Text="Last Update: --" FontSize="12" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="DataRateTxt" Text="Data Rate: --" FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,5"/>
+                            <TextBlock x:Name="LastUpdateTxt" Text="Last Update: --" FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                             
                             <!-- Data Logging Controls -->
-                            <Separator Margin="0,10,0,10"/>
+                            <Separator Margin="0,0,0,10"/>
                             <TextBlock Text="Data Logging" FontWeight="Bold" 
                                        Foreground="#FF6C757D" HorizontalAlignment="Center" Margin="0,0,0,5"/>
                             
@@ -329,78 +290,17 @@
                                     Style="{StaticResource ModernButton}" Background="#FF17A2B8" 
                                     Click="ExportLog_Click" HorizontalAlignment="Center" Margin="5"/>
                         </StackPanel>
-                    </Border>
+                    </GroupBox>
+                </Grid>
+
+                <!-- Window Access Buttons -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
+                    <Button Content="Open Monitor Window" Style="{StaticResource ModernButton}" 
+                            Background="#FF17A2B8" Click="OpenMonitorWindow_Click" Margin="5"/>
+                    <Button Content="Open Logs Window" Style="{StaticResource ModernButton}" 
+                            Background="#FF6C757D" Click="OpenLogsWindow_Click" Margin="5"/>
                 </StackPanel>
-            </GroupBox>
-                    </Grid>
-                </TabItem>
-                
-                <TabItem Header="Logs">
-                    <Grid Margin="10">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <!-- Log Controls -->
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                            <CheckBox x:Name="EnableLoggingChk" Content="Enable Logging" IsChecked="True" 
-                                      VerticalAlignment="Center" Margin="0,0,20,0" Checked="EnableLoggingChk_Checked" 
-                                      Unchecked="EnableLoggingChk_Unchecked"/>
-                            <TextBlock Text="Min Level:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <ComboBox x:Name="MinLevelCombo" Width="100" SelectedIndex="0" 
-                                      SelectionChanged="MinLevelCombo_SelectionChanged">
-                                <ComboBoxItem Content="Info"/>
-                                <ComboBoxItem Content="Warning"/>
-                                <ComboBoxItem Content="Error"/>
-                                <ComboBoxItem Content="Critical"/>
-                            </ComboBox>
-                        </StackPanel>
-
-                        <!-- Log Filters -->
-                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
-                            <TextBlock Text="Show:" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                            <CheckBox x:Name="ShowInfoChk" Content="Info" IsChecked="True" 
-                                      VerticalAlignment="Center" Margin="0,0,10,0" Checked="LogFilterChanged" 
-                                      Unchecked="LogFilterChanged"/>
-                            <CheckBox x:Name="ShowWarningChk" Content="Warning" IsChecked="True" 
-                                      VerticalAlignment="Center" Margin="0,0,10,0" Checked="LogFilterChanged" 
-                                      Unchecked="LogFilterChanged"/>
-                            <CheckBox x:Name="ShowErrorChk" Content="Error" IsChecked="True" 
-                                      VerticalAlignment="Center" Margin="0,0,10,0" Checked="LogFilterChanged" 
-                                      Unchecked="LogFilterChanged"/>
-                            <CheckBox x:Name="ShowCriticalChk" Content="Critical" IsChecked="True" 
-                                      VerticalAlignment="Center" Margin="0,0,10,0" Checked="LogFilterChanged" 
-                                      Unchecked="LogFilterChanged"/>
-                        </StackPanel>
-
-                        <!-- Log Messages -->
-                        <GroupBox Grid.Row="2" Header="Log Messages" Padding="5">
-                            <ListBox x:Name="LogMessagesListBox" ItemsSource="{Binding FilteredLogEntries}">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding FormattedMessage}" FontFamily="Consolas" FontSize="11"/>
-                                            <TextBlock Text="{Binding Source}" FontSize="9" Foreground="Gray" Margin="20,0,0,0"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </GroupBox>
-
-                        <!-- Log Actions -->
-                        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
-                            <Button Content="Clear Logs" Style="{StaticResource ModernButton}" 
-                                    Background="#FFDC3545" Click="ClearLogsBtn_Click" Margin="5"/>
-                            <Button Content="Export Logs" Style="{StaticResource ModernButton}" 
-                                    Background="#FF17A2B8" Click="ExportLogsBtn_Click" Margin="5"/>
-                            <TextBlock x:Name="LogCountTxt" Text="0 entries" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                        </StackPanel>
-                    </Grid>
-                </TabItem>
-            </TabControl>
+            </StackPanel>
         </Grid>
 
         <!-- Status Bar -->

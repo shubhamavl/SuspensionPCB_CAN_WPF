@@ -34,6 +34,10 @@ namespace SuspensionPCB_CAN_WPF
         // Current raw ADC data (from STM32)
         private int _leftRawADC = 0;
         private int _rightRawADC = 0;
+        
+        // Stream state tracking
+        private bool _leftStreamRunning = false;
+        private bool _rightStreamRunning = false;
 
         // Thread-safe collections for better performance
         private readonly ConcurrentQueue<CANMessageViewModel> _messageQueue = new ConcurrentQueue<CANMessageViewModel>();
@@ -42,7 +46,6 @@ namespace SuspensionPCB_CAN_WPF
 
         // Production logging
         private ProductionLogger _logger = ProductionLogger.Instance;
-        public ObservableCollection<ProductionLogger.LogEntry> FilteredLogEntries { get; set; } = new ObservableCollection<ProductionLogger.LogEntry>();
 
         // v0.7 Protocol - Only semantic IDs
         private readonly HashSet<uint> _rxMessageIds = new HashSet<uint> {
@@ -82,6 +85,8 @@ namespace SuspensionPCB_CAN_WPF
 
                 if (stopped)
                 {
+                    _leftStreamRunning = false;
+                    _rightStreamRunning = false;
                     _logger.LogInfo("Stopped all streams", "CAN");
                     // Success state - Green
                     StopAllBtn.Background = new SolidColorBrush(Color.FromRgb(40, 167, 69));
@@ -136,18 +141,6 @@ namespace SuspensionPCB_CAN_WPF
 
         private void InitializeApplication()
         {
-            if (MessageGrid != null)
-                MessageGrid.ItemsSource = FilteredMessages;
-
-            // Initialize logging UI
-            if (LogMessagesListBox != null)
-                LogMessagesListBox.ItemsSource = FilteredLogEntries;
-            
-            // Set up log filter update timer
-            var logUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            logUpdateTimer.Tick += (s, e) => UpdateLogFilter();
-            logUpdateTimer.Start();
-
             LoadConfiguration();
             
             // Load existing calibrations and tare settings
@@ -300,29 +293,12 @@ namespace SuspensionPCB_CAN_WPF
                 FilteredMessages.Clear();
                 var filtered = Messages.AsEnumerable();
 
-                if (FilterIdTxt != null && !string.IsNullOrWhiteSpace(FilterIdTxt.Text) &&
-                    uint.TryParse(FilterIdTxt.Text, System.Globalization.NumberStyles.HexNumber, null, out uint filterId))
-                {
-                    filtered = filtered.Where(m => m.Message.ID == filterId);
-                }
-
-                CheckBox? showTxChk = FindName("ShowTxChk") as CheckBox;
-                CheckBox? showRxChk = FindName("ShowRxChk") as CheckBox;
-
-                if (showTxChk?.IsChecked == true && showRxChk?.IsChecked != true)
-                    filtered = filtered.Where(m => m.Direction == "TX");
-                else if (showRxChk?.IsChecked == true && showTxChk?.IsChecked != true)
-                    filtered = filtered.Where(m => m.Direction == "RX");
-
                 foreach (var msg in filtered.TakeLast(200))
                     FilteredMessages.Add(msg);
-
-                if (MessageCountTxt != null)
-                    MessageCountTxt.Text = FilteredMessages.Count.ToString();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Filter application error: {ex.Message}");
+                _logger.LogError($"Filter application error: {ex.Message}", "UI");
             }
         }
 
@@ -346,26 +322,38 @@ namespace SuspensionPCB_CAN_WPF
             {
                 try
                 {
-                    // Update Left Side Display
+                    // Update Left Side Display with Smart Logic
                     if (LeftRawTxt != null) LeftRawTxt.Text = _leftRawADC.ToString();
+                    
+                    bool leftCalibrated = _leftCalibration != null && _leftCalibration.IsValid;
+                    bool leftTared = _tareManager.LeftIsTared;
                     
                     double leftCalibratedKg = 0.0;
                     double leftCalSlope = 0.0;
                     double leftCalIntercept = 0.0;
-                    if (_leftCalibration != null && _leftCalibration.IsValid)
+                    
+                    if (leftCalibrated)
                     {
-                        leftCalibratedKg = _leftCalibration.RawToKg(_leftRawADC);
+                        leftCalibratedKg = _leftCalibration!.RawToKg(_leftRawADC);
                         leftCalSlope = _leftCalibration.Slope;
                         leftCalIntercept = _leftCalibration.Intercept;
                         if (LeftCalibratedTxt != null) LeftCalibratedTxt.Text = $"{leftCalibratedKg:F1} kg";
                     }
                     else
                     {
-                        if (LeftCalibratedTxt != null) LeftCalibratedTxt.Text = "Calibration Required";
+                        if (LeftCalibratedTxt != null) LeftCalibratedTxt.Text = "Not Calibrated";
                     }
                     
-                    double leftDisplayKg = _tareManager.ApplyTare(leftCalibratedKg, true);
-                    if (LeftDisplayTxt != null) LeftDisplayTxt.Text = $"{leftDisplayKg:F1} kg";
+                    // Smart Display Logic
+                    if (leftCalibrated)
+                    {
+                        double leftDisplayKg = _tareManager.ApplyTare(leftCalibratedKg, true);
+                        if (LeftDisplayTxt != null) LeftDisplayTxt.Text = $"{leftDisplayKg:F1} kg";
+                    }
+                    else
+                    {
+                        if (LeftDisplayTxt != null) LeftDisplayTxt.Text = "Calibration Required";
+                    }
                     
                     if (LeftTareStatusTxt != null) LeftTareStatusTxt.Text = _tareManager.GetTareStatusText(true);
                     
@@ -373,30 +361,42 @@ namespace SuspensionPCB_CAN_WPF
                     if (_dataLogger.IsLogging)
                     {
                         double leftTareBaseline = _tareManager.LeftIsTared ? _tareManager.LeftBaselineKg : 0.0;
-                        _dataLogger.LogDataPoint("Left", _leftRawADC, leftCalibratedKg, leftDisplayKg, 
+                        _dataLogger.LogDataPoint("Left", _leftRawADC, leftCalibratedKg, leftCalibrated ? _tareManager.ApplyTare(leftCalibratedKg, true) : 0.0, 
                                                leftTareBaseline, leftCalSlope, leftCalIntercept, 0);
                     }
                     
-                    // Update Right Side Display
+                    // Update Right Side Display with Smart Logic
                     if (RightRawTxt != null) RightRawTxt.Text = _rightRawADC.ToString();
+                    
+                    bool rightCalibrated = _rightCalibration != null && _rightCalibration.IsValid;
+                    bool rightTared = _tareManager.RightIsTared;
                     
                     double rightCalibratedKg = 0.0;
                     double rightCalSlope = 0.0;
                     double rightCalIntercept = 0.0;
-                    if (_rightCalibration != null && _rightCalibration.IsValid)
+                    
+                    if (rightCalibrated)
                     {
-                        rightCalibratedKg = _rightCalibration.RawToKg(_rightRawADC);
+                        rightCalibratedKg = _rightCalibration!.RawToKg(_rightRawADC);
                         rightCalSlope = _rightCalibration.Slope;
                         rightCalIntercept = _rightCalibration.Intercept;
                         if (RightCalibratedTxt != null) RightCalibratedTxt.Text = $"{rightCalibratedKg:F1} kg";
                     }
                     else
                     {
-                        if (RightCalibratedTxt != null) RightCalibratedTxt.Text = "Calibration Required";
+                        if (RightCalibratedTxt != null) RightCalibratedTxt.Text = "Not Calibrated";
                     }
                     
-                    double rightDisplayKg = _tareManager.ApplyTare(rightCalibratedKg, false);
-                    if (RightDisplayTxt != null) RightDisplayTxt.Text = $"{rightDisplayKg:F1} kg";
+                    // Smart Display Logic
+                    if (rightCalibrated)
+                    {
+                        double rightDisplayKg = _tareManager.ApplyTare(rightCalibratedKg, false);
+                        if (RightDisplayTxt != null) RightDisplayTxt.Text = $"{rightDisplayKg:F1} kg";
+                    }
+                    else
+                    {
+                        if (RightDisplayTxt != null) RightDisplayTxt.Text = "Calibration Required";
+                    }
                     
                     if (RightTareStatusTxt != null) RightTareStatusTxt.Text = _tareManager.GetTareStatusText(false);
                     
@@ -404,23 +404,34 @@ namespace SuspensionPCB_CAN_WPF
                     if (_dataLogger.IsLogging)
                     {
                         double rightTareBaseline = _tareManager.RightIsTared ? _tareManager.RightBaselineKg : 0.0;
-                        _dataLogger.LogDataPoint("Right", _rightRawADC, rightCalibratedKg, rightDisplayKg, 
+                        _dataLogger.LogDataPoint("Right", _rightRawADC, rightCalibratedKg, rightCalibrated ? _tareManager.ApplyTare(rightCalibratedKg, false) : 0.0, 
                                                rightTareBaseline, rightCalSlope, rightCalIntercept, 0);
                     }
                     
-                    // Update Total and Balance
-                    double totalWeight = leftDisplayKg + rightDisplayKg;
-                    if (TotalWeightTxt != null) TotalWeightTxt.Text = $"{totalWeight:F1} kg";
-                    
-                    if (totalWeight > 0)
+                    // Update Summary with Smart Logic
+                    if (leftCalibrated && rightCalibrated)
                     {
-                        double leftPercent = (leftDisplayKg / totalWeight) * 100.0;
-                        double rightPercent = (rightDisplayKg / totalWeight) * 100.0;
-                        if (BalanceTxt != null) BalanceTxt.Text = $"{leftPercent:F0}% L / {rightPercent:F0}% R";
+                        double leftDisplayKg = _tareManager.ApplyTare(leftCalibratedKg, true);
+                        double rightDisplayKg = _tareManager.ApplyTare(rightCalibratedKg, false);
+                        double total = leftDisplayKg + rightDisplayKg;
+                        
+                        if (TotalWeightTxt != null) TotalWeightTxt.Text = $"{total:F1} kg";
+                        
+                        if (total > 0)
+                        {
+                            double leftPercent = (leftDisplayKg / total) * 100;
+                            double rightPercent = (rightDisplayKg / total) * 100;
+                            if (BalanceTxt != null) BalanceTxt.Text = $"{leftPercent:F0}% L / {rightPercent:F0}% R";
+                        }
+                        else
+                        {
+                            if (BalanceTxt != null) BalanceTxt.Text = "50% L / 50% R";
+                        }
                     }
                     else
                     {
-                        if (BalanceTxt != null) BalanceTxt.Text = "50% L / 50% R";
+                        if (TotalWeightTxt != null) TotalWeightTxt.Text = "Calibration Required";
+                        if (BalanceTxt != null) BalanceTxt.Text = "Calibration Required";
                     }
 
                     // Update System Status
@@ -578,24 +589,18 @@ namespace SuspensionPCB_CAN_WPF
             {
                 if (_canService?.IsConnected == true)
                 {
-                    // Check if left side calibration is valid before starting stream
-                    if (_leftCalibration == null || !_leftCalibration.IsValid)
-                    {
-                        MessageBox.Show("Left side calibration is required before starting stream.\nPlease calibrate the left side first.", 
-                                       "Calibration Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
-                    }
-                    
                     // Start streaming left side at current rate using v0.7 semantic ID
                     bool success = _canService.StartLeftStream(_currentTransmissionRate);
                     if (success)
                     {
+                        _leftStreamRunning = true;
                         _logger.LogInfo($"Started left side streaming at rate {_currentTransmissionRate}", "CAN");
                         MessageBox.Show($"Left side streaming started at {GetRateText(_currentTransmissionRate)}", 
                                       "Stream Started", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     else
                     {
+                        _leftStreamRunning = false;
                         _logger.LogError("Failed to start left side streaming", "CAN");
                         MessageBox.Show("Failed to start left side streaming.", "Stream Error", 
                                       MessageBoxButton.OK, MessageBoxImage.Error);
@@ -619,24 +624,18 @@ namespace SuspensionPCB_CAN_WPF
             {
                 if (_canService?.IsConnected == true)
                 {
-                    // Check if right side calibration is valid before starting stream
-                    if (_rightCalibration == null || !_rightCalibration.IsValid)
-                    {
-                        MessageBox.Show("Right side calibration is required before starting stream.\nPlease calibrate the right side first.", 
-                                       "Calibration Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
-                    }
-                    
                     // Start streaming right side at current rate using v0.7 semantic ID
                     bool success = _canService.StartRightStream(_currentTransmissionRate);
                     if (success)
                     {
+                        _rightStreamRunning = true;
                         _logger.LogInfo($"Started right side streaming at rate {_currentTransmissionRate}", "CAN");
                         MessageBox.Show($"Right side streaming started at {GetRateText(_currentTransmissionRate)}", 
                                       "Stream Started", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     else
                     {
+                        _rightStreamRunning = false;
                         _logger.LogError("Failed to start right side streaming", "CAN");
                         MessageBox.Show("Failed to start right side streaming.", "Stream Error", 
                                       MessageBoxButton.OK, MessageBoxImage.Error);
@@ -717,7 +716,6 @@ namespace SuspensionPCB_CAN_WPF
                 FilteredMessages.Clear();
                 while (_messageQueue.TryDequeue(out _)) { }
                 ResetStatistics();
-                if (MessageCountTxt != null) MessageCountTxt.Text = "0";
             }
             catch (Exception ex)
             {
@@ -737,17 +735,6 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        private void FilterChanged(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                ApplyMessageFilter();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Filter change error: {ex.Message}", "UI");
-            }
-        }
 
         private void LoadConfiguration()
         {
@@ -852,23 +839,103 @@ namespace SuspensionPCB_CAN_WPF
         
         private void CalibrateLeft_Click(object sender, RoutedEventArgs e)
         {
-            var calibrationDialog = new CalibrationDialog("Left");
-            calibrationDialog.Owner = this;
-            if (calibrationDialog.ShowDialog() == true)
+            try
             {
-                LoadCalibrations();
-                UpdateWeightDisplays();
+                // Check if left stream is already running
+                if (!_leftStreamRunning)
+                {
+                    if (_canService?.IsConnected == true)
+                    {
+                        // Auto-start left stream for calibration
+                        bool success = _canService.StartLeftStream(_currentTransmissionRate);
+                        if (success)
+                        {
+                            _leftStreamRunning = true;
+                            _logger.LogInfo($"Auto-started left stream for calibration at rate {_currentTransmissionRate}", "CAN");
+                            
+                            // Wait briefly for first data packet
+                            System.Threading.Thread.Sleep(200);
+                        }
+                        else
+                        {
+                            _logger.LogError("Failed to auto-start left stream for calibration", "CAN");
+                            MessageBox.Show("Failed to start left stream for calibration.", "Stream Error", 
+                                          MessageBoxButton.OK, MessageBoxImage.Error);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("CAN service not connected. Cannot start stream for calibration.", 
+                                      "Connection Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                }
+                
+                var calibrationDialog = new CalibrationDialog("Left");
+                calibrationDialog.Owner = this;
+                if (calibrationDialog.ShowDialog() == true)
+                {
+                    LoadCalibrations();
+                    UpdateWeightDisplays();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Calibration error: {ex.Message}", "UI");
+                MessageBox.Show($"Calibration error: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         
         private void CalibrateRight_Click(object sender, RoutedEventArgs e)
         {
-            var calibrationDialog = new CalibrationDialog("Right");
-            calibrationDialog.Owner = this;
-            if (calibrationDialog.ShowDialog() == true)
+            try
             {
-                LoadCalibrations();
-                UpdateWeightDisplays();
+                // Check if right stream is already running
+                if (!_rightStreamRunning)
+                {
+                    if (_canService?.IsConnected == true)
+                    {
+                        // Auto-start right stream for calibration
+                        bool success = _canService.StartRightStream(_currentTransmissionRate);
+                        if (success)
+                        {
+                            _rightStreamRunning = true;
+                            _logger.LogInfo($"Auto-started right stream for calibration at rate {_currentTransmissionRate}", "CAN");
+                            
+                            // Wait briefly for first data packet
+                            System.Threading.Thread.Sleep(200);
+                        }
+                        else
+                        {
+                            _logger.LogError("Failed to auto-start right stream for calibration", "CAN");
+                            MessageBox.Show("Failed to start right stream for calibration.", "Stream Error", 
+                                          MessageBoxButton.OK, MessageBoxImage.Error);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("CAN service not connected. Cannot start stream for calibration.", 
+                                      "Connection Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                }
+                
+                var calibrationDialog = new CalibrationDialog("Right");
+                calibrationDialog.Owner = this;
+                if (calibrationDialog.ShowDialog() == true)
+                {
+                    LoadCalibrations();
+                    UpdateWeightDisplays();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Calibration error: {ex.Message}", "UI");
+                MessageBox.Show($"Calibration error: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         
@@ -974,105 +1041,35 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        // Logging UI Event Handlers
-        private void EnableLoggingChk_Checked(object sender, RoutedEventArgs e)
-        {
-            _logger.IsEnabled = true;
-            _logger.LogInfo("Logging enabled", "UI");
-        }
-
-        private void EnableLoggingChk_Unchecked(object sender, RoutedEventArgs e)
-        {
-            _logger.IsEnabled = false;
-        }
-
-        private void MinLevelCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (MinLevelCombo?.SelectedIndex >= 0)
-            {
-                var level = (ProductionLogger.LogLevel)(MinLevelCombo.SelectedIndex + 1);
-                _logger.MinimumLevel = level;
-                _logger.LogInfo($"Minimum log level set to {level}", "UI");
-            }
-        }
-
-        private void LogFilterChanged(object sender, RoutedEventArgs e)
-        {
-            UpdateLogFilter();
-        }
-
-        private void UpdateLogFilter()
+        // Window Access Event Handlers
+        private void OpenMonitorWindow_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                FilteredLogEntries.Clear();
-                
-                bool showInfo = ShowInfoChk?.IsChecked == true;
-                bool showWarning = ShowWarningChk?.IsChecked == true;
-                bool showError = ShowErrorChk?.IsChecked == true;
-                bool showCritical = ShowCriticalChk?.IsChecked == true;
-
-                var filteredLogs = _logger.GetFilteredLogs(showInfo, showWarning, showError, showCritical);
-                
-                foreach (var logEntry in filteredLogs)
-                {
-                    FilteredLogEntries.Add(logEntry);
-                }
-
-                LogCountTxt.Text = $"{FilteredLogEntries.Count} entries";
+                var monitorWindow = new MonitorWindow(_canService, _logger, _tareManager, _leftCalibration, _rightCalibration);
+                monitorWindow.Show();
+                _logger?.LogInfo("Monitor window opened", "UI");
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Error updating log filter: {ex.Message}", "UI");
+                _logger?.LogError($"Error opening monitor window: {ex.Message}", "UI");
+                MessageBox.Show($"Error opening monitor window: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void ClearLogsBtn_Click(object sender, RoutedEventArgs e)
+        private void OpenLogsWindow_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                _logger.ClearLogs();
-                FilteredLogEntries.Clear();
-                LogCountTxt.Text = "0 entries";
-                _logger.LogInfo("Logs cleared", "UI");
+                var logsWindow = new LogsWindow(_logger);
+                logsWindow.Show();
+                _logger?.LogInfo("Logs window opened", "UI");
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Error clearing logs: {ex.Message}", "UI");
-            }
-        }
-
-        private void ExportLogsBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var saveDialog = new Microsoft.Win32.SaveFileDialog
-                {
-                    Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
-                    DefaultExt = "txt",
-                    FileName = $"suspension_logs_{DateTime.Now:yyyyMMdd_HHmmss}.txt"
-                };
-
-                if (saveDialog.ShowDialog() == true)
-                {
-                    if (_logger.ExportLogs(saveDialog.FileName))
-                    {
-                        MessageBox.Show($"Logs exported successfully to:\n{saveDialog.FileName}", 
-                                      "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-                        _logger.LogInfo($"Logs exported to {saveDialog.FileName}", "UI");
-                    }
-                    else
-                    {
-                        MessageBox.Show("Failed to export logs.", "Export Error", 
-                                      MessageBoxButton.OK, MessageBoxImage.Error);
-                        _logger.LogError("Failed to export logs", "UI");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error exporting logs: {ex.Message}", "UI");
-                MessageBox.Show($"Error exporting logs: {ex.Message}", "Export Error", 
+                _logger?.LogError($"Error opening logs window: {ex.Message}", "UI");
+                MessageBox.Show($"Error opening logs window: {ex.Message}", "Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }

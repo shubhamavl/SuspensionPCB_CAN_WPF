@@ -42,4 +42,37 @@ SuspensionPCB_Portable/
 *.g.cs
 *~
 
+# Log files
+*.log
+*.txt
+*.csv
+logs/
+Logs/
+
+# Application data
+*.db
+*.sqlite
+*.json
+config.json
+settings.json
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# IDE specific
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
