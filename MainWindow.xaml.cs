@@ -359,7 +359,6 @@ namespace SuspensionPCB_CAN_WPF
                     return;
                 }
 
-                if (ConnectionProgress != null) ConnectionProgress.Visibility = Visibility.Visible;
                 if (ConnectionToggle != null) ConnectionToggle.IsEnabled = false;
 
                 string comPort = "COM3"; // Auto-detected by CANService
@@ -390,7 +389,6 @@ namespace SuspensionPCB_CAN_WPF
             }
             finally
             {
-                if (ConnectionProgress != null) ConnectionProgress.Visibility = Visibility.Collapsed;
                 if (ConnectionToggle != null) ConnectionToggle.IsEnabled = true;
             }
         }
@@ -1144,7 +1142,6 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                if (ConnectionProgress != null) ConnectionProgress.Visibility = Visibility.Visible;
                 if (ConnectionToggle != null) ConnectionToggle.IsEnabled = false;
                 
                 _canService?.Disconnect();
@@ -1162,7 +1159,6 @@ namespace SuspensionPCB_CAN_WPF
             }
             finally
             {
-                if (ConnectionProgress != null) ConnectionProgress.Visibility = Visibility.Collapsed;
                 if (ConnectionToggle != null) ConnectionToggle.IsEnabled = true;
             }
         }

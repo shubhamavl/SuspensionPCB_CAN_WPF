@@ -88,7 +88,7 @@ namespace SuspensionPCB_CAN_WPF
         private void RefreshTimer_Tick(object? sender, EventArgs e)
         {
             // Update current raw ADC display
-            CurrentRawTxt.Text = _currentRawADC.ToString();
+            // CurrentRawTxt no longer exists in new design
         }
         
         private void OnRawDataReceived(object? sender, RawDataEventArgs e)
@@ -325,7 +325,8 @@ namespace SuspensionPCB_CAN_WPF
         
         private void UpdateStatus(string message)
         {
-            StatusTxt.Text = message;
+            // StatusTxt no longer exists in new design
+            // Status is now shown in individual step status text blocks
             UpdateStepVisuals();
         }
         
@@ -337,8 +338,7 @@ namespace SuspensionPCB_CAN_WPF
                 if (_point1Captured && !_point2Captured)
                 {
                     // Point 1 completed, Point 2 active
-                    Point1GroupBox.Style = (Style)FindResource("StepGroupBox");
-                    Point2GroupBox.Style = (Style)FindResource("ActiveStepGroupBox");
+                    // GroupBoxes no longer exist in new design
                     
                     // Update stepper visuals
                     if (Step1Circle != null) Step1Circle.Style = (Style)FindResource("StepperCircleCompleted");
@@ -351,8 +351,7 @@ namespace SuspensionPCB_CAN_WPF
                 else if (_point1Captured && _point2Captured)
                 {
                     // Both points completed
-                    Point1GroupBox.Style = (Style)FindResource("StepGroupBox");
-                    Point2GroupBox.Style = (Style)FindResource("StepGroupBox");
+                    // GroupBoxes no longer exist in new design
                     
                     // Update stepper visuals
                     if (Step1Circle != null) Step1Circle.Style = (Style)FindResource("StepperCircleCompleted");
@@ -365,8 +364,7 @@ namespace SuspensionPCB_CAN_WPF
                 else
                 {
                     // Point 1 active
-                    Point1GroupBox.Style = (Style)FindResource("ActiveStepGroupBox");
-                    Point2GroupBox.Style = (Style)FindResource("StepGroupBox");
+                    // GroupBoxes no longer exist in new design
                     
                     // Update stepper visuals
                     if (Step1Circle != null) Step1Circle.Style = (Style)FindResource("StepperCircleActive");

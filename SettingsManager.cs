@@ -12,7 +12,7 @@ namespace SuspensionPCB_CAN_WPF
         public string ComPort { get; set; } = "COM3";
         public byte TransmissionRate { get; set; } = 0x03; // Default 1kHz
         public int TransmissionRateIndex { get; set; } = 2; // ComboBox index
-        public string SaveDirectory { get; set; } = Path.Combine(AppContext.BaseDirectory, "Data");
+        public string SaveDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SuspensionSystem", "Data");
         public DateTime LastSaved { get; set; } = DateTime.Now;
     }
 
@@ -21,7 +21,7 @@ namespace SuspensionPCB_CAN_WPF
     /// </summary>
     public class SettingsManager
     {
-        private const string SETTINGS_FILE = "app_settings.json";
+        private static readonly string SETTINGS_FILE = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SuspensionSystem", "app_settings.json");
         private static SettingsManager? _instance;
         private AppSettings _settings = new AppSettings();
 
@@ -62,7 +62,7 @@ namespace SuspensionPCB_CAN_WPF
                     _settings = loaded;
                     // Migrate older settings without SaveDirectory
                     if (string.IsNullOrWhiteSpace(_settings.SaveDirectory))
-                        _settings.SaveDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
+                        _settings.SaveDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SuspensionSystem", "Data");
 
                     // Ensure directory exists
                     try
@@ -92,6 +92,12 @@ namespace SuspensionPCB_CAN_WPF
                 _settings.LastSaved = DateTime.Now;
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 string json = JsonSerializer.Serialize(_settings, options);
+                
+                // Ensure directory exists before writing
+                var settingsDir = Path.GetDirectoryName(SETTINGS_FILE);
+                if (!string.IsNullOrEmpty(settingsDir) && !Directory.Exists(settingsDir))
+                    Directory.CreateDirectory(settingsDir);
+                    
                 File.WriteAllText(SETTINGS_FILE, json);
                 ProductionLogger.Instance.LogInfo("Settings saved successfully", "Settings");
             }

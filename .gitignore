@@ -4,9 +4,6 @@
 *.txt
 *.json
 
-# But keep project settings file
-!app_settings.json
-
 # Build outputs
 bin/
 obj/
@@ -67,6 +64,8 @@ Logs/
 *.json
 config.json
 settings.json
+app_settings.json
+tare_config.json
 
 # Temporary files
 *.tmp
