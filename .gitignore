@@ -1,3 +1,15 @@
+# Generated data outputs
+*.csv
+*.log
+*.txt
+*.json
+
+# But keep project settings file
+!app_settings.json
+
+# Build outputs
+bin/
+obj/
 # .NET / Visual Studio
 bin/
 obj/

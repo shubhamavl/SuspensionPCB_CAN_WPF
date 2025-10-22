@@ -12,6 +12,7 @@ namespace SuspensionPCB_CAN_WPF
         public string ComPort { get; set; } = "COM3";
         public byte TransmissionRate { get; set; } = 0x03; // Default 1kHz
         public int TransmissionRateIndex { get; set; } = 2; // ComboBox index
+        public string SaveDirectory { get; set; } = Path.Combine(AppContext.BaseDirectory, "Data");
         public DateTime LastSaved { get; set; } = DateTime.Now;
     }
 
@@ -42,6 +43,13 @@ namespace SuspensionPCB_CAN_WPF
             {
                 _settings = new AppSettings();
                 ProductionLogger.Instance.LogInfo("Settings file not found, using defaults", "Settings");
+                try
+                {
+                    // Ensure default save directory exists
+                    if (!Directory.Exists(_settings.SaveDirectory))
+                        Directory.CreateDirectory(_settings.SaveDirectory);
+                }
+                catch { }
                 return;
             }
 
@@ -52,7 +60,19 @@ namespace SuspensionPCB_CAN_WPF
                 if (loaded != null)
                 {
                     _settings = loaded;
-                    ProductionLogger.Instance.LogInfo($"Settings loaded: COM={_settings.ComPort}, Rate={_settings.TransmissionRate}", "Settings");
+                    // Migrate older settings without SaveDirectory
+                    if (string.IsNullOrWhiteSpace(_settings.SaveDirectory))
+                        _settings.SaveDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
+
+                    // Ensure directory exists
+                    try
+                    {
+                        if (!Directory.Exists(_settings.SaveDirectory))
+                            Directory.CreateDirectory(_settings.SaveDirectory);
+                    }
+                    catch { }
+
+                    ProductionLogger.Instance.LogInfo($"Settings loaded: COM={_settings.ComPort}, Rate={_settings.TransmissionRate}, SaveDir={_settings.SaveDirectory}", "Settings");
                 }
             }
             catch (Exception ex)
@@ -98,6 +118,26 @@ namespace SuspensionPCB_CAN_WPF
             _settings.TransmissionRate = rate;
             _settings.TransmissionRateIndex = index;
             SaveSettings();
+        }
+
+        /// <summary>
+        /// Update save directory and ensure it exists
+        /// </summary>
+        public void SetSaveDirectory(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory)) return;
+            try
+            {
+                if (!Directory.Exists(directory))
+                    Directory.CreateDirectory(directory);
+                _settings.SaveDirectory = directory;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"Save directory set to: {directory}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to set save directory: {ex.Message}", "Settings");
+            }
         }
     }
 }

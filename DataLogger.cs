@@ -20,7 +20,13 @@ namespace SuspensionPCB_CAN_WPF
         {
             // Create timestamped log file
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            _logFilePath = $"suspension_log_{timestamp}.csv";
+            string baseDir = SettingsManager.Instance.Settings.SaveDirectory;
+            try
+            {
+                if (!Directory.Exists(baseDir)) Directory.CreateDirectory(baseDir);
+            }
+            catch { }
+            _logFilePath = Path.Combine(baseDir, $"suspension_log_{timestamp}.csv");
         }
         
         /// <summary>

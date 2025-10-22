@@ -11,6 +11,7 @@ using System.Collections.Concurrent;
 using System.Windows.Input;
 using System.Windows.Controls;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 
 namespace SuspensionPCB_CAN_WPF
 {
@@ -973,8 +974,44 @@ namespace SuspensionPCB_CAN_WPF
                 TransmissionRateCombo.SelectionChanged += TransmissionRateCombo_SelectionChanged;
             }
 
+            // Initialize save directory UI
+            try
+            {
+                if (SaveDirectoryTxt != null)
+                {
+                    SaveDirectoryTxt.Text = _settingsManager.Settings.SaveDirectory;
+                }
+            }
+            catch { }
+
             // Initialize streaming indicators
             UpdateStreamingIndicators();
+        }
+
+        private void BrowseSaveDirBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new OpenFolderDialog
+                {
+                    Title = "Select folder to store logs and configs",
+                    InitialDirectory = _settingsManager.Settings.SaveDirectory
+                };
+                
+                var result = dialog.ShowDialog();
+                if (result == true && !string.IsNullOrWhiteSpace(dialog.FolderName))
+                {
+                    _settingsManager.SetSaveDirectory(dialog.FolderName);
+                    if (SaveDirectoryTxt != null)
+                        SaveDirectoryTxt.Text = dialog.FolderName;
+                    ShowInlineStatus($"✓ Save folder set: {dialog.FolderName}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Browse folder error: {ex.Message}", "Settings");
+                ShowInlineStatus("✗ Failed to set save folder", true);
+            }
         }
 
         private void UpdateClock()

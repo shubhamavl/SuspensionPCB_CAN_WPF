@@ -122,16 +122,27 @@
         <Border x:Name="SettingsPanel" Grid.Row="2" Visibility="Collapsed" 
                 Background="#FFF0F0F0" BorderBrush="#FFCCCCCC" BorderThickness="1" 
                 Padding="15" Margin="15,0">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Transmission Rate:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
-                <ComboBox x:Name="TransmissionRateCombo" Width="120" SelectedIndex="2" SelectionChanged="TransmissionRateCombo_SelectionChanged">
-                    <ComboBoxItem>100 Hz</ComboBoxItem>
-                    <ComboBoxItem>500 Hz</ComboBoxItem>
-                    <ComboBoxItem>1 kHz</ComboBoxItem>
-                    <ComboBoxItem>1 Hz</ComboBoxItem>
-                </ComboBox>
-                <TextBlock Text="(Applied to new streams)" FontSize="10" 
-                           Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Transmission Rate:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
+                    <ComboBox x:Name="TransmissionRateCombo" Width="120" SelectedIndex="2" SelectionChanged="TransmissionRateCombo_SelectionChanged">
+                        <ComboBoxItem>100 Hz</ComboBoxItem>
+                        <ComboBoxItem>500 Hz</ComboBoxItem>
+                        <ComboBoxItem>1 kHz</ComboBoxItem>
+                        <ComboBoxItem>1 Hz</ComboBoxItem>
+                    </ComboBox>
+                    <TextBlock Text="(Applied to new streams)" FontSize="10" 
+                               Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Save Directory:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
+                    <TextBox x:Name="SaveDirectoryTxt" Width="380" IsReadOnly="True" Margin="0,0,10,0"/>
+                    <Button x:Name="BrowseSaveDirBtn" Content="Browse..." Style="{StaticResource ModernButton}" Click="BrowseSaveDirBtn_Click"/>
+                </StackPanel>
+                <TextBlock x:Name="SaveDirHintTxt" Text="Choose where CSV logs, calibration JSON and tare JSON will be stored" FontSize="10" Foreground="#FF95A5A6"/>
             </StackPanel>
         </Border>
 
