@@ -355,7 +355,7 @@ namespace SuspensionPCB_CAN_WPF
             {
                 if (_canService == null)
                 {
-                    MessageBox.Show("CAN Service not initialized.", "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowInlineStatus("CAN Service not initialized.", true);
                     return;
                 }
 
@@ -371,21 +371,20 @@ namespace SuspensionPCB_CAN_WPF
                     UpdateConnectionStatus(true);
                     ResetStatistics();
                     ShowStatusBanner("✓ Connected Successfully", true);
-                    MessageBox.Show("USB-CAN Connected Successfully.\n\nProtocol: CAN v0.7\nExpected responses:\n• 0x200 (Left side weights)\n• 0x201 (Right side weights)\n• 0x300 (System status)",
-                                  "Connected", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ShowInlineStatus("USB-CAN Connected Successfully. Protocol: CAN v0.7", false);
                 }
                 else
                 {
                     UpdateConnectionStatus(false);
                     ShowStatusBanner("✗ Connection Failed", false);
-                    MessageBox.Show("Connection Failed. Check USB-CAN device.", "Connection Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowInlineStatus("Connection Failed. Check USB-CAN device.", true);
                 }
             }
             catch (Exception ex)
             {
                 UpdateConnectionStatus(false);
                 ShowStatusBanner($"✗ Connection Error: {ex.Message}", false);
-                MessageBox.Show($"Connection Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowInlineStatus($"Connection Error: {ex.Message}", true);
             }
             finally
             {

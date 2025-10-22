@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Threading;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Linq;
 
 namespace SuspensionPCB_CAN_WPF
@@ -87,8 +88,15 @@ namespace SuspensionPCB_CAN_WPF
         
         private void RefreshTimer_Tick(object? sender, EventArgs e)
         {
-            // Update current raw ADC display
-            // CurrentRawTxt no longer exists in new design
+            // Update live ADC displays
+            if (Point1LiveADCTxt != null)
+            {
+                Point1LiveADCTxt.Text = _currentRawADC.ToString();
+            }
+            if (Point2LiveADCTxt != null)
+            {
+                Point2LiveADCTxt.Text = _currentRawADC.ToString();
+            }
         }
         
         private void OnRawDataReceived(object? sender, RawDataEventArgs e)
@@ -153,7 +161,15 @@ namespace SuspensionPCB_CAN_WPF
                 Point1RawTxt.Text = _currentRawADC.ToString();
                 Point1WeightTxt.Text = ((int)knownWeight).ToString();
                 
-                UpdateStatus($"✓ Point 1 captured: {(int)knownWeight} kg at ADC {_currentRawADC}. Add heavy load and capture Point 2.");
+                // Enable Step 2 button and update status
+                CapturePoint2Btn.IsEnabled = true;
+                Point1StatusTxt.Text = $"✓ Captured: {(int)knownWeight} kg at ADC {_currentRawADC}";
+                Point1StatusTxt.Foreground = System.Windows.Media.Brushes.Green;
+                Point2StatusTxt.Text = "Ready to capture";
+                Point2StatusTxt.Foreground = System.Windows.Media.Brushes.Green;
+                
+                // Update step visuals
+                UpdateStepVisuals();
                 
                 // Focus on Point 2 weight input
                 Point2WeightTxt.Focus();
@@ -218,7 +234,12 @@ namespace SuspensionPCB_CAN_WPF
                 Point2RawTxt.Text = _currentRawADC.ToString();
                 Point2WeightTxt.Text = ((int)knownWeight).ToString();
                 
-                UpdateStatus($"✓ Point 2 captured: {(int)knownWeight} kg at ADC {_currentRawADC}. Click 'Calculate Calibration' to proceed.");
+                // Update status
+                Point2StatusTxt.Text = $"✓ Captured: {(int)knownWeight} kg at ADC {_currentRawADC}";
+                Point2StatusTxt.Foreground = System.Windows.Media.Brushes.Green;
+                
+                // Update step visuals
+                UpdateStepVisuals();
             }
             catch (Exception ex)
             {
@@ -274,7 +295,10 @@ namespace SuspensionPCB_CAN_WPF
                 }
                 
                 SaveBtn.IsEnabled = true;
-                UpdateStatus("Calibration calculated successfully. Click 'Save Calibration' to save.");
+                
+                // Update status messages
+                Point1StatusTxt.Text = $"✓ Point 1: {Point1KnownWeight} kg @ ADC {Point1RawADC}";
+                Point2StatusTxt.Text = $"✓ Point 2: {Point2KnownWeight} kg @ ADC {Point2RawADC}";
             }
             catch (Exception ex)
             {
@@ -325,8 +349,8 @@ namespace SuspensionPCB_CAN_WPF
         
         private void UpdateStatus(string message)
         {
-            // StatusTxt no longer exists in new design
             // Status is now shown in individual step status text blocks
+            // This method is kept for compatibility but doesn't do much in the new design
             UpdateStepVisuals();
         }
         
@@ -338,46 +362,65 @@ namespace SuspensionPCB_CAN_WPF
                 if (_point1Captured && !_point2Captured)
                 {
                     // Point 1 completed, Point 2 active
-                    // GroupBoxes no longer exist in new design
-                    
-                    // Update stepper visuals
                     if (Step1Circle != null) Step1Circle.Style = (Style)FindResource("StepperCircleCompleted");
                     if (Step1Line != null) Step1Line.Style = (Style)FindResource("StepperLineCompleted");
                     if (Step2Circle != null) Step2Circle.Style = (Style)FindResource("StepperCircleActive");
                     
-                    // Update text colors
-                    UpdateStepTextColors(true, false);
+                    // Update step headers
+                    UpdateStepHeaders(true, false);
                 }
                 else if (_point1Captured && _point2Captured)
                 {
                     // Both points completed
-                    // GroupBoxes no longer exist in new design
-                    
-                    // Update stepper visuals
                     if (Step1Circle != null) Step1Circle.Style = (Style)FindResource("StepperCircleCompleted");
                     if (Step1Line != null) Step1Line.Style = (Style)FindResource("StepperLineCompleted");
                     if (Step2Circle != null) Step2Circle.Style = (Style)FindResource("StepperCircleCompleted");
                     
-                    // Update text colors
-                    UpdateStepTextColors(true, true);
+                    // Update step headers
+                    UpdateStepHeaders(true, true);
                 }
                 else
                 {
                     // Point 1 active
-                    // GroupBoxes no longer exist in new design
-                    
-                    // Update stepper visuals
                     if (Step1Circle != null) Step1Circle.Style = (Style)FindResource("StepperCircleActive");
                     if (Step1Line != null) Step1Line.Style = (Style)FindResource("StepperLine");
                     if (Step2Circle != null) Step2Circle.Style = (Style)FindResource("StepperCircle");
                     
-                    // Update text colors
-                    UpdateStepTextColors(false, false);
+                    // Update step headers
+                    UpdateStepHeaders(false, false);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error updating step visuals: {ex.Message}", "CalibrationDialog");
+            }
+        }
+        
+        private void UpdateStepHeaders(bool step1Completed, bool step2Completed)
+        {
+            try
+            {
+                // Update step header ellipses and text colors
+                var step1Ellipse = FindName("Step1Ellipse") as Ellipse;
+                var step2Ellipse = FindName("Step2Ellipse") as Ellipse;
+                
+                if (step1Ellipse != null)
+                {
+                    step1Ellipse.Fill = step1Completed ? 
+                        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF28A745")) : 
+                        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF1B5E96"));
+                }
+                
+                if (step2Ellipse != null)
+                {
+                    step2Ellipse.Fill = step2Completed ? 
+                        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF28A745")) : 
+                        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF6C757D"));
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"UpdateStepHeaders error: {ex.Message}");
             }
         }
         
