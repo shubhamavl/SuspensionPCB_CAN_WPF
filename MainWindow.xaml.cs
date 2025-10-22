@@ -359,9 +359,11 @@ namespace SuspensionPCB_CAN_WPF
                     return;
                 }
 
+                if (DisconnectBtn != null) DisconnectBtn.IsEnabled = false;
+                if (ConnectBtn != null) ConnectBtn.IsEnabled = false;
+
                 string comPort = "COM3"; // Auto-detected by CANService
                 
-                // Save COM port selection
                 _settingsManager.SetComPort(comPort);
 
                 bool connected = _canService.Connect(0, GetBaudRateValue());
@@ -374,11 +376,13 @@ namespace SuspensionPCB_CAN_WPF
                 }
                 else
                 {
+                    UpdateConnectionStatus(false);
                     MessageBox.Show("Connection Failed. Check USB-CAN device.", "Connection Failed", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
             catch (Exception ex)
             {
+                UpdateConnectionStatus(false);
                 MessageBox.Show($"Connection Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -1035,13 +1039,13 @@ namespace SuspensionPCB_CAN_WPF
             {
                 if (ConnectBtn != null)
                 {
-                    ConnectBtn.Content = connected ? "Disconnect" : "Connect";
-                    ConnectBtn.Background = connected ? 
-                        new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red) : 
-                        new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
+                    ConnectBtn.IsEnabled = !connected;
                 }
-                
-                // COM port is auto-detected, no UI control to enable/disable
+
+                if (DisconnectBtn != null)
+                {
+                    DisconnectBtn.IsEnabled = connected;
+                }
                 
                 if (RequestLeftBtn != null)
                 {
@@ -1056,6 +1060,18 @@ namespace SuspensionPCB_CAN_WPF
                 if (StopAllBtn != null)
                 {
                     StopAllBtn.IsEnabled = connected;
+                }
+
+                if (StatusIndicator != null)
+                {
+                    StatusIndicator.Fill = connected
+                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 167, 69)) // green
+                        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 53, 69)); // red
+                }
+
+                if (StatusText != null)
+                {
+                    StatusText.Text = connected ? "Connected" : "Disconnected";
                 }
             }
             catch (Exception ex)
@@ -1084,30 +1100,19 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
+                if (DisconnectBtn != null) DisconnectBtn.IsEnabled = false;
                 _canService?.Disconnect();
                 UpdateConnectionStatus(false);
                 _leftStreamRunning = false;
                 _rightStreamRunning = false;
                 UpdateStreamingIndicators();
                 _logger.LogInfo("Disconnected from CAN device", "CAN");
+                if (ConnectBtn != null) ConnectBtn.IsEnabled = true;
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Disconnect error: {ex.Message}", "CAN");
-            }
-        }
-
-        private void ClearLogBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                Messages.Clear();
-                FilteredMessages.Clear();
-                _logger.LogInfo("Cleared message log", "UI");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Clear log error: {ex.Message}", "UI");
+                if (DisconnectBtn != null) DisconnectBtn.IsEnabled = true;
             }
         }
         
