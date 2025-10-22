@@ -274,6 +274,10 @@ namespace SuspensionPCB_CAN_WPF
                     _serialPort.Write(frame, 0, frame.Length);
                 }
 
+                // Fire event for TX messages so they appear in monitor
+                var txMessage = new CANMessage(id, data, "TX");
+                MessageReceived?.Invoke(txMessage);
+
                 ProductionLogger.Instance.LogInfo($"USB-CAN-A: Sent CAN frame ID=0x{id:X3}, Data={BitConverter.ToString(data ?? new byte[0])}", "CANService");
                 return true;
             }
@@ -347,9 +351,6 @@ namespace SuspensionPCB_CAN_WPF
 
                 if (_instance != null)
                 {
-                    var message = new CANMessage(canId, data);
-                    _instance.MessageReceived?.Invoke(message);
-
                     if (_instance._connected)
                     {
                         bool success = _instance.SendMessage(canId, data);

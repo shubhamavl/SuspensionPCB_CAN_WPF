@@ -84,12 +84,12 @@ namespace SuspensionPCB_CAN_WPF
                 return "Not calibrated";
                 
             string slopeStr = Slope.ToString("F3");
-            string interceptStr = Intercept.ToString("F1");
+            string interceptStr = Intercept.ToString("F0");
             
             if (Intercept >= 0)
                 return $"kg = {slopeStr} × raw + {interceptStr}";
             else
-                return $"kg = {slopeStr} × raw - {Math.Abs(Intercept):F1}";
+                return $"kg = {slopeStr} × raw - {Math.Abs(Intercept):F0}";
         }
         
         /// <summary>

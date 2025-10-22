@@ -5,6 +5,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Collections.Concurrent;
+using System.Windows.Threading;
 
 namespace SuspensionPCB_CAN_WPF
 {
@@ -17,12 +19,23 @@ namespace SuspensionPCB_CAN_WPF
         private readonly LinearCalibration? _rightCalibration;
 
         // Message filtering
-        public ObservableCollection<CANMessage> AllMessages { get; set; }
-        public ObservableCollection<CANMessage> FilteredMessages { get; set; }
+        public ObservableCollection<CANMessageViewModel> AllMessages { get; set; }
+        public ObservableCollection<CANMessageViewModel> FilteredMessages { get; set; }
+
+        // High-performance message processing
+        private readonly ConcurrentQueue<CANMessageViewModel> _messageQueue = new ConcurrentQueue<CANMessageViewModel>();
+        private readonly DispatcherTimer _batchTimer;
 
         // Weight data
         private int _leftRawADC = 0;
         private int _rightRawADC = 0;
+
+        // Message statistics
+        private int _txCount = 0;
+        private int _rxCount = 0;
+        private DateTime _lastMessageTime = DateTime.MinValue;
+        private DateTime _rateStartTime = DateTime.Now;
+        private int _rateMessageCount = 0;
 
         public MonitorWindow(CANService? canService, ProductionLogger? logger, TareManager? tareManager, 
                            LinearCalibration? leftCalibration, LinearCalibration? rightCalibration)
@@ -36,11 +49,16 @@ namespace SuspensionPCB_CAN_WPF
             _rightCalibration = rightCalibration;
 
             // Initialize collections
-            AllMessages = new ObservableCollection<CANMessage>();
-            FilteredMessages = new ObservableCollection<CANMessage>();
+            AllMessages = new ObservableCollection<CANMessageViewModel>();
+            FilteredMessages = new ObservableCollection<CANMessageViewModel>();
 
             // Set data context
             DataContext = this;
+
+            // Initialize batch processing timer for high-performance updates
+            _batchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) }; // 20Hz
+            _batchTimer.Tick += ProcessMessageBatch;
+            _batchTimer.Start();
 
             // Subscribe to CAN events
             if (_canService != null)
@@ -61,23 +79,65 @@ namespace SuspensionPCB_CAN_WPF
 
         private void OnMessageReceived(CANMessage message)
         {
-            Dispatcher.Invoke(() =>
-            {
-                AllMessages.Insert(0, message);
-                
-                // Keep only last 1000 messages
-                while (AllMessages.Count > 1000)
-                {
-                    AllMessages.RemoveAt(AllMessages.Count - 1);
-                }
+            // Non-blocking: enqueue message for batch processing
+            var viewModel = new CANMessageViewModel(message, 
+                new HashSet<uint> { 0x200, 0x201, 0x300 }, // RX IDs
+                new HashSet<uint> { 0x040, 0x041, 0x044, 0x030, 0x031 }); // TX IDs
+            
+            _messageQueue.Enqueue(viewModel);
+        }
 
-                FilterChanged(null!, null!);
-            });
+        private void ProcessMessageBatch(object? sender, EventArgs e)
+        {
+            try
+            {
+                int processed = 0;
+                const int maxBatchSize = 50; // Process up to 50 messages per batch
+                
+                while (_messageQueue.TryDequeue(out var message) && processed < maxBatchSize)
+                {
+                    AllMessages.Insert(0, message);
+                    
+                    // Update statistics
+                    if (message.Direction == "TX")
+                    {
+                        _txCount++;
+                    }
+                    else if (message.Direction == "RX")
+                    {
+                        _rxCount++;
+                    }
+                    
+                    _lastMessageTime = message.Message.Timestamp;
+                    _rateMessageCount++;
+                    
+                    processed++;
+                    
+                    // Keep only last 1000 messages
+                    while (AllMessages.Count > 1000)
+                    {
+                        AllMessages.RemoveAt(AllMessages.Count - 1);
+                    }
+                }
+                
+                if (processed > 0)
+                {
+                    // Update statistics display
+                    UpdateStatistics();
+                    
+                    // Apply filters
+                    FilterChanged(null!, null!);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError($"Error processing message batch: {ex.Message}", "MonitorWindow");
+            }
         }
 
         private void OnRawDataReceived(object? sender, RawDataEventArgs e)
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.BeginInvoke(() =>
             {
                 if (e.Side == 0) // Left side
                 {
@@ -92,6 +152,57 @@ namespace SuspensionPCB_CAN_WPF
             });
         }
 
+        private void UpdateStatistics()
+        {
+            try
+            {
+                if (TxCountTxt != null)
+                {
+                    TxCountTxt.Text = _txCount.ToString();
+                }
+                if (RxCountTxt != null)
+                {
+                    RxCountTxt.Text = _rxCount.ToString();
+                }
+                if (LastMessageTxt != null)
+                {
+                    if (_lastMessageTime != DateTime.MinValue)
+                    {
+                        var timeDiff = DateTime.Now - _lastMessageTime;
+                        if (timeDiff.TotalSeconds < 60)
+                        {
+                            LastMessageTxt.Text = $"{timeDiff.TotalSeconds:F1}s ago";
+                        }
+                        else
+                        {
+                            LastMessageTxt.Text = _lastMessageTime.ToString("HH:mm:ss");
+                        }
+                    }
+                    else
+                    {
+                        LastMessageTxt.Text = "Never";
+                    }
+                }
+                if (MessageRateTxt != null)
+                {
+                    var timeDiff = DateTime.Now - _rateStartTime;
+                    if (timeDiff.TotalSeconds > 0)
+                    {
+                        var rate = _rateMessageCount / timeDiff.TotalSeconds;
+                        MessageRateTxt.Text = $"{rate:F1} msg/s";
+                    }
+                    else
+                    {
+                        MessageRateTxt.Text = "0 msg/s";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError($"Statistics update error: {ex.Message}", "MonitorWindow");
+            }
+        }
+
         private void UpdateWeightDisplay()
         {
             try
@@ -102,10 +213,10 @@ namespace SuspensionPCB_CAN_WPF
                 if (_leftCalibration != null && _leftCalibration.IsValid && _tareManager != null)
                 {
                     double leftCalibrated = _leftCalibration.RawToKg(_leftRawADC);
-                    LeftCalibratedTxt.Text = $"{leftCalibrated:F1} kg";
+                    LeftCalibratedTxt.Text = $"{leftCalibrated:F0} kg";
                     
                     double leftDisplay = _tareManager.ApplyTare(leftCalibrated, true);
-                    LeftDisplayTxt.Text = $"{leftDisplay:F1} kg";
+                    LeftDisplayTxt.Text = $"{leftDisplay:F0} kg";
                     LeftTareStatusTxt.Text = _tareManager.LeftIsTared ? "- Tared" : "- Not Tared";
                 }
                 else
@@ -121,10 +232,10 @@ namespace SuspensionPCB_CAN_WPF
                 if (_rightCalibration != null && _rightCalibration.IsValid && _tareManager != null)
                 {
                     double rightCalibrated = _rightCalibration.RawToKg(_rightRawADC);
-                    RightCalibratedTxt.Text = $"{rightCalibrated:F1} kg";
+                    RightCalibratedTxt.Text = $"{rightCalibrated:F0} kg";
                     
                     double rightDisplay = _tareManager.ApplyTare(rightCalibrated, false);
-                    RightDisplayTxt.Text = $"{rightDisplay:F1} kg";
+                    RightDisplayTxt.Text = $"{rightDisplay:F0} kg";
                     RightTareStatusTxt.Text = _tareManager.RightIsTared ? "- Tared" : "- Not Tared";
                 }
                 else
@@ -144,7 +255,7 @@ namespace SuspensionPCB_CAN_WPF
                     double rightDisplay = _tareManager.ApplyTare(rightCalibrated, false);
                     
                     double total = leftDisplay + rightDisplay;
-                    TotalWeightTxt.Text = $"{total:F1} kg";
+                    TotalWeightTxt.Text = $"{total:F0} kg";
                     
                     if (total > 0)
                     {
@@ -184,11 +295,11 @@ namespace SuspensionPCB_CAN_WPF
                 bool showTx = ShowTxChk.IsChecked == true;
                 bool showRx = ShowRxChk.IsChecked == true;
 
-                var filtered = AllMessages.Where(msg =>
+                var filtered = AllMessages.Take(200).Where(msg =>
                 {
-                    // Direction filter - CANMessage doesn't have Direction property, skip for now
-                    // if (!showTx && msg.Direction == "TX") return false;
-                    // if (!showRx && msg.Direction == "RX") return false;
+                    // Direction filter - now using CANMessageViewModel
+                    if (!showTx && msg.Direction == "TX") return false;
+                    if (!showRx && msg.Direction == "RX") return false;
 
                     // ID filter
                     if (!string.IsNullOrEmpty(filterId))
@@ -197,16 +308,16 @@ namespace SuspensionPCB_CAN_WPF
                         {
                             if (int.TryParse(filterId.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out int hexId))
                             {
-                                if (msg.ID != (uint)hexId) return false;
+                                if (msg.Message.ID != (uint)hexId) return false;
                             }
                         }
                         else if (int.TryParse(filterId, out int decId))
                         {
-                            if (msg.ID != (uint)decId) return false;
+                            if (msg.Message.ID != (uint)decId) return false;
                         }
                         else
                         {
-                            if (!msg.ID.ToString().Contains(filterId, StringComparison.OrdinalIgnoreCase)) return false;
+                            if (!msg.Message.ID.ToString().Contains(filterId, StringComparison.OrdinalIgnoreCase)) return false;
                         }
                     }
 
@@ -228,6 +339,9 @@ namespace SuspensionPCB_CAN_WPF
 
         protected override void OnClosed(EventArgs e)
         {
+            // Stop batch processing timer
+            _batchTimer?.Stop();
+            
             // Unsubscribe from events
             if (_canService != null)
             {

@@ -39,14 +39,15 @@
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/> <!-- Header -->
+            <RowDefinition Height="Auto"/> <!-- Controls -->
+            <RowDefinition Height="Auto"/> <!-- Filter checkboxes -->
+            <RowDefinition Height="*"/>    <!-- Log messages (MAIN AREA) -->
+            <RowDefinition Height="Auto"/> <!-- Status bar with buttons -->
         </Grid.RowDefinitions>
-
-        <!-- Header -->
-        <Border Grid.Row="0" Background="#FF6C757D" Padding="15" Margin="0,0,0,10">
+        
+        <!-- Row 0: Header -->
+        <Border Grid.Row="0" Background="#FF5D6D7E" Padding="15">
             <StackPanel>
                 <TextBlock Text="Production Logs" FontSize="20" FontWeight="Bold" 
                            Foreground="White" HorizontalAlignment="Center"/>
@@ -54,9 +55,9 @@
                            Foreground="White" HorizontalAlignment="Center" Margin="0,5,0,0"/>
             </StackPanel>
         </Border>
-
-        <!-- Log Controls -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="15,0,15,10">
+        
+        <!-- Row 1: Controls (Enable logging, Min level) -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="15,10">
             <CheckBox x:Name="EnableLoggingChk" Content="Enable Logging" IsChecked="True" 
                       VerticalAlignment="Center" Margin="0,0,20,0" Checked="EnableLoggingChk_Checked" 
                       Unchecked="EnableLoggingChk_Unchecked"/>
@@ -69,26 +70,26 @@
                 <ComboBoxItem Content="Critical"/>
             </ComboBox>
         </StackPanel>
-
-        <!-- Log Filters -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="15,0,15,10">
-            <TextBlock Text="Show:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+        
+        <!-- Row 2: Filter checkboxes -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="15,5">
+            <TextBlock Text="Show:" Margin="0,0,10,0"/>
             <CheckBox x:Name="ShowInfoChk" Content="Info" IsChecked="True" 
-                      VerticalAlignment="Center" Margin="0,0,10,0" Checked="LogFilterChanged" 
+                      VerticalAlignment="Center" Margin="0,0,15,0" Checked="LogFilterChanged" 
                       Unchecked="LogFilterChanged"/>
             <CheckBox x:Name="ShowWarningChk" Content="Warning" IsChecked="True" 
-                      VerticalAlignment="Center" Margin="0,0,10,0" Checked="LogFilterChanged" 
+                      VerticalAlignment="Center" Margin="0,0,15,0" Checked="LogFilterChanged" 
                       Unchecked="LogFilterChanged"/>
             <CheckBox x:Name="ShowErrorChk" Content="Error" IsChecked="True" 
-                      VerticalAlignment="Center" Margin="0,0,10,0" Checked="LogFilterChanged" 
+                      VerticalAlignment="Center" Margin="0,0,15,0" Checked="LogFilterChanged" 
                       Unchecked="LogFilterChanged"/>
             <CheckBox x:Name="ShowCriticalChk" Content="Critical" IsChecked="True" 
-                      VerticalAlignment="Center" Margin="0,0,10,0" Checked="LogFilterChanged" 
+                      VerticalAlignment="Center" Checked="LogFilterChanged" 
                       Unchecked="LogFilterChanged"/>
         </StackPanel>
-
-        <!-- Log Messages -->
-        <GroupBox Grid.Row="3" Header="Log Messages" Padding="5" Margin="15,0,15,10">
+        
+        <!-- Row 3: Log messages area (takes most space) -->
+        <Border Grid.Row="3" BorderBrush="#FFCCCCCC" BorderThickness="1" Margin="15,10">
             <ListBox x:Name="LogMessagesListBox" ItemsSource="{Binding FilteredLogEntries}">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
@@ -99,15 +100,29 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
-        </GroupBox>
-
-        <!-- Log Actions -->
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,15">
-            <Button Content="Clear Logs" Style="{StaticResource ModernButton}" 
-                    Background="#FFDC3545" Click="ClearLogsBtn_Click" Margin="5"/>
-            <Button Content="Export Logs" Style="{StaticResource ModernButton}" 
-                    Background="#FF17A2B8" Click="ExportLogsBtn_Click" Margin="5"/>
-            <TextBlock x:Name="LogCountTxt" Text="0 entries" VerticalAlignment="Center" Margin="10,0,0,0"/>
-        </StackPanel>
+        </Border>
+        
+        <!-- Row 4: Status bar with entry count and buttons -->
+        <Grid Grid.Row="4" Background="#FFF0F0F0" Height="50">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            
+            <TextBlock Grid.Column="0" x:Name="LogCountTxt" 
+                       Text="0 entries" VerticalAlignment="Center" 
+                       Margin="15,0" FontWeight="SemiBold"/>
+            
+            <Button Grid.Column="1" Content="Clear Logs" 
+                    Style="{StaticResource ModernButton}" 
+                    Background="#FFDC3545" Width="120" Height="35" Margin="5"
+                    Click="ClearLogsBtn_Click"/>
+            
+            <Button Grid.Column="2" Content="Export Logs" 
+                    Style="{StaticResource ModernButton}" 
+                    Background="#FF17A2B8" Width="120" Height="35" Margin="5,5,15,5"
+                    Click="ExportLogsBtn_Click"/>
+        </Grid>
     </Grid>
 </Window>

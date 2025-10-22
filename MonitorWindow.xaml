@@ -88,10 +88,27 @@
                     <DataGrid Grid.Row="1" x:Name="MessageGrid" 
                           AutoGenerateColumns="False" IsReadOnly="True"
                           ItemsSource="{Binding FilteredMessages}">
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Direction}" Value="TX">
+                                        <Setter Property="Foreground" Value="#FF1565C0"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="Background" Value="#FFE3F2FD"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Direction}" Value="RX">
+                                        <Setter Property="Foreground" Value="#FF1B5E20"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="Background" Value="#FFE8F5E9"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="90"/>
                             <DataGridTextColumn Header="ID" Binding="{Binding ID}" Width="60"/>
                             <DataGridTextColumn Header="Dir" Binding="{Binding Direction}" Width="40"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding MessageType}" Width="100"/>
                             <DataGridTextColumn Header="Data" Binding="{Binding Data}" Width="200"/>
                             <DataGridTextColumn Header="Decoded" Binding="{Binding Decoded}" Width="*"/>
                         </DataGrid.Columns>
@@ -99,118 +116,166 @@
                 </Grid>
             </GroupBox>
 
-            <!-- Weight Data Display -->
-            <GroupBox Grid.Column="1" Header="Live Weight Data" Padding="10">
-                <StackPanel>
-                    <!-- Left Side -->
-                    <Border Background="#FFF8F9FA" BorderBrush="#FF1B5E96" BorderThickness="1" 
-                            CornerRadius="5" Padding="10" Margin="0,0,0,10">
+            <!-- Weight Data Display Column -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Weight Data (scrollable if needed) -->
+                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                    <GroupBox Header="Live Weight Data" Padding="10">
                         <StackPanel>
-                            <TextBlock Text="LEFT SIDE" FontWeight="Bold" 
-                                       Foreground="#FF1B5E96" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            <!-- Left Side -->
+                            <Border Background="#FFF8F9FA" BorderBrush="#FF1B5E96" BorderThickness="1" 
+                                    CornerRadius="5" Padding="10" Margin="0,0,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="LEFT SIDE" FontWeight="Bold" 
+                                               Foreground="#FF1B5E96" HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                <!-- Raw ADC -->
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw ADC:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LeftRawTxt" Text="0" FontWeight="Bold" Margin="5,0,0,5"/>
+                                        <!-- Raw ADC -->
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw ADC:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LeftRawTxt" Text="0" FontWeight="Bold" Margin="5,0,0,5"/>
 
-                                <!-- Calibrated Weight -->
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Calibrated:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="LeftCalibratedTxt" Text="0.0 kg" FontWeight="Bold" Margin="5,0,0,5"/>
+                                        <!-- Calibrated Weight -->
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Calibrated:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="LeftCalibratedTxt" Text="0.0 kg" FontWeight="Bold" Margin="5,0,0,5"/>
 
-                                <!-- Display Weight (after tare) -->
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Display:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="LeftDisplayTxt" Text="0.0 kg" FontWeight="Bold" 
-                                           Foreground="#FF28A745" Margin="5,0,0,5"/>
+                                        <!-- Display Weight (after tare) -->
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Display:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="LeftDisplayTxt" Text="0.0 kg" FontWeight="Bold" 
+                                                   Foreground="#FF28A745" Margin="5,0,0,5"/>
 
-                                <!-- Tare Status -->
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Tare:" FontWeight="Bold" Margin="0,0,5,0"/>
-                                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="LeftTareStatusTxt" Text="- Not Tared" FontSize="10" Margin="5,0,0,0"/>
-                            </Grid>
+                                        <!-- Tare Status -->
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Tare:" FontWeight="Bold" Margin="0,0,5,0"/>
+                                        <TextBlock Grid.Row="3" Grid.Column="1" x:Name="LeftTareStatusTxt" Text="- Not Tared" FontSize="10" Margin="5,0,0,0"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Right Side -->
+                            <Border Background="#FFF8F9FA" BorderBrush="#FF28A745" BorderThickness="1" 
+                                    CornerRadius="5" Padding="10" Margin="0,0,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="RIGHT SIDE" FontWeight="Bold" 
+                                               Foreground="#FF28A745" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Raw ADC -->
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw ADC:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="RightRawTxt" Text="0" FontWeight="Bold" Margin="5,0,0,5"/>
+
+                                        <!-- Calibrated Weight -->
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Calibrated:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="RightCalibratedTxt" Text="0.0 kg" FontWeight="Bold" Margin="5,0,0,5"/>
+
+                                        <!-- Display Weight (after tare) -->
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Display:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="RightDisplayTxt" Text="0.0 kg" FontWeight="Bold" 
+                                                   Foreground="#FF28A745" Margin="5,0,0,5"/>
+
+                                        <!-- Tare Status -->
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Tare:" FontWeight="Bold" Margin="0,0,5,0"/>
+                                        <TextBlock Grid.Row="3" Grid.Column="1" x:Name="RightTareStatusTxt" Text="- Not Tared" FontSize="10" Margin="5,0,0,0"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Summary -->
+                            <Border Background="#FFF8F9FA" BorderBrush="#FF6C757D" BorderThickness="1" 
+                                    CornerRadius="5" Padding="10">
+                                <StackPanel>
+                                    <TextBlock Text="SUMMARY" FontWeight="Bold" 
+                                               Foreground="#FF6C757D" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/>
+                                            <RowDefinition/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition/>
+                                            <ColumnDefinition/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Total Weight -->
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Total:" FontWeight="Bold" Margin="0,0,5,5"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TotalWeightTxt" Text="0.0 kg" FontWeight="Bold" 
+                                                   Foreground="#FF28A745" Margin="5,0,0,5"/>
+
+                                        <!-- Balance -->
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Balance:" FontWeight="Bold" Margin="0,0,5,0"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="BalanceTxt" Text="50% L / 50% R" FontWeight="Bold" 
+                                                   Foreground="#FF6C757D" Margin="5,0,0,0"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
-                    </Border>
+                    </GroupBox>
+                </ScrollViewer>
+                
+                <!-- Statistics Panel (fixed at bottom) -->
+                <GroupBox Grid.Row="1" Header="CAN Statistics" Padding="10" Margin="0,10,0,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                    <!-- Right Side -->
-                    <Border Background="#FFF8F9FA" BorderBrush="#FF28A745" BorderThickness="1" 
-                            CornerRadius="5" Padding="10" Margin="0,0,0,10">
-                        <StackPanel>
-                            <TextBlock Text="RIGHT SIDE" FontWeight="Bold" 
-                                       Foreground="#FF28A745" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            <!-- TX Count -->
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="TX Messages:" FontWeight="Bold" Margin="0,0,5,5"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxCountTxt" Text="0" FontWeight="Bold" 
+                                       Foreground="#FF3498DB" Margin="5,0,0,5"/>
 
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
+                            <!-- RX Count -->
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="RX Messages:" FontWeight="Bold" Margin="0,0,5,5"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="RxCountTxt" Text="0" FontWeight="Bold" 
+                                       Foreground="#FF27AE60" Margin="5,0,0,5"/>
 
-                                <!-- Raw ADC -->
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw ADC:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="RightRawTxt" Text="0" FontWeight="Bold" Margin="5,0,0,5"/>
+                            <!-- Message Rate -->
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Rate:" FontWeight="Bold" Margin="0,0,5,5"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="MessageRateTxt" Text="0 msg/s" FontWeight="Bold" 
+                                       Foreground="#FF6C757D" Margin="5,0,0,5"/>
 
-                                <!-- Calibrated Weight -->
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Calibrated:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="RightCalibratedTxt" Text="0.0 kg" FontWeight="Bold" Margin="5,0,0,5"/>
-
-                                <!-- Display Weight (after tare) -->
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Display:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="RightDisplayTxt" Text="0.0 kg" FontWeight="Bold" 
-                                           Foreground="#FF28A745" Margin="5,0,0,5"/>
-
-                                <!-- Tare Status -->
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Tare:" FontWeight="Bold" Margin="0,0,5,0"/>
-                                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="RightTareStatusTxt" Text="- Not Tared" FontSize="10" Margin="5,0,0,0"/>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Summary -->
-                    <Border Background="#FFF8F9FA" BorderBrush="#FF6C757D" BorderThickness="1" 
-                            CornerRadius="5" Padding="10">
-                        <StackPanel>
-                            <TextBlock Text="SUMMARY" FontWeight="Bold" 
-                                       Foreground="#FF6C757D" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition/>
-                                    <RowDefinition/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition/>
-                                    <ColumnDefinition/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Total Weight -->
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Total:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TotalWeightTxt" Text="0.0 kg" FontWeight="Bold" 
-                                           Foreground="#FF28A745" Margin="5,0,0,5"/>
-
-                                <!-- Balance -->
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Balance:" FontWeight="Bold" Margin="0,0,5,0"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="BalanceTxt" Text="50% L / 50% R" FontWeight="Bold" 
-                                           Foreground="#FF6C757D" Margin="5,0,0,0"/>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </GroupBox>
+                            <!-- Last Message -->
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Last:" FontWeight="Bold" Margin="0,0,5,0"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" x:Name="LastMessageTxt" Text="Never" FontSize="10" 
+                                       Foreground="#FF6C757D" Margin="5,0,0,0"/>
+                        </Grid>
+                    </StackPanel>
+                </GroupBox>
+            </Grid>
         </Grid>
     </Grid>
 </Window>

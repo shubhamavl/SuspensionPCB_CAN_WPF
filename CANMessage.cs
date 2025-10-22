@@ -11,6 +11,7 @@ namespace SuspensionPCB_CAN_WPF
         public uint ID { get; set; }
         public byte[] Data { get; set; }
         public DateTime Timestamp { get; set; }
+        public string Direction { get; set; } = "RX";
         public int Length => Data?.Length ?? 0;
 
         public CANMessage()
@@ -18,20 +19,23 @@ namespace SuspensionPCB_CAN_WPF
             ID = 0;
             Data = new byte[0];
             Timestamp = DateTime.Now;
+            Direction = "RX";
         }
 
-        public CANMessage(uint id, byte[] data)
+        public CANMessage(uint id, byte[] data, string direction = "RX")
         {
             ID = id;
             Data = data ?? new byte[0];
             Timestamp = DateTime.Now;
+            Direction = direction;
         }
 
-        public CANMessage(uint id, byte[] data, DateTime timestamp)
+        public CANMessage(uint id, byte[] data, DateTime timestamp, string direction = "RX")
         {
             ID = id;
             Data = data ?? new byte[0];
             Timestamp = timestamp;
+            Direction = direction;
         }
 
         // Helper method to get hex string representation of data
@@ -47,6 +51,23 @@ namespace SuspensionPCB_CAN_WPF
         public string GetIDHexString()
         {
             return $"0x{ID:X3}";
+        }
+
+        // Get protocol description for semantic IDs
+        public string GetProtocolDescription()
+        {
+            return ID switch
+            {
+                0x200 => "LEFT_RAW_DATA",
+                0x201 => "RIGHT_RAW_DATA",
+                0x040 => "START_LEFT_STREAM",
+                0x041 => "START_RIGHT_STREAM",
+                0x044 => "STOP_ALL_STREAMS",
+                0x300 => "SYSTEM_STATUS",
+                0x030 => "MODE_INTERNAL",
+                0x031 => "MODE_ADS1115",
+                _ => $"UNKNOWN_0x{ID:X3}"
+            };
         }
 
         // Create a copy of the message
@@ -79,18 +100,7 @@ namespace SuspensionPCB_CAN_WPF
 
         public string ID => $"0x{_message.ID:X3}";
 
-        public string Direction
-        {
-            get
-            {
-                if (_rxMessageIds.Contains(_message.ID))
-                    return "RX";
-                else if (_txMessageIds.Contains(_message.ID))
-                    return "TX";
-                else
-                    return "??";
-            }
-        }
+        public string Direction => _message.Direction;
 
         public string Data
         {
@@ -105,6 +115,20 @@ namespace SuspensionPCB_CAN_WPF
         }
 
         public string Length => _message.Length.ToString();
+
+        public string MessageType
+        {
+            get
+            {
+                return _message.ID switch
+                {
+                    0x200 or 0x201 => "Raw Data",
+                    0x040 or 0x041 or 0x044 => "Stream Control",
+                    0x300 or 0x030 or 0x031 => "System",
+                    _ => "Unknown"
+                };
+            }
+        }
 
         public string Decoded
         {
@@ -124,8 +148,18 @@ namespace SuspensionPCB_CAN_WPF
         // Decode message based on CAN Protocol Specification v0.7
         private string DecodeMessage()
         {
+            // Handle empty messages properly (v0.7 protocol has empty messages)
             if (_message.Data == null || _message.Data.Length == 0)
-                return "No Data";
+            {
+                // For commands that expect empty data, show decoded name
+                switch (_message.ID)
+                {
+                    case 0x044: return "Stop All Streams (empty)";
+                    case 0x030: return "Switch to Internal ADC (empty)";
+                    case 0x031: return "Switch to ADS1115 (empty)";
+                    default: return "Empty Message";
+                }
+            }
 
             switch (_message.ID)
             {

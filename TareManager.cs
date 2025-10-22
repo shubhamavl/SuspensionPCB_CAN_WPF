@@ -92,14 +92,14 @@ namespace SuspensionPCB_CAN_WPF
             if (isLeft)
             {
                 if (LeftIsTared)
-                    return $"✓ Tared (baseline: {LeftBaselineKg:F1}kg)";
+                    return $"✓ Tared (baseline: {LeftBaselineKg:F0}kg)";
                 else
                     return "- Not Tared";
             }
             else
             {
                 if (RightIsTared)
-                    return $"✓ Tared (baseline: {RightBaselineKg:F1}kg)";
+                    return $"✓ Tared (baseline: {RightBaselineKg:F0}kg)";
                 else
                     return "- Not Tared";
             }
