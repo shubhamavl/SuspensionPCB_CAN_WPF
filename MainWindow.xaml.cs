@@ -553,8 +553,8 @@ namespace SuspensionPCB_CAN_WPF
                 
                 if (leftCalibrated)
                 {
-                    if (LeftCalibratedTxt != null) LeftCalibratedTxt.Text = $"{leftData.CalibratedWeight:F0} kg";
-                    if (LeftDisplayTxt != null) LeftDisplayTxt.Text = $"{leftData.TaredWeight:F0} kg";
+                    if (LeftCalibratedTxt != null) LeftCalibratedTxt.Text = $"{(int)leftData.CalibratedWeight} kg";
+                    if (LeftDisplayTxt != null) LeftDisplayTxt.Text = $"{(int)leftData.TaredWeight} kg";
                 }
                 else
                 {
@@ -571,8 +571,8 @@ namespace SuspensionPCB_CAN_WPF
                 
                 if (rightCalibrated)
                 {
-                    if (RightCalibratedTxt != null) RightCalibratedTxt.Text = $"{rightData.CalibratedWeight:F0} kg";
-                    if (RightDisplayTxt != null) RightDisplayTxt.Text = $"{rightData.TaredWeight:F0} kg";
+                    if (RightCalibratedTxt != null) RightCalibratedTxt.Text = $"{(int)rightData.CalibratedWeight} kg";
+                    if (RightDisplayTxt != null) RightDisplayTxt.Text = $"{(int)rightData.TaredWeight} kg";
                 }
                 else
                 {
@@ -649,7 +649,7 @@ namespace SuspensionPCB_CAN_WPF
                 _tareManager.SaveToFile();
                 
                 UpdateWeightDisplays();
-                MessageBox.Show($"Left side tared successfully.\nBaseline: {currentCalibratedKg:F0} kg", 
+                MessageBox.Show($"Left side tared successfully.\nBaseline: {(int)currentCalibratedKg} kg", 
                               "Tare Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -675,7 +675,7 @@ namespace SuspensionPCB_CAN_WPF
                 _tareManager.SaveToFile();
                 
                 UpdateWeightDisplays();
-                MessageBox.Show($"Right side tared successfully.\nBaseline: {currentCalibratedKg:F0} kg", 
+                MessageBox.Show($"Right side tared successfully.\nBaseline: {(int)currentCalibratedKg} kg", 
                               "Tare Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)

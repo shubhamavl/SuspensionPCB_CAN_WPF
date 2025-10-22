@@ -75,6 +75,11 @@ namespace SuspensionPCB_CAN_WPF
             _refreshTimer.Start();
             
             UpdateStatus("Ready to calibrate. Place light load and capture Point 1.");
+            
+            // Set default values and focus
+            Point1KnownWeight = 0;    // Default to empty platform (integer)
+            Point2KnownWeight = 1000; // Default to 1000kg calibration weight (integer)
+            Point1WeightTxt.Focus();
         }
         
         private void RefreshTimer_Tick(object? sender, EventArgs e)
@@ -106,23 +111,49 @@ namespace SuspensionPCB_CAN_WPF
             {
                 if (!double.TryParse(Point1WeightTxt.Text, out double knownWeight))
                 {
-                    MessageBox.Show("Please enter a valid weight for Point 1.", "Invalid Input", 
+                    MessageBox.Show("Please enter a valid weight for Point 1.\n\nExample: 0 for empty platform", "Invalid Input", 
                                   MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Point1WeightTxt.Focus();
                     return;
                 }
                 
+                // Validate positive integer only
                 if (knownWeight < 0)
                 {
-                    MessageBox.Show("Weight cannot be negative.", "Invalid Input", 
+                    MessageBox.Show("Weight cannot be negative.\n\nEnter 0 for empty platform.", "Invalid Input", 
                                   MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Point1WeightTxt.Focus();
+                    return;
+                }
+                
+                if (knownWeight != Math.Floor(knownWeight))
+                {
+                    MessageBox.Show("Weight must be a whole number (integer).\n\nExample: 0, 50, 100 (not 0.5 or 1.2)", "Invalid Input", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Point1WeightTxt.Focus();
+                    return;
+                }
+                
+                if (knownWeight > 10000)
+                {
+                    MessageBox.Show("Weight cannot exceed 10,000 kg.\n\nEnter a reasonable weight value.", "Invalid Input", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Point1WeightTxt.Focus();
                     return;
                 }
                 
                 Point1RawADC = _currentRawADC;
-                Point1KnownWeight = knownWeight;
+                Point1KnownWeight = (int)knownWeight; // Convert to integer
                 _point1Captured = true;
                 
-                UpdateStatus("Point 1 captured. Add heavy load and capture Point 2.");
+                // Update UI to show captured data
+                Point1RawTxt.Text = _currentRawADC.ToString();
+                Point1WeightTxt.Text = ((int)knownWeight).ToString();
+                
+                UpdateStatus($"✓ Point 1 captured: {(int)knownWeight} kg at ADC {_currentRawADC}. Add heavy load and capture Point 2.");
+                
+                // Focus on Point 2 weight input
+                Point2WeightTxt.Focus();
             }
             catch (Exception ex)
             {
@@ -137,23 +168,54 @@ namespace SuspensionPCB_CAN_WPF
             {
                 if (!double.TryParse(Point2WeightTxt.Text, out double knownWeight))
                 {
-                    MessageBox.Show("Please enter a valid weight for Point 2.", "Invalid Input", 
+                    MessageBox.Show("Please enter a valid weight for Point 2.\n\nExample: 50 for 50kg calibration weight", "Invalid Input", 
                                   MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Point2WeightTxt.Focus();
+                    return;
+                }
+                
+                // Validate positive integer only
+                if (knownWeight < 0)
+                {
+                    MessageBox.Show("Weight cannot be negative.\n\nEnter a positive weight value.", "Invalid Input", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Point2WeightTxt.Focus();
+                    return;
+                }
+                
+                if (knownWeight != Math.Floor(knownWeight))
+                {
+                    MessageBox.Show("Weight must be a whole number (integer).\n\nExample: 50, 100, 200 (not 50.5 or 1.2)", "Invalid Input", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Point2WeightTxt.Focus();
+                    return;
+                }
+                
+                if (knownWeight > 10000)
+                {
+                    MessageBox.Show("Weight cannot exceed 10,000 kg.\n\nEnter a reasonable weight value.", "Invalid Input", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Point2WeightTxt.Focus();
                     return;
                 }
                 
                 if (knownWeight <= Point1KnownWeight)
                 {
-                    MessageBox.Show("Point 2 weight must be greater than Point 1 weight.", "Invalid Input", 
+                    MessageBox.Show($"Point 2 weight ({(int)knownWeight} kg) must be greater than Point 1 weight ({Point1KnownWeight} kg).\n\nAdd more weight for accurate calibration.", "Invalid Input", 
                                   MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Point2WeightTxt.Focus();
                     return;
                 }
                 
                 Point2RawADC = _currentRawADC;
-                Point2KnownWeight = knownWeight;
+                Point2KnownWeight = (int)knownWeight; // Convert to integer
                 _point2Captured = true;
                 
-                UpdateStatus("Point 2 captured. Click 'Calculate Calibration' to proceed.");
+                // Update UI to show captured data
+                Point2RawTxt.Text = _currentRawADC.ToString();
+                Point2WeightTxt.Text = ((int)knownWeight).ToString();
+                
+                UpdateStatus($"✓ Point 2 captured: {(int)knownWeight} kg at ADC {_currentRawADC}. Click 'Calculate Calibration' to proceed.");
             }
             catch (Exception ex)
             {
@@ -261,6 +323,37 @@ namespace SuspensionPCB_CAN_WPF
         private void UpdateStatus(string message)
         {
             StatusTxt.Text = message;
+            UpdateStepVisuals();
+        }
+        
+        private void UpdateStepVisuals()
+        {
+            try
+            {
+                // Update step visual indicators
+                if (_point1Captured && !_point2Captured)
+                {
+                    // Point 1 completed, Point 2 active
+                    Point1GroupBox.Style = (Style)FindResource("StepGroupBox");
+                    Point2GroupBox.Style = (Style)FindResource("ActiveStepGroupBox");
+                }
+                else if (_point1Captured && _point2Captured)
+                {
+                    // Both points completed
+                    Point1GroupBox.Style = (Style)FindResource("StepGroupBox");
+                    Point2GroupBox.Style = (Style)FindResource("StepGroupBox");
+                }
+                else
+                {
+                    // Point 1 active
+                    Point1GroupBox.Style = (Style)FindResource("ActiveStepGroupBox");
+                    Point2GroupBox.Style = (Style)FindResource("StepGroupBox");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error updating step visuals: {ex.Message}", "CalibrationDialog");
+            }
         }
         
         protected override void OnClosed(EventArgs e)
