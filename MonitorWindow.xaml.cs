@@ -213,10 +213,10 @@ namespace SuspensionPCB_CAN_WPF
                 if (_leftCalibration != null && _leftCalibration.IsValid && _tareManager != null)
                 {
                     double leftCalibrated = _leftCalibration.RawToKg(_leftRawADC);
-                    LeftCalibratedTxt.Text = $"{leftCalibrated:F0} kg";
+                    LeftCalibratedTxt.Text = $"{(int)leftCalibrated} kg";
                     
                     double leftDisplay = _tareManager.ApplyTare(leftCalibrated, true);
-                    LeftDisplayTxt.Text = $"{leftDisplay:F0} kg";
+                    LeftDisplayTxt.Text = $"{(int)leftDisplay} kg";
                     LeftTareStatusTxt.Text = _tareManager.LeftIsTared ? "- Tared" : "- Not Tared";
                 }
                 else
@@ -232,10 +232,10 @@ namespace SuspensionPCB_CAN_WPF
                 if (_rightCalibration != null && _rightCalibration.IsValid && _tareManager != null)
                 {
                     double rightCalibrated = _rightCalibration.RawToKg(_rightRawADC);
-                    RightCalibratedTxt.Text = $"{rightCalibrated:F0} kg";
+                    RightCalibratedTxt.Text = $"{(int)rightCalibrated} kg";
                     
                     double rightDisplay = _tareManager.ApplyTare(rightCalibrated, false);
-                    RightDisplayTxt.Text = $"{rightDisplay:F0} kg";
+                    RightDisplayTxt.Text = $"{(int)rightDisplay} kg";
                     RightTareStatusTxt.Text = _tareManager.RightIsTared ? "- Tared" : "- Not Tared";
                 }
                 else
@@ -255,7 +255,7 @@ namespace SuspensionPCB_CAN_WPF
                     double rightDisplay = _tareManager.ApplyTare(rightCalibrated, false);
                     
                     double total = leftDisplay + rightDisplay;
-                    TotalWeightTxt.Text = $"{total:F0} kg";
+                    TotalWeightTxt.Text = $"{(int)total} kg";
                     
                     if (total > 0)
                     {
