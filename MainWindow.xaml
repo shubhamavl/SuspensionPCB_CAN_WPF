@@ -8,103 +8,40 @@
         Background="#FFF5F5F5">
 
     <Window.Resources>
-        <!-- Modern Button Style -->
-        <Style x:Key="ModernButton" TargetType="Button">
-            <Setter Property="Background" Value="#FF2C3E50"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="16,10"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="6"/>
-            <Setter Property="MinWidth" Value="120"/>
-            <Setter Property="MinHeight" Value="38"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" 
-                                CornerRadius="6" 
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                BorderBrush="{TemplateBinding BorderBrush}">
-                            <ContentPresenter HorizontalAlignment="Center" 
-                                            VerticalAlignment="Center" 
-                                            Margin="{TemplateBinding Padding}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#FF34495E"/>
-                                <Setter Property="Effect">
-                                    <Setter.Value>
-                                        <DropShadowEffect BlurRadius="8" ShadowDepth="2" Color="#40000000"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#FF1A252F"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Responsive GroupBox Style -->
-        <Style x:Key="ResponsiveGroupBox" TargetType="GroupBox">
-            <Setter Property="Padding" Value="20"/>
-            <Setter Property="Margin" Value="0,0,0,20"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#FFE0E0E0"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="GroupBox">
-                        <Grid>
-                            <Border Background="{TemplateBinding Background}" 
-                                    BorderBrush="{TemplateBinding BorderBrush}" 
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="8">
-                                <Border.Effect>
-                                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Color="#20000000"/>
-                                </Border.Effect>
-                            </Border>
-                            <StackPanel>
-                                <TextBlock Text="{TemplateBinding Header}" 
-                                         FontWeight="Bold" 
-                                         FontSize="16"
-                                         Foreground="#FF2C3E50" 
-                                         Margin="20,15,20,10"/>
-                                <ContentPresenter Margin="{TemplateBinding Padding}"/>
-                            </StackPanel>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Responsive Data Card Style -->
-        <Style x:Key="DataCard" TargetType="Border">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#FFE0E0E0"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Padding" Value="20"/>
-            <Setter Property="Margin" Value="10"/>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Color="#20000000"/>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <!-- Status Banner Animation -->
+        <Storyboard x:Key="SlideDownAnimation">
+            <DoubleAnimation Storyboard.TargetProperty="Height" 
+                           From="0" To="40" Duration="0:0:0.3">
+                <DoubleAnimation.EasingFunction>
+                    <PowerEase EasingMode="EaseOut" Power="2"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" 
+                           From="0" To="1" Duration="0:0:0.3"/>
+        </Storyboard>
+        
+        <Storyboard x:Key="SlideUpAnimation">
+            <DoubleAnimation Storyboard.TargetProperty="Height" 
+                           From="40" To="0" Duration="0:0:0.3">
+                <DoubleAnimation.EasingFunction>
+                    <PowerEase EasingMode="EaseIn" Power="2"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" 
+                           From="1" To="0" Duration="0:0:0.3"/>
+        </Storyboard>
     </Window.Resources>
+
+    <Window.InputBindings>
+        <KeyBinding Key="K" Modifiers="Ctrl" Command="{Binding ConnectionToggleCommand}"/>
+        <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding StartLeftCommand}"/>
+        <KeyBinding Key="R" Modifiers="Ctrl" Command="{Binding StartRightCommand}"/>
+        <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding StopAllCommand}"/>
+    </Window.InputBindings>
 
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -113,23 +50,34 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Border Grid.Row="0" Background="#FF2C3E50" Padding="15">
+        <Border Grid.Row="0" Background="{StaticResource PrimaryBlue}" Padding="24">
             <Grid>
                 <TextBlock Text="Weight Measurement System Monitor" 
-                           FontSize="18" FontWeight="Bold" Foreground="White"
+                           Style="{StaticResource HeaderLarge}"
                            HorizontalAlignment="Left"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <TextBlock Text="Status:" Foreground="White" VerticalAlignment="Center" Margin="5"/>
                     <Ellipse x:Name="StatusIndicator" Width="12" Height="12" 
-                             Fill="#FFDC3545" VerticalAlignment="Center"/>
+                             Fill="{StaticResource DangerRed}" VerticalAlignment="Center"/>
                     <TextBlock x:Name="StatusText" Text="Disconnected" 
                                Foreground="White" VerticalAlignment="Center" Margin="5"/>
                 </StackPanel>
             </Grid>
         </Border>
 
+        <!-- Status Banner -->
+        <Border x:Name="StatusBanner" Grid.Row="1" Height="0" 
+                Background="{StaticResource SuccessGreen}" 
+                Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" 
+                        VerticalAlignment="Center">
+                <TextBlock x:Name="StatusBannerText" Text="✓ Connected Successfully" 
+                           Foreground="White" FontWeight="SemiBold" Margin="10"/>
+            </StackPanel>
+        </Border>
+
         <!-- Controls -->
-        <Border Grid.Row="1" Background="#FFF8F9FA" Padding="20">
+        <Border Grid.Row="2" Background="{StaticResource GrayLight}" Padding="20">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -141,29 +89,27 @@
 
                 <!-- Connection -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock Text="CAN: 250 kbps" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="Bold" Foreground="#FF2C3E50"/>
-                    <Button x:Name="ConnectBtn" Content="🔌 Connect" 
-                            Style="{StaticResource ModernButton}" 
-                            Background="#FF28A745"
-                            Click="ConnectBtn_Click"
-                            ToolTip="Connect to USB-CAN adapter (250 kbps fixed)"/>
-                    <Button x:Name="DisconnectBtn" Content="🔌 Disconnect" 
-                            Style="{StaticResource ModernButton}" 
-                            Background="#FFE74C3C" Click="DisconnectBtn_Click" 
-                            IsEnabled="False"
-                            ToolTip="Disconnect from USB-CAN adapter"/>
+                    <TextBlock Text="CAN: 250 kbps" VerticalAlignment="Center" Margin="0,0,16,0" 
+                               FontWeight="Bold" Foreground="{StaticResource PrimaryBlue}"/>
+                    <ToggleButton x:Name="ConnectionToggle" Content="🔌 Connect" 
+                                  Style="{StaticResource ToggleButton}"
+                                  Click="ConnectionToggle_Click"
+                                  ToolTip="Connect/Disconnect from USB-CAN adapter (Ctrl+K)"/>
+                    <ProgressBar x:Name="ConnectionProgress" Width="20" Height="20" 
+                                 IsIndeterminate="True" Visibility="Collapsed" 
+                                 Margin="8,0,0,0"/>
                 </StackPanel>
 
                 <!-- Data Stream Controls -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="30,0,0,0">
                     <Button x:Name="RequestLeftBtn" Content="▶ Start Left" 
-                            Style="{StaticResource ModernButton}" 
-                            Background="#FF27AE60" Click="RequestLeftBtn_Click" 
+                            Style="{StaticResource SuccessButton}" 
+                            Click="RequestLeftBtn_Click" 
                             IsEnabled="False" 
                             ToolTip="Start left side streaming at selected rate (Ctrl+L)"/>
                     <Button x:Name="RequestRightBtn" Content="▶ Start Right" 
-                            Style="{StaticResource ModernButton}" 
-                            Background="#FF27AE60" Click="RequestRightBtn_Click" 
+                            Style="{StaticResource SuccessButton}" 
+                            Click="RequestRightBtn_Click" 
                             IsEnabled="False" 
                             ToolTip="Start right side streaming at selected rate (Ctrl+R)"/>
                 </StackPanel>
@@ -171,8 +117,7 @@
                 <!-- Stop All -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="30,0,0,0">
                     <Button x:Name="StopAllBtn" Content="⏹ Stop All Streams" 
-                            Style="{StaticResource ModernButton}" 
-                            Background="#FFE74C3C" 
+                            Style="{StaticResource DangerButton}" 
                             Click="StopAll_Click" 
                             IsEnabled="False" 
                             ToolTip="Stop all active streams (Ctrl+S)"/>
@@ -181,7 +126,8 @@
                 <!-- Settings -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="30,0,0,0">
                     <Button x:Name="SettingsToggleBtn" Content="⚙ Settings" 
-                            Style="{StaticResource ModernButton}" Background="#FF95A5A6"
+                            Style="{StaticResource ModernButton}" 
+                            Background="{StaticResource GrayMedium}"
                             Click="SettingsToggle_Click"
                             ToolTip="Open transmission settings"/>
                 </StackPanel>
@@ -194,7 +140,7 @@
         </Border>
 
         <!-- Settings Panel (initially collapsed) -->
-        <Border x:Name="SettingsPanel" Grid.Row="2" Visibility="Collapsed" 
+        <Border x:Name="SettingsPanel" Grid.Row="3" Visibility="Collapsed" 
                 Background="#FFF0F0F0" BorderBrush="#FFCCCCCC" BorderThickness="1" 
                 Padding="15" Margin="15,0">
             <StackPanel>
@@ -222,7 +168,7 @@
         </Border>
 
         <!-- Main Content -->
-        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" 
+        <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" 
                       Margin="15" Padding="5">
             <Grid MinWidth="1100">
                 <StackPanel>
@@ -357,36 +303,26 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Total and Balance -->
-                    <GroupBox Grid.Column="0" Header="Summary" Style="{StaticResource ResponsiveGroupBox}" Margin="0,0,10,0">
+                    <!-- Total Weight Card (Prominent) -->
+                    <Border Grid.Column="0" Style="{StaticResource DataCard}" 
+                            BorderBrush="{StaticResource SuccessGreen}" BorderThickness="3"
+                            Margin="0,0,10,0">
                         <StackPanel>
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition/>
-                                    <RowDefinition/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition/>
-                                    <ColumnDefinition/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Total Weight -->
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Total:" FontWeight="Bold" Margin="0,0,5,5"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TotalWeightTxt" Text="0.0 kg" FontWeight="Bold" 
-                                           Foreground="#FF28A745" Margin="5,0,0,5"/>
-
-                                <!-- Balance -->
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Balance:" FontWeight="Bold" Margin="0,0,5,0"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="BalanceTxt" Text="50% L / 50% R" FontWeight="Bold" 
-                                           Foreground="#FF6C757D" Margin="5,0,0,0"/>
-                            </Grid>
-
-                            <!-- Reset Tares Button -->
-                            <Button Content="Reset All Tares" Style="{StaticResource ModernButton}" 
-                                    Background="#FFDC3545" Click="ResetTares_Click" 
-                                    HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                            <TextBlock Text="TOTAL WEIGHT" Style="{StaticResource HeaderSmall}" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                            <TextBlock x:Name="TotalWeightTxt" Text="0 kg" 
+                                       FontSize="32" FontWeight="Bold" 
+                                       Foreground="{StaticResource SuccessGreen}" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            <TextBlock x:Name="BalanceTxt" Text="50% L / 50% R" 
+                                       FontSize="14" FontWeight="SemiBold" 
+                                       Foreground="{StaticResource GrayMedium}" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                            <Button Content="Reset All Tares" Style="{StaticResource DangerButton}" 
+                                    Click="ResetTares_Click" 
+                                    HorizontalAlignment="Center"/>
                         </StackPanel>
-                    </GroupBox>
+                    </Border>
 
                     <!-- System Status -->
                     <GroupBox Grid.Column="1" Header="System Status" Style="{StaticResource ResponsiveGroupBox}" Margin="10,0,0,0">
@@ -419,18 +355,18 @@
                 </Grid>
 
                 <!-- Window Access Buttons -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
+                <UniformGrid Rows="1" Columns="2" HorizontalAlignment="Center" Margin="0,20,0,0">
                     <Button Content="Open Monitor Window" Style="{StaticResource ModernButton}" 
-                            Background="#FF17A2B8" Click="OpenMonitorWindow_Click" Margin="5"/>
+                            Background="{StaticResource InfoCyan}" Click="OpenMonitorWindow_Click" Margin="5"/>
                     <Button Content="Open Logs Window" Style="{StaticResource ModernButton}" 
-                            Background="#FF6C757D" Click="OpenLogsWindow_Click" Margin="5"/>
-                </StackPanel>
+                            Background="{StaticResource GrayMedium}" Click="OpenLogsWindow_Click" Margin="5"/>
+                </UniformGrid>
                 </StackPanel>
             </Grid>
         </ScrollViewer>
 
         <!-- Status Bar -->
-        <StatusBar Grid.Row="4" Background="#FF2C3E50" Foreground="White" Height="28">
+        <StatusBar Grid.Row="5" Background="{StaticResource PrimaryBlue}" Foreground="White" Height="28">
             <StatusBarItem>
                 <TextBlock x:Name="StatusBarText" Text="Ready | CAN v0.7 @ 250 kbps" />
             </StatusBarItem>

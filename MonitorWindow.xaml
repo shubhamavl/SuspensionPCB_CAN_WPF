@@ -103,9 +103,25 @@
                     <!-- Message Grid -->
                     <DataGrid Grid.Row="1" x:Name="MessageGrid" 
                           AutoGenerateColumns="False" IsReadOnly="True"
+                          EnableRowVirtualization="True"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          AlternatingRowBackground="#FFF8F9FA"
+                          GridLinesVisibility="Horizontal"
+                          HeadersVisibility="Column"
                           ItemsSource="{Binding FilteredMessages}">
+                        <DataGrid.ColumnHeaderStyle>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="{StaticResource PrimaryBlue}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="Padding" Value="8,4"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                            </Style>
+                        </DataGrid.ColumnHeaderStyle>
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow">
+                                <Setter Property="MinHeight" Value="25"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Direction}" Value="TX">
                                         <Setter Property="Foreground" Value="#FF1565C0"/>
@@ -121,12 +137,12 @@
                             </Style>
                         </DataGrid.RowStyle>
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="90"/>
-                            <DataGridTextColumn Header="ID" Binding="{Binding ID}" Width="60"/>
-                            <DataGridTextColumn Header="Dir" Binding="{Binding Direction}" Width="40"/>
-                            <DataGridTextColumn Header="Type" Binding="{Binding MessageType}" Width="100"/>
-                            <DataGridTextColumn Header="Data" Binding="{Binding Data}" Width="200"/>
-                            <DataGridTextColumn Header="Decoded" Binding="{Binding Decoded}" Width="*"/>
+                            <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="80" MinWidth="80"/>
+                            <DataGridTextColumn Header="ID" Binding="{Binding ID}" Width="60" MinWidth="60"/>
+                            <DataGridTextColumn Header="Dir" Binding="{Binding Direction}" Width="40" MinWidth="40"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding MessageType}" Width="100" MinWidth="100"/>
+                            <DataGridTextColumn Header="Data" Binding="{Binding Data}" Width="150" MinWidth="150"/>
+                            <DataGridTextColumn Header="Decoded" Binding="{Binding Decoded}" Width="*" MinWidth="200"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>

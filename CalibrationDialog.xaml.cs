@@ -2,6 +2,9 @@ using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Threading;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Linq;
 
 namespace SuspensionPCB_CAN_WPF
 {
@@ -336,23 +339,79 @@ namespace SuspensionPCB_CAN_WPF
                     // Point 1 completed, Point 2 active
                     Point1GroupBox.Style = (Style)FindResource("StepGroupBox");
                     Point2GroupBox.Style = (Style)FindResource("ActiveStepGroupBox");
+                    
+                    // Update stepper visuals
+                    if (Step1Circle != null) Step1Circle.Style = (Style)FindResource("StepperCircleCompleted");
+                    if (Step1Line != null) Step1Line.Style = (Style)FindResource("StepperLineCompleted");
+                    if (Step2Circle != null) Step2Circle.Style = (Style)FindResource("StepperCircleActive");
+                    
+                    // Update text colors
+                    UpdateStepTextColors(true, false);
                 }
                 else if (_point1Captured && _point2Captured)
                 {
                     // Both points completed
                     Point1GroupBox.Style = (Style)FindResource("StepGroupBox");
                     Point2GroupBox.Style = (Style)FindResource("StepGroupBox");
+                    
+                    // Update stepper visuals
+                    if (Step1Circle != null) Step1Circle.Style = (Style)FindResource("StepperCircleCompleted");
+                    if (Step1Line != null) Step1Line.Style = (Style)FindResource("StepperLineCompleted");
+                    if (Step2Circle != null) Step2Circle.Style = (Style)FindResource("StepperCircleCompleted");
+                    
+                    // Update text colors
+                    UpdateStepTextColors(true, true);
                 }
                 else
                 {
                     // Point 1 active
                     Point1GroupBox.Style = (Style)FindResource("ActiveStepGroupBox");
                     Point2GroupBox.Style = (Style)FindResource("StepGroupBox");
+                    
+                    // Update stepper visuals
+                    if (Step1Circle != null) Step1Circle.Style = (Style)FindResource("StepperCircleActive");
+                    if (Step1Line != null) Step1Line.Style = (Style)FindResource("StepperLine");
+                    if (Step2Circle != null) Step2Circle.Style = (Style)FindResource("StepperCircle");
+                    
+                    // Update text colors
+                    UpdateStepTextColors(false, false);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error updating step visuals: {ex.Message}", "CalibrationDialog");
+            }
+        }
+        
+        private void UpdateStepTextColors(bool step1Completed, bool step2Completed)
+        {
+            try
+            {
+                // Find the text blocks within the stepper grids
+                var step1Grid = Step1Circle?.Parent as Grid;
+                var step2Grid = Step2Circle?.Parent as Grid;
+                
+                if (step1Grid != null)
+                {
+                    var step1Text = step1Grid.Children.OfType<TextBlock>().FirstOrDefault();
+                    if (step1Text != null)
+                    {
+                        step1Text.Foreground = Brushes.White; // Always white for visibility
+                    }
+                }
+                
+                if (step2Grid != null)
+                {
+                    var step2Text = step2Grid.Children.OfType<TextBlock>().FirstOrDefault();
+                    if (step2Text != null)
+                    {
+                        step2Text.Foreground = step2Completed ? Brushes.White : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF6C757D"));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"UpdateStepTextColors error: {ex.Message}");
             }
         }
         

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.IO;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
@@ -151,7 +152,7 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     if (_canService?.IsConnected == false)
                     {
-                        ConnectBtn_Click(sender, new RoutedEventArgs());
+                        ConnectionToggle_Click(sender, new RoutedEventArgs());
                     }
                 }
             }
@@ -348,9 +349,8 @@ namespace SuspensionPCB_CAN_WPF
             return 250;
         }
 
-        private void ConnectBtn_Click(object sender, RoutedEventArgs e)
+        private void ConnectionToggle_Click(object sender, RoutedEventArgs e)
         {
-            StopAllBtn.IsEnabled = true;
             try
             {
                 if (_canService == null)
@@ -359,8 +359,8 @@ namespace SuspensionPCB_CAN_WPF
                     return;
                 }
 
-                if (DisconnectBtn != null) DisconnectBtn.IsEnabled = false;
-                if (ConnectBtn != null) ConnectBtn.IsEnabled = false;
+                if (ConnectionProgress != null) ConnectionProgress.Visibility = Visibility.Visible;
+                if (ConnectionToggle != null) ConnectionToggle.IsEnabled = false;
 
                 string comPort = "COM3"; // Auto-detected by CANService
                 
@@ -371,19 +371,27 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     UpdateConnectionStatus(true);
                     ResetStatistics();
+                    ShowStatusBanner("✓ Connected Successfully", true);
                     MessageBox.Show("USB-CAN Connected Successfully.\n\nProtocol: CAN v0.7\nExpected responses:\n• 0x200 (Left side weights)\n• 0x201 (Right side weights)\n• 0x300 (System status)",
                                   "Connected", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else
                 {
                     UpdateConnectionStatus(false);
+                    ShowStatusBanner("✗ Connection Failed", false);
                     MessageBox.Show("Connection Failed. Check USB-CAN device.", "Connection Failed", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
             catch (Exception ex)
             {
                 UpdateConnectionStatus(false);
+                ShowStatusBanner($"✗ Connection Error: {ex.Message}", false);
                 MessageBox.Show($"Connection Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (ConnectionProgress != null) ConnectionProgress.Visibility = Visibility.Collapsed;
+                if (ConnectionToggle != null) ConnectionToggle.IsEnabled = true;
             }
         }
 
@@ -1033,18 +1041,54 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
+        private void ShowStatusBanner(string message, bool isSuccess)
+        {
+            try
+            {
+                if (StatusBanner != null && StatusBannerText != null)
+                {
+                    StatusBannerText.Text = message;
+                    StatusBanner.Background = isSuccess 
+                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 167, 69)) // green
+                        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 53, 69)); // red
+                    
+                    StatusBanner.Visibility = Visibility.Visible;
+                    StatusBanner.Height = 40;
+                    
+                    // Start slide down animation
+                    var slideDown = (Storyboard)FindResource("SlideDownAnimation");
+                    slideDown.Begin(StatusBanner);
+                    
+                    // Auto-dismiss after 3 seconds
+                    var timer = new DispatcherTimer();
+                    timer.Interval = TimeSpan.FromSeconds(3);
+                    timer.Tick += (s, e) =>
+                    {
+                        timer.Stop();
+                        var slideUp = (Storyboard)FindResource("SlideUpAnimation");
+                        slideUp.Completed += (sender, args) =>
+                        {
+                            StatusBanner.Visibility = Visibility.Collapsed;
+                        };
+                        slideUp.Begin(StatusBanner);
+                    };
+                    timer.Start();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Status banner error: {ex.Message}", "UI");
+            }
+        }
+
         private void UpdateConnectionStatus(bool connected)
         {
             try
             {
-                if (ConnectBtn != null)
+                if (ConnectionToggle != null)
                 {
-                    ConnectBtn.IsEnabled = !connected;
-                }
-
-                if (DisconnectBtn != null)
-                {
-                    DisconnectBtn.IsEnabled = connected;
+                    ConnectionToggle.IsChecked = connected;
+                    ConnectionToggle.Content = connected ? "🔌 Disconnect" : "🔌 Connect";
                 }
                 
                 if (RequestLeftBtn != null)
@@ -1100,19 +1144,26 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                if (DisconnectBtn != null) DisconnectBtn.IsEnabled = false;
+                if (ConnectionProgress != null) ConnectionProgress.Visibility = Visibility.Visible;
+                if (ConnectionToggle != null) ConnectionToggle.IsEnabled = false;
+                
                 _canService?.Disconnect();
                 UpdateConnectionStatus(false);
                 _leftStreamRunning = false;
                 _rightStreamRunning = false;
                 UpdateStreamingIndicators();
+                ShowStatusBanner("✓ Disconnected Successfully", true);
                 _logger.LogInfo("Disconnected from CAN device", "CAN");
-                if (ConnectBtn != null) ConnectBtn.IsEnabled = true;
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Disconnect error: {ex.Message}", "CAN");
-                if (DisconnectBtn != null) DisconnectBtn.IsEnabled = true;
+                ShowStatusBanner($"✗ Disconnect Error: {ex.Message}", false);
+            }
+            finally
+            {
+                if (ConnectionProgress != null) ConnectionProgress.Visibility = Visibility.Collapsed;
+                if (ConnectionToggle != null) ConnectionToggle.IsEnabled = true;
             }
         }
         
