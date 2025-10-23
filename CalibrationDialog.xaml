@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="LMV Suspension Axle Weight Measurement System Monitor - Calibration" 
-        Height="550" Width="850" MinHeight="500" MinWidth="700"
+        Height="750" Width="700" MinHeight="750" MinWidth="700"
         WindowStartupLocation="CenterOwner" WindowState="Normal"
         ResizeMode="CanResize" Background="#FFF8F9FA" Icon="Assets/AVL_Icon.ico">
 
@@ -176,7 +176,10 @@
         </Grid.ColumnDefinitions>
 
         <!-- Header -->
-        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#FF1B5E96" CornerRadius="6" Padding="15,10" Margin="0,0,0,10">
+        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#FF1B5E96" CornerRadius="8" Padding="20,15" Margin="0,0,0,15">
+            <Border.Effect>
+                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="3" Opacity="0.3" BlurRadius="8"/>
+            </Border.Effect>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -185,176 +188,176 @@
                 
                 <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                        <Image Source="Assets/AVL_Logo.jpg" Width="25" Height="25" Margin="0,0,10,0" 
+                        <Image Source="Assets/AVL_Logo.jpg" Width="32" Height="32" Margin="0,0,15,0" 
                                VerticalAlignment="Center"/>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="{Binding Side, StringFormat='{}{0} Side Calibration'}" 
-                                       FontSize="18" FontWeight="Bold" Foreground="White"/>
+                                       FontSize="20" FontWeight="Bold" Foreground="White"/>
                             <TextBlock Text="Hardware Calibration Process" 
-                                       FontSize="11" Foreground="#FFE3F2FD"/>
+                                       FontSize="12" Foreground="#FFE3F2FD"/>
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>
                 
-                <!-- Status Indicator -->
+                <!-- Status Indicator and Info Button -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Ellipse Width="12" Height="12" Fill="#FF27AE60" Margin="0,0,6,0"/>
+                    <Ellipse Width="12" Height="12" Fill="#FF27AE60" Margin="0,0,8,0">
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="#FF27AE60" Direction="270" ShadowDepth="2" Opacity="0.5" BlurRadius="4"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
                     <TextBlock Text="Ready for Calibration" FontSize="12" FontWeight="SemiBold" 
-                               Foreground="White" VerticalAlignment="Center"/>
+                               Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                    
+                    <!-- Info Button -->
+                    <Button x:Name="InfoBtn" Content="ℹ️ Info" 
+                            Background="#FF17A2B8" Foreground="White" 
+                            BorderThickness="0" Padding="8,4" FontSize="10" FontWeight="SemiBold"
+                            Click="InfoBtn_Click" Cursor="Hand" VerticalAlignment="Center"
+                            ToolTip="Click for detailed calibration information">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}" 
+                                        CornerRadius="4" 
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" 
+                                                    VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#FF138496"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
             </StackPanel>
             </Grid>
         </Border>
 
-        <!-- Instructions and Stepper Combined -->
-        <Border Grid.Row="1" Grid.ColumnSpan="2" Background="#FFF8F9FA" CornerRadius="6" 
-                BorderBrush="#FF1B5E96" BorderThickness="2" Padding="15,10" Margin="0,0,0,10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>  <!-- Instructions -->
-                    <ColumnDefinition Width="*"/>     <!-- Spacer -->
-                    <ColumnDefinition Width="Auto"/>   <!-- Stepper -->
-                </Grid.ColumnDefinitions>
-                
-                <!-- Instructions - Left Side -->
-                <StackPanel Grid.Column="0" Margin="0,0,20,0">
-                    <TextBlock Text="📋 Calibration Instructions" FontSize="14" FontWeight="Bold" 
-                               Foreground="#FF1B5E96" Margin="0,0,0,8"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        
-                        <!-- Step 1 Instructions -->
-                        <StackPanel Grid.Column="0" Margin="0,0,15,0">
-                            <TextBlock Text="Step 1: Empty Platform" FontSize="12" FontWeight="Bold" 
-                                       Foreground="#FF1B5E96" Margin="0,0,0,4"/>
-                            <TextBlock Text="1. Remove all weight from platform" FontSize="10" 
-                                       Foreground="#FF495057" Margin="0,0,0,2"/>
-                            <TextBlock Text="2. Type '0' in left weight field" FontSize="10" 
-                                       Foreground="#FF495057" Margin="0,0,0,2"/>
-                            <TextBlock Text="3. Click 'Capture Point 1'" FontSize="10" 
-                                       Foreground="#FF495057"/>
-                        </StackPanel>
-                        
-                        <!-- Step 2 Instructions -->
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="Step 2: Known Weight" FontSize="12" FontWeight="Bold" 
-                                       Foreground="#FF1B5E96" Margin="0,0,0,4"/>
-                            <TextBlock Text="1. Add known weight to platform" FontSize="10" 
-                                       Foreground="#FF495057" Margin="0,0,0,2"/>
-                            <TextBlock Text="2. Type weight in right field" FontSize="10" 
-                                       Foreground="#FF495057" Margin="0,0,0,2"/>
-                            <TextBlock Text="3. Click 'Capture Point 2'" FontSize="10" 
-                                       Foreground="#FF495057"/>
-                        </StackPanel>
-                    </Grid>
-                </StackPanel>
-                
-                <!-- Stepper - Right Side -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <!-- Stepper Only (Instructions moved to popup) -->
+        <Border Grid.Row="1" Grid.ColumnSpan="2" Background="#FFF8F9FA" CornerRadius="8" 
+                BorderBrush="#FF1B5E96" BorderThickness="2" Padding="20,15" Margin="0,0,0,15">
+            <Border.Effect>
+                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="2" Opacity="0.2" BlurRadius="6"/>
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <!-- Step 1 -->
-                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="0,0,20,0">
-                        <Grid Width="30" Height="30" HorizontalAlignment="Center" Margin="0,0,0,6">
+                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="0,0,25,0">
+                        <Grid Width="40" Height="40" HorizontalAlignment="Center" Margin="0,0,0,8">
                             <Ellipse x:Name="Step1Circle" Style="{StaticResource StepperCircleActive}" 
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <TextBlock Text="1" FontWeight="Bold" FontSize="14" Foreground="White" 
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect Color="#FF1B5E96" Direction="270" ShadowDepth="2" Opacity="0.4" BlurRadius="4"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+                            <TextBlock Text="1" FontWeight="Bold" FontSize="16" Foreground="White" 
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Grid>
-                        <TextBlock Text="Capture Point 1" FontSize="10" FontWeight="SemiBold" 
+                        <TextBlock Text="Capture Point 1" FontSize="11" FontWeight="SemiBold" 
                                    HorizontalAlignment="Center" Foreground="#FF1B5E96"/>
-                        <TextBlock Text="Empty Platform" FontSize="9" 
-                                   HorizontalAlignment="Center" Foreground="#FF6C757D" Margin="0,1,0,0"/>
+                        <TextBlock Text="Empty Platform" FontSize="10" 
+                                   HorizontalAlignment="Center" Foreground="#FF6C757D" Margin="0,2,0,0"/>
                     </StackPanel>
                     
                     <!-- Connecting Line -->
-                    <Rectangle x:Name="Step1Line" Width="25" Height="2" Fill="#FFE9ECEF" 
-                               VerticalAlignment="Center" Margin="0,0,20,0"/>
+                    <Rectangle x:Name="Step1Line" Width="30" Height="3" Fill="#FFE9ECEF" 
+                               VerticalAlignment="Center" Margin="0,0,25,0">
+                        <Rectangle.Effect>
+                            <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="1" Opacity="0.2" BlurRadius="2"/>
+                        </Rectangle.Effect>
+                    </Rectangle>
                     
                     <!-- Step 2 -->
                     <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
-                        <Grid Width="30" Height="30" HorizontalAlignment="Center" Margin="0,0,0,6">
+                        <Grid Width="40" Height="40" HorizontalAlignment="Center" Margin="0,0,0,8">
                             <Ellipse x:Name="Step2Circle" Style="{StaticResource StepperCircle}" 
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <TextBlock Text="2" FontWeight="Bold" FontSize="14" Foreground="#FF6C757D" 
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect Color="#FF6C757D" Direction="270" ShadowDepth="2" Opacity="0.3" BlurRadius="4"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+                            <TextBlock Text="2" FontWeight="Bold" FontSize="16" Foreground="#FF6C757D" 
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Grid>
-                        <TextBlock Text="Capture Point 2" FontSize="10" FontWeight="SemiBold" 
+                        <TextBlock Text="Capture Point 2" FontSize="11" FontWeight="SemiBold" 
                                    HorizontalAlignment="Center" Foreground="#FF1B5E96"/>
-                        <TextBlock Text="Known Weight" FontSize="9" 
-                                   HorizontalAlignment="Center" Foreground="#FF6C757D" Margin="0,1,0,0"/>
+                        <TextBlock Text="Known Weight" FontSize="10" 
+                                   HorizontalAlignment="Center" Foreground="#FF6C757D" Margin="0,2,0,0"/>
                     </StackPanel>
                 </StackPanel>
-            </Grid>
-        </Border>
+            </Border>
 
         <!-- Main Content Area -->
-        <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="0,0,0,10" MinHeight="200">
+        <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="0,0,0,15" MinHeight="250">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*" MinWidth="300"/>
                 <ColumnDefinition Width="20"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*" MinWidth="300"/>
             </Grid.ColumnDefinitions>
             
             <!-- Left Side - Point 1 -->
-            <Border Grid.Column="0" Background="White" CornerRadius="6" 
+            <Border Grid.Column="0" Background="White" CornerRadius="8" 
                     BorderBrush="#FF1B5E96" BorderThickness="2" Padding="15" Margin="3">
+                <Border.Effect>
+                    <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="3" Opacity="0.2" BlurRadius="8"/>
+                </Border.Effect>
                 <StackPanel>
                     <!-- Header -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                        <Ellipse x:Name="Step1Ellipse" Width="25" Height="25" Fill="#FF1B5E96" Margin="0,0,8,0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Ellipse x:Name="Step1Ellipse" Width="22" Height="22" Fill="#FF1B5E96" Margin="0,0,6,0"/>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Step 1: Empty Platform" FontSize="14" FontWeight="Bold" 
+                            <TextBlock Text="Step 1: Empty Platform" FontSize="13" FontWeight="Bold" 
                                        Foreground="#FF1B5E96"/>
-                            <TextBlock Text="Capture baseline measurement" FontSize="10" 
+                            <TextBlock Text="Capture baseline measurement" FontSize="9" 
                                        Foreground="#FF6C757D"/>
                         </StackPanel>
                     </StackPanel>
                     
                     <!-- Current Raw ADC -->
-                    <StackPanel Margin="0,0,0,10">
-                        <TextBlock Text="Current Raw ADC Value:" FontSize="12" FontWeight="SemiBold" 
-                                   Foreground="#FF495057" Margin="0,0,0,4"/>
-                        <TextBox x:Name="Point1RawTxt" FontSize="16" FontWeight="Bold" 
+                    <StackPanel Margin="0,0,0,8">
+                        <TextBlock Text="Current Raw ADC Value:" FontSize="11" FontWeight="SemiBold" 
+                                   Foreground="#FF495057" Margin="0,0,0,3"/>
+                        <TextBox x:Name="Point1RawTxt" FontSize="14" FontWeight="Bold" 
                                 Text="{Binding Point1RawADC}" IsReadOnly="True" 
                                 Background="#FFF8F9FA" BorderBrush="#FF17A2B8" BorderThickness="2"
-                                Padding="8,6" TextAlignment="Center" Foreground="#FF17A2B8"
-                                Width="120" HorizontalAlignment="Left"/>
-                        <TextBlock Text="🔄 Live ADC reading from CAN" FontSize="9" 
-                                   Foreground="#FF6C757D" HorizontalAlignment="Left" Margin="0,2,0,0"/>
+                                Padding="6,4" TextAlignment="Center" Foreground="#FF17A2B8"
+                                Width="100" HorizontalAlignment="Left"/>
+                        <TextBlock Text="🔄 Live ADC reading from CAN" FontSize="8" 
+                                   Foreground="#FF6C757D" HorizontalAlignment="Left" Margin="0,1,0,0"/>
                     </StackPanel>
                     
                     <!-- Known Weight Input -->
-                    <StackPanel Margin="0,0,0,10">
-                        <TextBlock Text="Known Weight (kg):" FontSize="12" FontWeight="SemiBold" 
-                                   Foreground="#FF495057" Margin="0,0,0,4"/>
-                        <TextBox x:Name="Point1WeightTxt" FontSize="16" FontWeight="Bold" 
+                    <StackPanel Margin="0,0,0,8">
+                        <TextBlock Text="Known Weight (kg):" FontSize="11" FontWeight="SemiBold" 
+                                   Foreground="#FF495057" Margin="0,0,0,3"/>
+                        <TextBox x:Name="Point1WeightTxt" FontSize="14" FontWeight="Bold" 
                                 Text="{Binding Point1KnownWeight, UpdateSourceTrigger=PropertyChanged}" 
                                 Background="#FFF8F9FA" BorderBrush="#FF1B5E96" BorderThickness="2"
-                                Padding="8,6" TextAlignment="Center" Foreground="#FF1B5E96"
-                                Width="120" HorizontalAlignment="Left"/>
-                        <TextBlock Text="💡 Type 0 for empty platform" FontSize="10" 
-                                   Foreground="#FF28A745" HorizontalAlignment="Left" Margin="0,4,0,0" FontWeight="SemiBold"/>
+                                Padding="6,4" TextAlignment="Center" Foreground="#FF1B5E96"
+                                Width="100" HorizontalAlignment="Left"/>
+                        <TextBlock Text="💡 Type 0 for empty platform" FontSize="9" 
+                                   Foreground="#FF28A745" HorizontalAlignment="Left" Margin="0,3,0,0" FontWeight="SemiBold"/>
                     </StackPanel>
                     
                     <!-- Capture Button -->
                     <Button x:Name="CapturePoint1Btn" Content="📸 CAPTURE POINT 1" 
                             Style="{StaticResource SuccessButton}" 
-                            Click="CapturePoint1_Click" FontSize="14" FontWeight="Bold"
-                            Height="35" Margin="0,8,0,0" Padding="12,6"/>
+                            Click="CapturePoint1_Click" FontSize="12" FontWeight="Bold"
+                            Height="30" Margin="0,6,0,0" Padding="10,4" HorizontalAlignment="Left"/>
                     
                     <!-- Status -->
-                    <TextBlock x:Name="Point1StatusTxt" Text="Ready to capture" FontSize="10" 
-                               Foreground="#FF28A745" HorizontalAlignment="Center" 
-                               Margin="0,8,0,0" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="Point1StatusTxt" Text="Ready to capture" FontSize="9" 
+                               Foreground="#FF28A745" HorizontalAlignment="Left" 
+                               Margin="0,6,0,0" FontWeight="SemiBold"/>
                     
                     <!-- Live ADC Display -->
-                    <Border Margin="0,10,0,0" Background="#FFF0F8FF" CornerRadius="4" Padding="8">
+                    <Border Margin="0,8,0,0" Background="#FFF0F8FF" CornerRadius="4" Padding="6" HorizontalAlignment="Left">
                         <StackPanel>
-                            <TextBlock Text="🔄 Live ADC Reading" FontSize="10" FontWeight="Bold" 
-                                       Foreground="#FF1B5E96" HorizontalAlignment="Center" Margin="0,0,0,4"/>
-                            <TextBlock x:Name="Point1LiveADCTxt" Text="0" FontSize="14" FontWeight="Bold" 
-                                       Foreground="#FF17A2B8" HorizontalAlignment="Center"/>
+                            <TextBlock Text="🔄 Live ADC Reading" FontSize="9" FontWeight="Bold" 
+                                       Foreground="#FF1B5E96" HorizontalAlignment="Left" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="Point1LiveADCTxt" Text="0" FontSize="12" FontWeight="Bold" 
+                                       Foreground="#FF17A2B8" HorizontalAlignment="Left"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -364,64 +367,67 @@
             <Rectangle Grid.Column="1" Fill="#FFE9ECEF" Width="2" HorizontalAlignment="Center"/>
             
             <!-- Right Side - Point 2 -->
-            <Border Grid.Column="2" Background="White" CornerRadius="6" 
+            <Border Grid.Column="2" Background="White" CornerRadius="8" 
                     BorderBrush="#FF1B5E96" BorderThickness="2" Padding="15" Margin="3">
+                <Border.Effect>
+                    <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="3" Opacity="0.2" BlurRadius="8"/>
+                </Border.Effect>
                 <StackPanel>
                     <!-- Header -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                        <Ellipse x:Name="Step2Ellipse" Width="25" Height="25" Fill="#FF6C757D" Margin="0,0,8,0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Ellipse x:Name="Step2Ellipse" Width="22" Height="22" Fill="#FF6C757D" Margin="0,0,6,0"/>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Step 2: Known Weight" FontSize="14" FontWeight="Bold" 
+                            <TextBlock Text="Step 2: Known Weight" FontSize="13" FontWeight="Bold" 
                                        Foreground="#FF1B5E96"/>
-                            <TextBlock Text="Add calibrated weight" FontSize="10" 
+                            <TextBlock Text="Add calibrated weight" FontSize="9" 
                                        Foreground="#FF6C757D"/>
                         </StackPanel>
                     </StackPanel>
                     
                     <!-- Current Raw ADC -->
-                    <StackPanel Margin="0,0,0,10">
-                        <TextBlock Text="Current Raw ADC Value:" FontSize="12" FontWeight="SemiBold" 
-                                   Foreground="#FF495057" Margin="0,0,0,4"/>
-                        <TextBox x:Name="Point2RawTxt" FontSize="16" FontWeight="Bold" 
+                    <StackPanel Margin="0,0,0,8">
+                        <TextBlock Text="Current Raw ADC Value:" FontSize="11" FontWeight="SemiBold" 
+                                   Foreground="#FF495057" Margin="0,0,0,3"/>
+                        <TextBox x:Name="Point2RawTxt" FontSize="14" FontWeight="Bold" 
                                 Text="{Binding Point2RawADC}" IsReadOnly="True" 
                                 Background="#FFF8F9FA" BorderBrush="#FF17A2B8" BorderThickness="2"
-                                Padding="8,6" TextAlignment="Center" Foreground="#FF17A2B8"
-                                Width="120" HorizontalAlignment="Left"/>
-                        <TextBlock Text="🔄 Live ADC reading from CAN" FontSize="9" 
-                                   Foreground="#FF6C757D" HorizontalAlignment="Left" Margin="0,2,0,0"/>
+                                Padding="6,4" TextAlignment="Center" Foreground="#FF17A2B8"
+                                Width="100" HorizontalAlignment="Left"/>
+                        <TextBlock Text="🔄 Live ADC reading from CAN" FontSize="8" 
+                                   Foreground="#FF6C757D" HorizontalAlignment="Left" Margin="0,1,0,0"/>
                     </StackPanel>
                     
                     <!-- Known Weight Input -->
-                    <StackPanel Margin="0,0,0,10">
-                        <TextBlock Text="Known Weight (kg):" FontSize="12" FontWeight="SemiBold" 
-                                   Foreground="#FF495057" Margin="0,0,0,4"/>
-                        <TextBox x:Name="Point2WeightTxt" FontSize="16" FontWeight="Bold" 
+                    <StackPanel Margin="0,0,0,8">
+                        <TextBlock Text="Known Weight (kg):" FontSize="11" FontWeight="SemiBold" 
+                                   Foreground="#FF495057" Margin="0,0,0,3"/>
+                        <TextBox x:Name="Point2WeightTxt" FontSize="14" FontWeight="Bold" 
                                 Text="{Binding Point2KnownWeight, UpdateSourceTrigger=PropertyChanged}" 
                                 Background="#FFF8F9FA" BorderBrush="#FF1B5E96" BorderThickness="2"
-                                Padding="8,6" TextAlignment="Center" Foreground="#FF1B5E96"
-                                Width="120" HorizontalAlignment="Left"/>
-                        <TextBlock Text="💡 Type weight you added (e.g., 1000)" FontSize="10" 
-                                   Foreground="#FF28A745" HorizontalAlignment="Left" Margin="0,4,0,0" FontWeight="SemiBold"/>
+                                Padding="6,4" TextAlignment="Center" Foreground="#FF1B5E96"
+                                Width="100" HorizontalAlignment="Left"/>
+                        <TextBlock Text="💡 Type weight you added (e.g., 1000)" FontSize="9" 
+                                   Foreground="#FF28A745" HorizontalAlignment="Left" Margin="0,3,0,0" FontWeight="SemiBold"/>
                     </StackPanel>
                     
                     <!-- Capture Button -->
                     <Button x:Name="CapturePoint2Btn" Content="📸 CAPTURE POINT 2" 
                             Style="{StaticResource SuccessButton}" 
-                            Click="CapturePoint2_Click" FontSize="14" FontWeight="Bold"
-                            Height="35" Margin="0,8,0,0" Padding="12,6" IsEnabled="False"/>
+                            Click="CapturePoint2_Click" FontSize="12" FontWeight="Bold"
+                            Height="30" Margin="0,6,0,0" Padding="10,4" IsEnabled="False" HorizontalAlignment="Left"/>
                     
                     <!-- Status -->
-                    <TextBlock x:Name="Point2StatusTxt" Text="Waiting for Step 1" FontSize="10" 
-                               Foreground="#FF6C757D" HorizontalAlignment="Center" 
-                               Margin="0,8,0,0" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="Point2StatusTxt" Text="Waiting for Step 1" FontSize="9" 
+                               Foreground="#FF6C757D" HorizontalAlignment="Left" 
+                               Margin="0,6,0,0" FontWeight="SemiBold"/>
                     
                     <!-- Live ADC Display -->
-                    <Border Margin="0,10,0,0" Background="#FFF0F8FF" CornerRadius="4" Padding="8">
+                    <Border Margin="0,8,0,0" Background="#FFF0F8FF" CornerRadius="4" Padding="6" HorizontalAlignment="Left">
                         <StackPanel>
-                            <TextBlock Text="🔄 Live ADC Reading" FontSize="10" FontWeight="Bold" 
-                                       Foreground="#FF1B5E96" HorizontalAlignment="Center" Margin="0,0,0,4"/>
-                            <TextBlock x:Name="Point2LiveADCTxt" Text="0" FontSize="14" FontWeight="Bold" 
-                                       Foreground="#FF17A2B8" HorizontalAlignment="Center"/>
+                            <TextBlock Text="🔄 Live ADC Reading" FontSize="9" FontWeight="Bold" 
+                                       Foreground="#FF1B5E96" HorizontalAlignment="Left" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="Point2LiveADCTxt" Text="0" FontSize="12" FontWeight="Bold" 
+                                       Foreground="#FF17A2B8" HorizontalAlignment="Left"/>
                         </StackPanel>
                     </Border>
             </StackPanel>
@@ -430,59 +436,183 @@
 
 
         <!-- Action Buttons -->
-        <Border Grid.Row="3" Grid.Column="0" Background="White" CornerRadius="6" 
-                BorderBrush="#FFE9ECEF" BorderThickness="2" Padding="15,12" Margin="0,0,10,10">
-            <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
-                <!-- Calculate Button -->
-                <Button Content="🧮 Calculate Calibration" 
+        <Border Grid.Row="3" Grid.ColumnSpan="2" Background="White" CornerRadius="8" 
+                BorderBrush="#FFE9ECEF" BorderThickness="2" Padding="20,15" Margin="0,0,0,15">
+            <Border.Effect>
+                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="2" Opacity="0.15" BlurRadius="6"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- View Results Button (Left Side) -->
+                <Button Grid.Column="0" x:Name="ViewResultsBtn" Content="📊 View Results" 
+                        Background="#FF17A2B8" Foreground="White" 
+                        BorderThickness="0" Padding="12,6" FontSize="11" FontWeight="SemiBold"
+                        Click="ViewResultsBtn_Click" Cursor="Hand" VerticalAlignment="Center"
+                        ToolTip="Click to view calibration results (grey when not calculated)"
+                        IsEnabled="False">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" 
+                                    CornerRadius="6" 
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="ButtonBorder" Property="Background" Value="#FF138496"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="ButtonBorder" Property="Background" Value="#FFB0B0B0"/>
+                                    <Setter Property="Foreground" Value="#FF666666"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+                
+                <!-- Calculate Button (Centered) -->
+                <Button Grid.Column="2" Content="🧮 Calculate" 
                         Style="{StaticResource SuccessButton}" 
                         Click="CalculateCalibration_Click" FontSize="12" 
-                        Height="32" Width="160" Margin="0,0,0,8"/>
+                        Height="32" Width="150" HorizontalAlignment="Center"/>
                 
-                <!-- Save Button -->
-                <Button Content="💾 Save Calibration" 
-                        Style="{StaticResource SuccessButton}" 
-                        Click="SaveCalibration_Click" FontSize="12" 
-                        Height="32" Width="160" IsEnabled="False" x:Name="SaveBtn"/>
-            </StackPanel>
-        </Border>
-        
-        <!-- Results Display -->
-        <Border Grid.Row="3" Grid.Column="1" Background="White" CornerRadius="6" 
-                BorderBrush="#FFE9ECEF" BorderThickness="2" Padding="20" Margin="0,0,0,10">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>  <!-- Title -->
-                    <RowDefinition Height="Auto"/>  <!-- Equation -->
-                    <RowDefinition Height="Auto"/>  <!-- Error -->
-                    <RowDefinition Height="*"/>     <!-- Spacer -->
-                    <RowDefinition Height="Auto"/>  <!-- Cancel Button -->
-                </Grid.RowDefinitions>
-                
-                <TextBlock Grid.Row="0" Text="Calibration Results" FontSize="16" FontWeight="Bold" 
-                           Foreground="#FF1B5E96" HorizontalAlignment="Center" Margin="0,0,0,15"/>
-                
-                <Border Grid.Row="1" Background="#FFF8F9FA" CornerRadius="4" Padding="12" Margin="0,0,0,10">
-                    <TextBlock x:Name="EquationTxt" Text="Not calculated" FontFamily="Consolas" 
-                               FontSize="14" HorizontalAlignment="Center" TextWrapping="Wrap"
-                               Foreground="#FF495057"/>
-                </Border>
-                
-                <TextBlock Grid.Row="2" x:Name="ErrorTxt" Text="" FontWeight="Bold" 
-                           HorizontalAlignment="Center" FontSize="12" Foreground="#FFDC3545"
-                           TextWrapping="Wrap" Margin="0,0,0,15"/>
-                
-                <Button Grid.Row="4" Content="❌ Cancel" Style="{StaticResource WarningButton}" 
-                        Click="Cancel_Click" FontSize="12" 
-                        Height="32" Width="120" HorizontalAlignment="Center"/>
+                <!-- Save and Cancel Buttons -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="💾 Save" 
+                            Style="{StaticResource SuccessButton}" 
+                            Click="SaveCalibration_Click" FontSize="11" 
+                            Height="28" Width="100" IsEnabled="False" x:Name="SaveBtn" Margin="0,0,10,0"/>
+                    <Button Content="❌ Cancel" Style="{StaticResource WarningButton}" 
+                            Click="Cancel_Click" FontSize="11" 
+                            Height="28" Width="100"/>
+                </StackPanel>
             </Grid>
         </Border>
         
         <!-- Footer -->
-        <Border Grid.Row="4" Grid.ColumnSpan="2" Background="#FF1B5E96" Padding="4,2" CornerRadius="0,0,6,6">
+        <Border Grid.Row="4" Grid.ColumnSpan="2" Background="#FF1B5E96" Padding="8,4" CornerRadius="0,0,8,8">
+            <Border.Effect>
+                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="2" Opacity="0.3" BlurRadius="4"/>
+            </Border.Effect>
             <TextBlock Text="© 2025 AVL India Pvt Ltd. All rights reserved." 
-                       Foreground="White" FontSize="8" Opacity="0.8" 
+                       Foreground="White" FontSize="9" Opacity="0.9" 
                        HorizontalAlignment="Right"/>
         </Border>
+        
+        <!-- Instructions Popup -->
+    <Popup x:Name="InstructionsPopup" IsOpen="False" Placement="Center" PlacementTarget="{Binding ElementName=InfoBtn}"
+           AllowsTransparency="True" PopupAnimation="Fade">
+        <Border Background="White" CornerRadius="8" BorderBrush="#FF1B5E96" BorderThickness="2" 
+                Padding="25" MaxWidth="500" MinWidth="400">
+            <Border.Effect>
+                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="5" Opacity="0.3" BlurRadius="10"/>
+            </Border.Effect>
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                    <TextBlock Text="📋" FontSize="24" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock Text="Calibration Instructions" FontSize="18" FontWeight="Bold" 
+                               Foreground="#FF1B5E96" VerticalAlignment="Center"/>
+                    <Button Content="✕" FontSize="14" FontWeight="Bold" Background="#FFDC3545" 
+                            Foreground="White" BorderThickness="0" Width="25" Height="25" 
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-5,-5,0"
+                            Click="CloseInstructionsPopup_Click" Cursor="Hand">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}" 
+                                        CornerRadius="12" 
+                                        Width="25" Height="25">
+                                    <ContentPresenter HorizontalAlignment="Center" 
+                                                    VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+                
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Step 1 Instructions -->
+                    <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                        <TextBlock Text="Step 1: Empty Platform" FontSize="14" FontWeight="Bold" 
+                                   Foreground="#FF1B5E96" Margin="0,0,0,10"/>
+                        <TextBlock Text="1. Remove all weight from platform" FontSize="12" 
+                                   Foreground="#FF495057" Margin="0,0,0,5"/>
+                        <TextBlock Text="2. Type '0' in left weight field" FontSize="12" 
+                                   Foreground="#FF495057" Margin="0,0,0,5"/>
+                        <TextBlock Text="3. Click 'Capture Point 1'" FontSize="12" 
+                                   Foreground="#FF495057"/>
+                    </StackPanel>
+                    
+                    <!-- Step 2 Instructions -->
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Step 2: Known Weight" FontSize="14" FontWeight="Bold" 
+                                   Foreground="#FF1B5E96" Margin="0,0,0,10"/>
+                        <TextBlock Text="1. Add known weight to platform" FontSize="12" 
+                                   Foreground="#FF495057" Margin="0,0,0,5"/>
+                        <TextBlock Text="2. Type weight in right field" FontSize="12" 
+                                   Foreground="#FF495057" Margin="0,0,0,5"/>
+                        <TextBlock Text="3. Click 'Capture Point 2'" FontSize="12" 
+                                   Foreground="#FF495057"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Popup>
+    
+    <!-- Results Popup -->
+    <Popup x:Name="ResultsPopup" IsOpen="False" Placement="Center" PlacementTarget="{Binding ElementName=ViewResultsBtn}"
+           AllowsTransparency="True" PopupAnimation="Fade">
+        <Border Background="White" CornerRadius="8" BorderBrush="#FF1B5E96" BorderThickness="2" 
+                Padding="25" MaxWidth="600" MinWidth="500">
+            <Border.Effect>
+                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="5" Opacity="0.3" BlurRadius="10"/>
+            </Border.Effect>
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                    <TextBlock Text="📊" FontSize="24" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock Text="Calibration Results" FontSize="18" FontWeight="Bold" 
+                               Foreground="#FF1B5E96" VerticalAlignment="Center"/>
+                    <Button Content="✕" FontSize="14" FontWeight="Bold" Background="#FFDC3545" 
+                            Foreground="White" BorderThickness="0" Width="25" Height="25" 
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-5,-5,0"
+                            Click="CloseResultsPopup_Click" Cursor="Hand">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}" 
+                                        CornerRadius="12" 
+                                        Width="25" Height="25">
+                                    <ContentPresenter HorizontalAlignment="Center" 
+                                                    VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+                
+                <!-- Equation Display -->
+                <Border Background="#FFF8F9FA" CornerRadius="4" Padding="15" Margin="0,0,0,15">
+                    <TextBlock x:Name="PopupEquationTxt" Text="Not calculated" FontFamily="Consolas" 
+                               FontSize="14" HorizontalAlignment="Center" TextWrapping="Wrap"
+                               Foreground="#FF495057"/>
+                </Border>
+                
+                <!-- Error Display -->
+                <TextBlock x:Name="PopupErrorTxt" Text="" FontWeight="Bold" 
+                           HorizontalAlignment="Center" FontSize="12" Foreground="#FFDC3545"
+                           TextWrapping="Wrap" Margin="0,0,0,20"/>
+            </StackPanel>
+        </Border>
+    </Popup>
     </Grid>
 </Window>

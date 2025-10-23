@@ -265,8 +265,9 @@ namespace SuspensionPCB_CAN_WPF
                     Point2RawADC, Point2KnownWeight
                 );
                 
-                // Display results
-                EquationTxt.Text = _calibration.GetEquationString();
+                // Display results (only in popup now)
+                PopupEquationTxt.Text = _calibration.GetEquationString();
+                PopupEquationTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF495057"));
                 
                 // Verify accuracy
                 double error1 = _calibration.VerifyPoint(Point1RawADC, Point1KnownWeight);
@@ -275,26 +276,29 @@ namespace SuspensionPCB_CAN_WPF
                 
                 if (maxError < 0.1)
                 {
-                    ErrorTxt.Text = $"✓ Excellent accuracy (max error: {maxError:F2}%)";
-                    ErrorTxt.Foreground = System.Windows.Media.Brushes.Green;
+                    PopupErrorTxt.Text = $"✓ Excellent accuracy (max error: {maxError:F2}%)";
+                    PopupErrorTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF28A745"));
                 }
                 else if (maxError < 1.0)
                 {
-                    ErrorTxt.Text = $"✓ Good accuracy (max error: {maxError:F2}%)";
-                    ErrorTxt.Foreground = System.Windows.Media.Brushes.Green;
+                    PopupErrorTxt.Text = $"✓ Good accuracy (max error: {maxError:F2}%)";
+                    PopupErrorTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF28A745"));
                 }
                 else if (maxError < 5.0)
                 {
-                    ErrorTxt.Text = $"⚠ Acceptable accuracy (max error: {maxError:F2}%)";
-                    ErrorTxt.Foreground = System.Windows.Media.Brushes.Orange;
+                    PopupErrorTxt.Text = $"⚠ Acceptable accuracy (max error: {maxError:F2}%)";
+                    PopupErrorTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFFC107"));
                 }
                 else
                 {
-                    ErrorTxt.Text = $"✗ Poor accuracy (max error: {maxError:F2}%)";
-                    ErrorTxt.Foreground = System.Windows.Media.Brushes.Red;
+                    PopupErrorTxt.Text = $"✗ Poor accuracy (max error: {maxError:F2}%)";
+                    PopupErrorTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFDC3545"));
                 }
                 
                 SaveBtn.IsEnabled = true;
+                
+                // Enable View Results button
+                ViewResultsBtn.IsEnabled = true;
                 
                 // Update status messages
                 Point1StatusTxt.Text = $"✓ Point 1: {Point1KnownWeight} kg @ ADC {Point1RawADC}";
@@ -454,6 +458,44 @@ namespace SuspensionPCB_CAN_WPF
             {
                 System.Diagnostics.Debug.WriteLine($"UpdateStepTextColors error: {ex.Message}");
             }
+        }
+        
+        private void InfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            // Show instructions popup
+            InstructionsPopup.IsOpen = true;
+        }
+        
+        private void CloseInstructionsPopup_Click(object sender, RoutedEventArgs e)
+        {
+            InstructionsPopup.IsOpen = false;
+        }
+        
+        private void ViewResultsBtn_Click(object sender, RoutedEventArgs e)
+        {
+            // Show results popup - always allow clicking
+            // If calibration not calculated, show grey/disabled results
+            if (!ViewResultsBtn.IsEnabled)
+            {
+                // Show disabled/grey results
+                PopupEquationTxt.Text = "No calibration data available";
+                PopupEquationTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFB0B0B0"));
+                PopupErrorTxt.Text = "Please complete calibration first";
+                PopupErrorTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFB0B0B0"));
+            }
+            else
+            {
+                // Show normal results (already calculated)
+                PopupEquationTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF495057"));
+                PopupErrorTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFDC3545"));
+            }
+            
+            ResultsPopup.IsOpen = true;
+        }
+        
+        private void CloseResultsPopup_Click(object sender, RoutedEventArgs e)
+        {
+            ResultsPopup.IsOpen = false;
         }
         
         protected override void OnClosed(EventArgs e)
