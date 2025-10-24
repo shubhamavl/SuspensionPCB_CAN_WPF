@@ -157,6 +157,16 @@
                     <Button x:Name="BrowseSaveDirBtn" Content="Browse..." Style="{StaticResource ModernButton}" Click="BrowseSaveDirBtn_Click"/>
                 </StackPanel>
                 <TextBlock x:Name="SaveDirHintTxt" Text="Choose where CSV logs, calibration JSON and tare JSON will be stored" FontSize="10" Foreground="#FF95A5A6"/>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="KeyboardShortcutsBtn" Content="⌨ Keyboard Shortcuts" 
+                            Style="{StaticResource ModernButton}" 
+                            Click="KeyboardShortcutsBtn_Click" Width="180"/>
+                    <TextBlock Text="View all available keyboard shortcuts" FontSize="10" 
+                               Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
             </StackPanel>
         </Border>
 
@@ -296,21 +306,35 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Total Weight Card (Prominent) -->
+                    <!-- ADC Mode Controls -->
                     <Border Grid.Column="0" Style="{StaticResource DataCard}" 
-                            BorderBrush="{StaticResource SuccessGreen}" BorderThickness="3"
+                            BorderBrush="#FF2196F3" BorderThickness="3"
                             Margin="0,0,10,0">
                         <StackPanel>
-                            <TextBlock Text="TOTAL WEIGHT" Style="{StaticResource HeaderSmall}" 
+                            <TextBlock Text="ADC MODE CONTROL" Style="{StaticResource HeaderSmall}" 
                                        HorizontalAlignment="Center" Margin="0,0,0,15"/>
-                            <TextBlock x:Name="TotalWeightTxt" Text="0 kg" 
-                                       FontSize="32" FontWeight="Bold" 
-                                       Foreground="{StaticResource SuccessGreen}" 
-                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                            <TextBlock x:Name="BalanceTxt" Text="50% L / 50% R" 
-                                       FontSize="14" FontWeight="SemiBold" 
-                                       Foreground="{StaticResource GrayMedium}" 
-                                       HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                            
+                            <!-- Current Mode Display -->
+                            <Border x:Name="CurrentModeBorder" Background="#FF2196F3" 
+                                    CornerRadius="5" Padding="15,8" Margin="0,0,0,15">
+                                <TextBlock x:Name="CurrentModeTxt" Text="Internal ADC (12-bit)" 
+                                           Foreground="White" FontSize="16" FontWeight="Bold" 
+                                           HorizontalAlignment="Center"/>
+                            </Border>
+                            
+                            <!-- Mode Switch Buttons -->
+                            <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="0,0,0,15">
+                                <Button x:Name="InternalADCBtn" Content="Internal ADC (12-bit)" 
+                                        Style="{StaticResource ModernButton}" 
+                                        Background="#FF2196F3" Click="InternalADCBtn_Click" 
+                                        Width="200" Margin="0,0,0,8"/>
+                                <Button x:Name="ADS1115Btn" Content="ADS1115 (16-bit)" 
+                                        Style="{StaticResource ModernButton}" 
+                                        Background="#FF4CAF50" Click="ADS1115Btn_Click" 
+                                        Width="200"/>
+                            </StackPanel>
+                            
+                            <!-- Reset Tares Button -->
                             <Button Content="Reset All Tares" Style="{StaticResource DangerButton}" 
                                     Click="ResetTares_Click" 
                                     HorizontalAlignment="Center"/>
@@ -322,6 +346,20 @@
                         <StackPanel>
                             <TextBlock x:Name="DataRateTxt" Text="Data Rate: --" FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,5"/>
                             <TextBlock x:Name="LastUpdateTxt" Text="Last Update: --" FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            
+                            <!-- System Status Request -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                                <Button x:Name="RequestStatusBtn" Content="📊 Request Status" 
+                                        Style="{StaticResource ModernButton}" 
+                                        Background="#FF17A2B8" Click="RequestStatusBtn_Click" 
+                                        Width="150" Margin="0,0,5,0"/>
+                                
+                                <!-- Status History -->
+                                <Button x:Name="StatusHistoryBtn" Content="📈 Status History" 
+                                        Style="{StaticResource ModernButton}" 
+                                        Background="#FF6F42C1" Click="StatusHistoryBtn_Click" 
+                                        Width="150"/>
+                            </StackPanel>
                             
                             <!-- Data Logging Controls -->
                             <Separator Margin="0,0,0,10"/>

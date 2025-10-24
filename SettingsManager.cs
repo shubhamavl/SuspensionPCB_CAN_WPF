@@ -14,6 +14,12 @@ namespace SuspensionPCB_CAN_WPF
         public int TransmissionRateIndex { get; set; } = 2; // ComboBox index
         public string SaveDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SuspensionSystem", "Data");
         public DateTime LastSaved { get; set; } = DateTime.Now;
+        
+        // System status persistence
+        public byte LastKnownADCMode { get; set; } = 0; // 0=Internal, 1=ADS1115
+        public byte LastKnownSystemStatus { get; set; } = 0; // 0=OK, 1=Warning, 2=Error
+        public byte LastKnownErrorFlags { get; set; } = 0;
+        public DateTime LastStatusUpdate { get; set; } = DateTime.MinValue;
     }
 
     /// <summary>
@@ -21,58 +27,51 @@ namespace SuspensionPCB_CAN_WPF
     /// </summary>
     public class SettingsManager
     {
-        private static readonly string SETTINGS_FILE = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SuspensionSystem", "app_settings.json");
         private static SettingsManager? _instance;
+        private static readonly object _lock = new object();
         private AppSettings _settings = new AppSettings();
-
-        public static SettingsManager Instance => _instance ??= new SettingsManager();
+        private readonly string _settingsPath;
 
         private SettingsManager()
         {
+            _settingsPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "SuspensionSystem",
+                "settings.json"
+            );
+            
             LoadSettings();
+        }
+
+        public static SettingsManager Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    lock (_lock)
+                    {
+                        _instance ??= new SettingsManager();
+                    }
+                }
+                return _instance;
+            }
         }
 
         public AppSettings Settings => _settings;
 
-        /// <summary>
-        /// Load settings from JSON file
-        /// </summary>
         public void LoadSettings()
         {
-            if (!File.Exists(SETTINGS_FILE))
-            {
-                _settings = new AppSettings();
-                ProductionLogger.Instance.LogInfo("Settings file not found, using defaults", "Settings");
-                try
-                {
-                    // Ensure default save directory exists
-                    if (!Directory.Exists(_settings.SaveDirectory))
-                        Directory.CreateDirectory(_settings.SaveDirectory);
-                }
-                catch { }
-                return;
-            }
-
             try
             {
-                string json = File.ReadAllText(SETTINGS_FILE);
-                var loaded = JsonSerializer.Deserialize<AppSettings>(json);
-                if (loaded != null)
+                if (File.Exists(_settingsPath))
                 {
-                    _settings = loaded;
-                    // Migrate older settings without SaveDirectory
-                    if (string.IsNullOrWhiteSpace(_settings.SaveDirectory))
-                        _settings.SaveDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SuspensionSystem", "Data");
-
-                    // Ensure directory exists
-                    try
-                    {
-                        if (!Directory.Exists(_settings.SaveDirectory))
-                            Directory.CreateDirectory(_settings.SaveDirectory);
-                    }
-                    catch { }
-
-                    ProductionLogger.Instance.LogInfo($"Settings loaded: COM={_settings.ComPort}, Rate={_settings.TransmissionRate}, SaveDir={_settings.SaveDirectory}", "Settings");
+                    string json = File.ReadAllText(_settingsPath);
+                    _settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                }
+                else
+                {
+                    _settings = new AppSettings();
                 }
             }
             catch (Exception ex)
@@ -82,23 +81,20 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        /// <summary>
-        /// Save settings to JSON file
-        /// </summary>
         public void SaveSettings()
         {
             try
             {
                 _settings.LastSaved = DateTime.Now;
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                string json = JsonSerializer.Serialize(_settings, options);
+                string json = JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true });
                 
-                // Ensure directory exists before writing
-                var settingsDir = Path.GetDirectoryName(SETTINGS_FILE);
-                if (!string.IsNullOrEmpty(settingsDir) && !Directory.Exists(settingsDir))
-                    Directory.CreateDirectory(settingsDir);
-                    
-                File.WriteAllText(SETTINGS_FILE, json);
+                string? directory = Path.GetDirectoryName(_settingsPath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                
+                File.WriteAllText(_settingsPath, json);
                 ProductionLogger.Instance.LogInfo("Settings saved successfully", "Settings");
             }
             catch (Exception ex)
@@ -107,28 +103,36 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        /// <summary>
-        /// Update COM port setting
-        /// </summary>
         public void SetComPort(string comPort)
         {
-            _settings.ComPort = comPort;
-            SaveSettings();
+            if (string.IsNullOrWhiteSpace(comPort)) return;
+            try
+            {
+                _settings.ComPort = comPort;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"COM port set to: {comPort}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to set COM port: {ex.Message}", "Settings");
+            }
         }
 
-        /// <summary>
-        /// Update transmission rate setting
-        /// </summary>
         public void SetTransmissionRate(byte rate, int index)
         {
-            _settings.TransmissionRate = rate;
-            _settings.TransmissionRateIndex = index;
-            SaveSettings();
+            try
+            {
+                _settings.TransmissionRate = rate;
+                _settings.TransmissionRateIndex = index;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"Transmission rate set to: 0x{rate:X2} (index: {index})", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to set transmission rate: {ex.Message}", "Settings");
+            }
         }
 
-        /// <summary>
-        /// Update save directory and ensure it exists
-        /// </summary>
         public void SetSaveDirectory(string directory)
         {
             if (string.IsNullOrWhiteSpace(directory)) return;
@@ -145,6 +149,47 @@ namespace SuspensionPCB_CAN_WPF
                 ProductionLogger.Instance.LogError($"Failed to set save directory: {ex.Message}", "Settings");
             }
         }
+        
+        /// <summary>
+        /// Update system status in settings
+        /// </summary>
+        /// <param name="adcMode">ADC mode (0=Internal, 1=ADS1115)</param>
+        /// <param name="systemStatus">System status (0=OK, 1=Warning, 2=Error)</param>
+        /// <param name="errorFlags">Error flags</param>
+        public void UpdateSystemStatus(byte adcMode, byte systemStatus, byte errorFlags)
+        {
+            try
+            {
+                _settings.LastKnownADCMode = adcMode;
+                _settings.LastKnownSystemStatus = systemStatus;
+                _settings.LastKnownErrorFlags = errorFlags;
+                _settings.LastStatusUpdate = DateTime.Now;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"System status updated: ADC={adcMode}, Status={systemStatus}, Errors=0x{errorFlags:X2}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to update system status: {ex.Message}", "Settings");
+            }
+        }
+        
+        /// <summary>
+        /// Get last known ADC mode
+        /// </summary>
+        /// <returns>ADC mode (0=Internal, 1=ADS1115)</returns>
+        public byte GetLastKnownADCMode()
+        {
+            return _settings.LastKnownADCMode;
+        }
+        
+        /// <summary>
+        /// Get last known system status
+        /// </summary>
+        /// <returns>System status info</returns>
+        public (byte adcMode, byte systemStatus, byte errorFlags, DateTime lastUpdate) GetLastKnownSystemStatus()
+        {
+            return (_settings.LastKnownADCMode, _settings.LastKnownSystemStatus, 
+                   _settings.LastKnownErrorFlags, _settings.LastStatusUpdate);
+        }
     }
 }
-

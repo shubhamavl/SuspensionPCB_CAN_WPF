@@ -108,7 +108,27 @@ A professional Windows WPF application for real-time weight monitoring and calib
 | `Ctrl+T` | Toggle settings panel |
 | `Ctrl+M` | Open monitor window |
 | `Ctrl+P` | Open production logs |
+| `Ctrl+I` | Switch to Internal ADC mode |
+| `Ctrl+A` | Switch to ADS1115 mode |
 | `F1` | Show help |
+
+## 🔬 ADC Modes
+
+### Internal ADC (12-bit)
+- **Resolution**: 4096 levels (0-4095)
+- **Reference**: 3.3V
+- **Precision**: ~1.075 kg/count (with 0.75V signal)
+- **Best for**: Standard measurements, faster sampling
+- **Sampling**: Timer-triggered DMA (dynamic rate)
+
+### ADS1115 (16-bit)
+- **Resolution**: 32768 levels (0-32767)
+- **Reference**: 4.096V
+- **Precision**: ~0.167 kg/count (with 0.75V signal)
+- **Best for**: High-precision measurements, 6.4x better than Internal ADC
+- **Sampling**: Fixed 860 SPS
+
+**Note**: All keyboard shortcuts are also accessible via the "⌨ Keyboard Shortcuts" button in the Settings panel.
 
 ## 🔬 Calibration Process
 

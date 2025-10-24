@@ -35,6 +35,7 @@ namespace SuspensionPCB_CAN_WPF
         private const uint CAN_MSG_ID_START_RIGHT_STREAM = 0x041; // Start right side streaming
         private const uint CAN_MSG_ID_STOP_ALL_STREAMS = 0x044;   // Stop all streaming (empty message)
         private const uint CAN_MSG_ID_SYSTEM_STATUS = 0x300;      // System status (on-demand only)
+        private const uint CAN_MSG_ID_STATUS_REQUEST = 0x032;     // Request system status (empty message)
         private const uint CAN_MSG_ID_MODE_INTERNAL = 0x030;      // Switch to Internal ADC mode (empty message)
         private const uint CAN_MSG_ID_MODE_ADS1115 = 0x031;       // Switch to ADS1115 mode (empty message)
 
@@ -340,6 +341,15 @@ namespace SuspensionPCB_CAN_WPF
         {
             // Empty message (0 bytes) for mode switch
             return SendMessage(CAN_MSG_ID_MODE_ADS1115, new byte[0]);
+        }
+
+        /// <summary>
+        /// Request system status from STM32 (on-demand)
+        /// </summary>
+        /// <returns>True if request sent successfully</returns>
+        public bool RequestSystemStatus()
+        {
+            return SendMessage(CAN_MSG_ID_STATUS_REQUEST, new byte[0]);
         }
 
         // Static methods for easy access from all windows

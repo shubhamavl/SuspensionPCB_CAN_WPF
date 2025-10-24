@@ -64,6 +64,7 @@ namespace SuspensionPCB_CAN_WPF
                 0x041 => "START_RIGHT_STREAM",
                 0x044 => "STOP_ALL_STREAMS",
                 0x300 => "SYSTEM_STATUS",
+                0x032 => "STATUS_REQUEST",
                 0x030 => "MODE_INTERNAL",
                 0x031 => "MODE_ADS1115",
                 _ => $"UNKNOWN_0x{ID:X3}"
@@ -124,7 +125,7 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     0x200 or 0x201 => "Raw Data",
                     0x040 or 0x041 or 0x044 => "Stream Control",
-                    0x300 or 0x030 or 0x031 => "System",
+                    0x300 or 0x032 or 0x030 or 0x031 => "System",
                     _ => "Unknown"
                 };
             }
@@ -180,6 +181,9 @@ namespace SuspensionPCB_CAN_WPF
 
                 case 0x300:
                     return DecodeSystemStatus(_message.Data);
+
+                case 0x032:
+                    return "Request System Status";
 
                 case 0x030:
                     return "Switch to Internal ADC Mode";

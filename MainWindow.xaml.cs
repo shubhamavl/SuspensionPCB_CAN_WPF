@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Threading;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Data;
 using System.IO;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
@@ -31,6 +32,7 @@ namespace SuspensionPCB_CAN_WPF
         private LinearCalibration? _rightCalibration;
         private TareManager _tareManager = new TareManager();
         private DataLogger _dataLogger = new DataLogger();
+        private StatusHistoryManager _statusHistoryManager = new StatusHistoryManager(100);
         
         // Current raw ADC data (from STM32)
         private int _leftRawADC = 0;
@@ -64,7 +66,8 @@ namespace SuspensionPCB_CAN_WPF
             0x041,  // Start right side streaming
             0x044,  // Stop all streams
             0x030,  // Switch to Internal ADC mode
-            0x031   // Switch to ADS1115 mode
+            0x031,  // Switch to ADS1115 mode
+            0x032   // Request system status
         };
 
         // Current transmission state
@@ -147,6 +150,16 @@ namespace SuspensionPCB_CAN_WPF
                 else if (e.Key == Key.T && Keyboard.Modifiers == ModifierKeys.Control)
                 {
                     ResetTares_Click(sender, new RoutedEventArgs());
+                }
+                else if (e.Key == Key.I && Keyboard.Modifiers == ModifierKeys.Control)
+                {
+                    InternalADCBtn_Click(sender, e);
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
+                {
+                    ADS1115Btn_Click(sender, e);
+                    e.Handled = true;
                 }
                 else if (e.Key == Key.F5)
                 {
@@ -943,11 +956,15 @@ namespace SuspensionPCB_CAN_WPF
             _weightProcessor.SetTareManager(_tareManager);
             _weightProcessor.Start();
 
+            // Initialize ADC mode from settings
+            InitializeADCModeFromSettings();
+
             try
             {
                 _canService = new CANService();
                 _canService.MessageReceived += OnCANMessageReceived;
                 _canService.RawDataReceived += OnRawDataReceived;
+                _canService.SystemStatusReceived += HandleSystemStatus;
                 _logger.LogInfo("CAN Service initialized successfully", "CANService");
             }
             catch (Exception ex)
@@ -1262,6 +1279,463 @@ namespace SuspensionPCB_CAN_WPF
             {
                 MessageBox.Show($"Error opening logs window: {ex.Message}", "Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void InternalADCBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_canService?.IsConnected != true)
+                {
+                    ShowInlineStatus("✗ CAN service not connected", true);
+                    return;
+                }
+
+                bool success = _canService.SwitchToInternalADC();
+                FlashTxIndicator();
+                
+                if (success)
+                {
+                    UpdateAdcModeIndicators("Internal", "#FF2196F3");
+                    _logger.LogInfo("Switched to Internal ADC mode (12-bit)", "Mode");
+                    ShowInlineStatus("✓ Switched to Internal ADC mode");
+                }
+                else
+                {
+                    _logger.LogError("Failed to switch to Internal ADC mode", "Mode");
+                    ShowInlineStatus("✗ Failed to switch ADC mode", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Internal ADC switch error: {ex.Message}", "Mode");
+            }
+        }
+
+        private void ADS1115Btn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_canService?.IsConnected != true)
+                {
+                    ShowInlineStatus("✗ CAN service not connected", true);
+                    return;
+                }
+
+                bool success = _canService.SwitchToADS1115();
+                FlashTxIndicator();
+                
+                if (success)
+                {
+                    UpdateAdcModeIndicators("ADS1115", "#FF4CAF50");
+                    _logger.LogInfo("Switched to ADS1115 mode (16-bit)", "Mode");
+                    ShowInlineStatus("✓ Switched to ADS1115 mode (16-bit precision)");
+                }
+                else
+                {
+                    _logger.LogError("Failed to switch to ADS1115 mode", "Mode");
+                    ShowInlineStatus("✗ Failed to switch ADC mode", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"ADS1115 switch error: {ex.Message}", "Mode");
+            }
+        }
+
+        private void UpdateAdcModeIndicators(string mode, string colorHex)
+        {
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    string displayText = mode == "Internal" 
+                        ? "Internal ADC (12-bit)" 
+                        : "ADS1115 (16-bit)";
+                    
+                    // Update main ADC mode control panel
+                    if (CurrentModeTxt != null)
+                        CurrentModeTxt.Text = displayText;
+                    
+                    if (CurrentModeBorder != null)
+                        CurrentModeBorder.Background = new SolidColorBrush(
+                            (Color)ColorConverter.ConvertFromString(colorHex));
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Update mode indicators error: {ex.Message}", "UI");
+            }
+        }
+
+        private void HandleSystemStatus(object? sender, SystemStatusEventArgs e)
+        {
+            try
+            {
+                string mode = e.ADCMode == 0 ? "Internal" : "ADS1115";
+                string color = e.ADCMode == 0 ? "#FF2196F3" : "#FF4CAF50";
+                UpdateAdcModeIndicators(mode, color);
+                
+                // Update data logger with system status
+                _dataLogger?.UpdateSystemStatus(e.SystemStatus, e.ErrorFlags);
+                
+                // Update settings with system status
+                SettingsManager.Instance.UpdateSystemStatus(e.ADCMode, e.SystemStatus, e.ErrorFlags);
+                
+                // Add to status history
+                _statusHistoryManager.AddStatusEntry(e.SystemStatus, e.ErrorFlags, e.ADCMode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"System status handler error: {ex.Message}", "CAN");
+            }
+        }
+
+        private void InitializeADCModeFromSettings()
+        {
+            try
+            {
+                var (adcMode, systemStatus, errorFlags, lastUpdate) = SettingsManager.Instance.GetLastKnownSystemStatus();
+                
+                if (lastUpdate != DateTime.MinValue)
+                {
+                    string mode = adcMode == 0 ? "Internal" : "ADS1115";
+                    string color = adcMode == 0 ? "#FF2196F3" : "#FF4CAF50";
+                    UpdateAdcModeIndicators(mode, color);
+                    
+                    _logger.LogInfo($"Initialized ADC mode from settings: {mode} (last update: {lastUpdate:yyyy-MM-dd HH:mm:ss})", "Settings");
+                }
+                else
+                {
+                    _logger.LogInfo("No previous ADC mode found in settings, using default", "Settings");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Failed to initialize ADC mode from settings: {ex.Message}", "Settings");
+            }
+        }
+
+        private void RequestStatusBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_canService?.IsConnected != true)
+                {
+                    ShowInlineStatus("✗ CAN service not connected", true);
+                    return;
+                }
+
+                bool success = _canService.RequestSystemStatus();
+                FlashTxIndicator();
+                
+                if (success)
+                {
+                    _logger.LogInfo("Requested system status from STM32", "Status");
+                    ShowInlineStatus("✓ Status request sent to STM32");
+                }
+                else
+                {
+                    _logger.LogError("Failed to send status request", "Status");
+                    ShowInlineStatus("✗ Failed to request status", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Status request error: {ex.Message}", "Status");
+                ShowInlineStatus($"✗ Status Error: {ex.Message}", true);
+            }
+        }
+
+        private void StatusHistoryBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var historyWindow = new Window
+                {
+                    Title = "System Status History",
+                    Width = 800,
+                    Height = 600,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Owner = this,
+                    Background = new SolidColorBrush(Color.FromRgb(245, 245, 245))
+                };
+
+                var grid = new Grid();
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                // Title and statistics
+                var titlePanel = new StackPanel { Margin = new Thickness(20, 20, 20, 10) };
+                
+                var title = new TextBlock
+                {
+                    Text = "System Status History",
+                    FontSize = 24,
+                    FontWeight = FontWeights.Bold,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 0, 0, 10)
+                };
+                titlePanel.Children.Add(title);
+
+                // Statistics
+                var (totalEntries, okCount, warningCount, errorCount, firstEntry, lastEntry) = _statusHistoryManager.GetStatistics();
+                var statsText = $"Total Entries: {totalEntries} | OK: {okCount} | Warnings: {warningCount} | Errors: {errorCount}";
+                if (firstEntry.HasValue && lastEntry.HasValue)
+                {
+                    statsText += $" | Range: {firstEntry.Value:yyyy-MM-dd HH:mm} - {lastEntry.Value:yyyy-MM-dd HH:mm}";
+                }
+                
+                var statsBlock = new TextBlock
+                {
+                    Text = statsText,
+                    FontSize = 12,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Foreground = new SolidColorBrush(Color.FromRgb(100, 100, 100))
+                };
+                titlePanel.Children.Add(statsBlock);
+
+                grid.Children.Add(titlePanel);
+                Grid.SetRow(titlePanel, 0);
+
+                // Data grid
+                var dataGrid = new DataGrid
+                {
+                    AutoGenerateColumns = false,
+                    CanUserAddRows = false,
+                    CanUserDeleteRows = false,
+                    IsReadOnly = true,
+                    GridLinesVisibility = DataGridGridLinesVisibility.All,
+                    HeadersVisibility = DataGridHeadersVisibility.All,
+                    Margin = new Thickness(20, 0, 20, 0)
+                };
+
+                dataGrid.Columns.Add(new DataGridTextColumn
+                {
+                    Header = "Timestamp",
+                    Binding = new Binding("Timestamp") { StringFormat = "yyyy-MM-dd HH:mm:ss" },
+                    Width = 150
+                });
+                dataGrid.Columns.Add(new DataGridTextColumn
+                {
+                    Header = "Status",
+                    Binding = new Binding("StatusText"),
+                    Width = 80
+                });
+                dataGrid.Columns.Add(new DataGridTextColumn
+                {
+                    Header = "ADC Mode",
+                    Binding = new Binding("ModeText"),
+                    Width = 100
+                });
+                dataGrid.Columns.Add(new DataGridTextColumn
+                {
+                    Header = "Error Flags",
+                    Binding = new Binding("ErrorFlagsText"),
+                    Width = 80
+                });
+
+                dataGrid.ItemsSource = _statusHistoryManager.GetAllEntries();
+                grid.Children.Add(dataGrid);
+                Grid.SetRow(dataGrid, 1);
+
+                // Buttons
+                var buttonPanel = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(20, 10, 20, 20)
+                };
+
+                var refreshBtn = new Button
+                {
+                    Content = "🔄 Refresh",
+                    Width = 100,
+                    Height = 30,
+                    Margin = new Thickness(5)
+                };
+                refreshBtn.Click += (s, args) => dataGrid.ItemsSource = _statusHistoryManager.GetAllEntries();
+
+                var clearBtn = new Button
+                {
+                    Content = "🗑️ Clear",
+                    Width = 100,
+                    Height = 30,
+                    Margin = new Thickness(5)
+                };
+                clearBtn.Click += (s, args) =>
+                {
+                    _statusHistoryManager.ClearHistory();
+                    dataGrid.ItemsSource = _statusHistoryManager.GetAllEntries();
+                };
+
+                var closeBtn = new Button
+                {
+                    Content = "Close",
+                    Width = 100,
+                    Height = 30,
+                    Margin = new Thickness(5)
+                };
+                closeBtn.Click += (s, args) => historyWindow.Close();
+
+                buttonPanel.Children.Add(refreshBtn);
+                buttonPanel.Children.Add(clearBtn);
+                buttonPanel.Children.Add(closeBtn);
+
+                grid.Children.Add(buttonPanel);
+                Grid.SetRow(buttonPanel, 2);
+
+                historyWindow.Content = grid;
+                historyWindow.ShowDialog();
+
+                _logger.LogInfo("Status history dialog opened", "UI");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Status history dialog error: {ex.Message}", "UI");
+                MessageBox.Show($"Error opening status history: {ex.Message}", 
+                               "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void KeyboardShortcutsBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var shortcutsWindow = new Window
+                {
+                    Title = "Keyboard Shortcuts",
+                    Width = 500,
+                    Height = 450,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Owner = this,
+                    ResizeMode = ResizeMode.NoResize,
+                    Background = new SolidColorBrush(Color.FromRgb(245, 245, 245))
+                };
+
+                var scrollViewer = new ScrollViewer
+                {
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    Padding = new Thickness(20)
+                };
+
+                var stackPanel = new StackPanel();
+
+                // Title
+                var title = new TextBlock
+                {
+                    Text = "Keyboard Shortcuts",
+                    FontSize = 20,
+                    FontWeight = FontWeights.Bold,
+                    Margin = new Thickness(0, 0, 0, 15)
+                };
+                stackPanel.Children.Add(title);
+
+                // Shortcuts list
+                var shortcuts = new[]
+                {
+                    ("Connection", new[] {
+                        ("Ctrl+C", "Connect to CAN bus"),
+                        ("Ctrl+D", "Disconnect from CAN bus")
+                    }),
+                    ("Streaming Control", new[] {
+                        ("Ctrl+L", "Start left side streaming"),
+                        ("Ctrl+R", "Start right side streaming"),
+                        ("Ctrl+S", "Stop all streams")
+                    }),
+                    ("ADC Mode", new[] {
+                        ("Ctrl+I", "Switch to Internal ADC mode (12-bit)"),
+                        ("Ctrl+A", "Switch to ADS1115 mode (16-bit)")
+                    }),
+                    ("Windows", new[] {
+                        ("Ctrl+T", "Toggle settings panel"),
+                        ("Ctrl+M", "Open monitor window"),
+                        ("Ctrl+P", "Open production logs")
+                    }),
+                    ("Help", new[] {
+                        ("F1", "Show help")
+                    })
+                };
+
+                foreach (var (category, items) in shortcuts)
+                {
+                    // Category header
+                    var categoryHeader = new TextBlock
+                    {
+                        Text = category,
+                        FontSize = 14,
+                        FontWeight = FontWeights.SemiBold,
+                        Margin = new Thickness(0, 10, 0, 5),
+                        Foreground = new SolidColorBrush(Color.FromRgb(52, 152, 219))
+                    };
+                    stackPanel.Children.Add(categoryHeader);
+
+                    // Shortcuts in category
+                    foreach (var (key, description) in items)
+                    {
+                        var shortcutPanel = new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal,
+                            Margin = new Thickness(10, 3, 0, 3)
+                        };
+
+                        var keyBorder = new Border
+                        {
+                            Background = new SolidColorBrush(Color.FromRgb(230, 230, 230)),
+                            BorderBrush = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                            BorderThickness = new Thickness(1),
+                            CornerRadius = new CornerRadius(3),
+                            Padding = new Thickness(8, 2, 8, 2),
+                            Margin = new Thickness(0, 0, 10, 0),
+                            MinWidth = 80
+                        };
+
+                        var keyText = new TextBlock
+                        {
+                            Text = key,
+                            FontFamily = new FontFamily("Consolas"),
+                            FontWeight = FontWeights.SemiBold,
+                            HorizontalAlignment = HorizontalAlignment.Center
+                        };
+                        keyBorder.Child = keyText;
+
+                        var descText = new TextBlock
+                        {
+                            Text = description,
+                            VerticalAlignment = VerticalAlignment.Center
+                        };
+
+                        shortcutPanel.Children.Add(keyBorder);
+                        shortcutPanel.Children.Add(descText);
+                        stackPanel.Children.Add(shortcutPanel);
+                    }
+                }
+
+                // Close button
+                var closeButton = new Button
+                {
+                    Content = "Close",
+                    Width = 100,
+                    Height = 30,
+                    Margin = new Thickness(0, 20, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+                closeButton.Click += (s, args) => shortcutsWindow.Close();
+                stackPanel.Children.Add(closeButton);
+
+                scrollViewer.Content = stackPanel;
+                shortcutsWindow.Content = scrollViewer;
+                shortcutsWindow.ShowDialog();
+
+                _logger.LogInfo("Keyboard shortcuts dialog opened", "UI");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Keyboard shortcuts dialog error: {ex.Message}", "UI");
+                MessageBox.Show($"Error opening shortcuts dialog: {ex.Message}", 
+                               "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

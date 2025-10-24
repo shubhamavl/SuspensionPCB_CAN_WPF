@@ -14,6 +14,11 @@ namespace SuspensionPCB_CAN_WPF
         private bool _isLogging = false;
         private readonly object _logLock = new object();
         
+        // System status tracking
+        private byte _lastSystemStatus = 0;
+        private byte _lastErrorFlags = 0;
+        private DateTime _lastStatusTimestamp = DateTime.MinValue;
+        
         public bool IsLogging => _isLogging;
         
         public DataLogger()
@@ -41,8 +46,8 @@ namespace SuspensionPCB_CAN_WPF
                     if (_isLogging)
                         return true; // Already logging
                     
-                    // Create CSV header
-                    string header = "Timestamp,Side,RawADC,CalibratedKg,TaredKg,TareBaseline,CalSlope,CalIntercept,ADCMode";
+                    // Create CSV header with system status fields
+                    string header = "Timestamp,Side,RawADC,CalibratedKg,TaredKg,TareBaseline,CalSlope,CalIntercept,ADCMode,SystemStatus,ErrorFlags,StatusTimestamp";
                     File.WriteAllText(_logFilePath, header + Environment.NewLine);
                     
                     _isLogging = true;
@@ -70,6 +75,21 @@ namespace SuspensionPCB_CAN_WPF
         }
         
         /// <summary>
+        /// Update system status for logging
+        /// </summary>
+        /// <param name="systemStatus">System status (0=OK, 1=Warning, 2=Error)</param>
+        /// <param name="errorFlags">Error flags</param>
+        public void UpdateSystemStatus(byte systemStatus, byte errorFlags)
+        {
+            lock (_logLock)
+            {
+                _lastSystemStatus = systemStatus;
+                _lastErrorFlags = errorFlags;
+                _lastStatusTimestamp = DateTime.Now;
+            }
+        }
+        
+        /// <summary>
         /// Log a data point
         /// </summary>
         /// <param name="side">"Left" or "Right"</param>
@@ -91,8 +111,13 @@ namespace SuspensionPCB_CAN_WPF
                 lock (_logLock)
                 {
                     string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+                    string statusTimestamp = _lastStatusTimestamp != DateTime.MinValue 
+                        ? _lastStatusTimestamp.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)
+                        : "";
+                    
                     string line = $"{timestamp},{side},{rawADC},{calibratedKg:F3},{taredKg:F3}," +
-                                 $"{tareBaseline:F3},{calSlope:F6},{calIntercept:F3},{adcMode}";
+                                 $"{tareBaseline:F3},{calSlope:F6},{calIntercept:F3},{adcMode}," +
+                                 $"{_lastSystemStatus},{_lastErrorFlags},{statusTimestamp}";
                     
                     File.AppendAllText(_logFilePath, line + Environment.NewLine);
                 }
