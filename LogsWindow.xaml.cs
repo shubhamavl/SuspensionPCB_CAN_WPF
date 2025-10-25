@@ -3,16 +3,19 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.IO;
+using Microsoft.Win32;
 
 namespace SuspensionPCB_CAN_WPF
 {
     public partial class LogsWindow : Window
     {
         private readonly ProductionLogger? _logger;
+        private bool _isInitialized = false;
 
-        // Log filtering
-        public ObservableCollection<ProductionLogger.LogEntry> AllLogEntries { get; set; }
-        public ObservableCollection<ProductionLogger.LogEntry> FilteredLogEntries { get; set; }
+        // CAN message logging
+        public ObservableCollection<LogEntry> AllLogEntries { get; set; }
+        public ObservableCollection<LogEntry> FilteredLogEntries { get; set; }
 
         public LogsWindow(ProductionLogger? logger)
         {
@@ -21,14 +24,11 @@ namespace SuspensionPCB_CAN_WPF
             _logger = logger;
 
             // Initialize collections
-            AllLogEntries = new ObservableCollection<ProductionLogger.LogEntry>();
-            FilteredLogEntries = new ObservableCollection<ProductionLogger.LogEntry>();
+            AllLogEntries = new ObservableCollection<LogEntry>();
+            FilteredLogEntries = new ObservableCollection<LogEntry>();
 
             // Set data context
             DataContext = this;
-
-            // Subscribe to logger events - ProductionLogger doesn't have LogEntryAdded event
-            // We'll use a timer to update the UI periodically
 
             // Initialize UI
             InitializeUI();
@@ -41,92 +41,130 @@ namespace SuspensionPCB_CAN_WPF
             {
                 foreach (var entry in _logger.LogEntries)
                 {
-                    AllLogEntries.Add(entry);
+                    // Convert ProductionLogger.LogEntry to LogEntry
+                    var logEntry = new LogEntry
+                    {
+                        Timestamp = entry.Timestamp,
+                        Message = entry.Message,
+                        Level = ExtractLogLevel(entry.Message),
+                        Source = "ProductionLogger"
+                    };
+                    AllLogEntries.Add(logEntry);
                 }
             }
 
-            // Set up filtering
-            LogFilterChanged(null!, null!);
+            // Set up filtering only after UI is fully loaded
+            Dispatcher.BeginInvoke(new Action(() => {
+                try
+                {
+                    _isInitialized = true;
+                    LogFilterChanged(null!, null!);
+                    UpdateLogCount();
+                }
+                catch (Exception ex)
+                {
+                    // Silently handle initialization errors
+                    System.Diagnostics.Debug.WriteLine($"LogsWindow initialization error: {ex.Message}");
+                }
+            }));
         }
 
-
-        private void EnableLoggingChk_Checked(object sender, RoutedEventArgs e)
+        private string ExtractLogLevel(string message)
         {
-            if (_logger != null)
-            {
-                _logger.IsEnabled = true;
-            }
-        }
-
-        private void EnableLoggingChk_Unchecked(object sender, RoutedEventArgs e)
-        {
-            if (_logger != null)
-            {
-                _logger.IsEnabled = false;
-            }
-        }
-
-        private void MinLevelCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_logger != null && MinLevelCombo.SelectedIndex >= 0)
-            {
-                _logger.MinimumLevel = (ProductionLogger.LogLevel)(MinLevelCombo.SelectedIndex + 1);
-            }
-            LogFilterChanged(sender, e);
+            if (message.Contains("ERROR")) return "ERROR";
+            if (message.Contains("WARNING")) return "WARNING";
+            if (message.Contains("CRITICAL")) return "CRITICAL";
+            if (message.Contains("INFO")) return "INFO";
+            return "INFO";
         }
 
         private void LogFilterChanged(object sender, RoutedEventArgs e)
         {
             try
             {
+                // Don't process filters until UI is fully initialized
+                if (!_isInitialized) return;
+                
                 FilteredLogEntries.Clear();
-
-                bool showInfo = ShowInfoChk?.IsChecked == true;
-                bool showWarning = ShowWarningChk?.IsChecked == true;
-                bool showError = ShowErrorChk?.IsChecked == true;
-                bool showCritical = ShowCriticalChk?.IsChecked == true;
-
-                var filtered = AllLogEntries.Where(entry =>
+                
+                // Apply filters based on checkboxes (with null checks)
+                foreach (var entry in AllLogEntries)
                 {
-                    return entry.Level switch
+                    bool include = true;
+                    
+                    // Check log level filters with null safety
+                    if (entry.Level == "INFO" && ShowInfoChk?.IsChecked != true)
+                        include = false;
+                    if (entry.Level == "WARNING" && ShowWarningChk?.IsChecked != true)
+                        include = false;
+                    if (entry.Level == "ERROR" && ShowErrorChk?.IsChecked != true)
+                        include = false;
+                    if (entry.Level == "CRITICAL" && ShowCriticalChk?.IsChecked != true)
+                        include = false;
+
+                    if (include)
                     {
-                        ProductionLogger.LogLevel.Info => showInfo,
-                        ProductionLogger.LogLevel.Warning => showWarning,
-                        ProductionLogger.LogLevel.Error => showError,
-                        ProductionLogger.LogLevel.Critical => showCritical,
-                        _ => false
-                    };
-                });
-
-                foreach (var entry in filtered)
-                {
-                    FilteredLogEntries.Add(entry);
+                        FilteredLogEntries.Add(entry);
+                    }
                 }
-
-                LogCountTxt.Text = $"{FilteredLogEntries.Count} entries";
+                
+                UpdateLogCount();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Log filtering error: {ex.Message}");
+                MessageBox.Show($"Filter error: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private void UpdateLogCount()
+        {
+            try
+            {
+                if (LogCountTxt != null)
+                {
+                    LogCountTxt.Text = $"{FilteredLogEntries.Count} entries";
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"UpdateLogCount error: {ex.Message}");
+            }
+        }
+
+        private void EnableLoggingChk_Checked(object sender, RoutedEventArgs e)
+        {
+            // Enable logging functionality
+        }
+
+        private void EnableLoggingChk_Unchecked(object sender, RoutedEventArgs e)
+        {
+            // Disable logging functionality
+        }
+
+        private void MinLevelCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Handle minimum log level change
+            LogFilterChanged(sender, e);
         }
 
         private void ClearLogsBtn_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                AllLogEntries.Clear();
-                FilteredLogEntries.Clear();
-                LogCountTxt.Text = "0 entries";
-                
-                if (_logger != null)
+                var result = MessageBox.Show("Clear all log entries?", "Confirm Clear", 
+                                           MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (result == MessageBoxResult.Yes)
                 {
-                    _logger.ClearLogs();
+                    AllLogEntries.Clear();
+                    FilteredLogEntries.Clear();
+                    UpdateLogCount();
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Clear logs error: {ex.Message}");
+                MessageBox.Show($"Clear error: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -134,40 +172,48 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                if (_logger != null)
+                var saveDialog = new SaveFileDialog
                 {
-                    var saveDialog = new Microsoft.Win32.SaveFileDialog
-                    {
-                        Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
-                        DefaultExt = "txt",
-                        FileName = $"suspension_logs_{DateTime.Now:yyyyMMdd_HHmmss}.txt"
-                    };
+                    Title = "Export Logs",
+                    Filter = "CSV Files (*.csv)|*.csv|Text Files (*.txt)|*.txt|All Files (*.*)|*.*",
+                    DefaultExt = "csv",
+                    FileName = $"logs_{DateTime.Now:yyyyMMdd_HHmmss}.csv"
+                };
 
-                    if (saveDialog.ShowDialog() == true)
+                if (saveDialog.ShowDialog() == true)
+                {
+                    using (var writer = new StreamWriter(saveDialog.FileName))
                     {
-                        if (_logger.ExportLogs(saveDialog.FileName))
+                        writer.WriteLine("Timestamp,Level,Message,Source");
+                        
+                        foreach (var entry in FilteredLogEntries)
                         {
-                            MessageBox.Show($"Logs exported successfully to:\n{saveDialog.FileName}", 
-                                          "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-                        }
-                        else
-                        {
-                            MessageBox.Show("Failed to export logs.", "Export Error", 
-                                          MessageBoxButton.OK, MessageBoxImage.Error);
+                            writer.WriteLine($"{entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff},{entry.Level},\"{entry.Message}\",{entry.Source}");
                         }
                     }
+                    
+                    MessageBox.Show($"Logs exported to: {saveDialog.FileName}", "Export Complete", 
+                                  MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Export error: {ex.Message}", "Export Error", 
+                MessageBox.Show($"Export error: {ex.Message}", "Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+    }
 
-        protected override void OnClosed(EventArgs e)
-        {
-            base.OnClosed(e);
-        }
+    /// <summary>
+    /// Log entry for display
+    /// </summary>
+    public class LogEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string Level { get; set; } = "";
+        public string Message { get; set; } = "";
+        public string Source { get; set; } = "";
+        
+        public string FormattedMessage => $"[{Timestamp:HH:mm:ss.fff}] {Level}: {Message}";
     }
 }

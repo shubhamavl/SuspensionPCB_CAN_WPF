@@ -104,32 +104,6 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        private void TransmissionRateCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            try
-            {
-                if (TransmissionRateCombo?.SelectedIndex >= 0)
-                {
-                    _currentTransmissionRate = TransmissionRateCombo.SelectedIndex switch
-                    {
-                        0 => 0x01, // 100Hz
-                        1 => 0x02, // 500Hz
-                        2 => 0x03, // 1kHz
-                        3 => 0x05, // 1Hz
-                        _ => 0x03  // Default 1kHz
-                    };
-                    
-                    // Save to settings
-                    _settingsManager.SetTransmissionRate(_currentTransmissionRate, TransmissionRateCombo.SelectedIndex);
-                    
-                    _logger.LogInfo($"Transmission rate changed and saved: {GetRateText(_currentTransmissionRate)}", "Settings");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Rate selection error: {ex.Message}", "Settings");
-            }
-            }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
             {
@@ -575,12 +549,10 @@ namespace SuspensionPCB_CAN_WPF
                 
                 if (leftCalibrated)
                 {
-                    if (LeftCalibratedTxt != null) LeftCalibratedTxt.Text = $"{(int)leftData.CalibratedWeight} kg";
                     if (LeftDisplayTxt != null) LeftDisplayTxt.Text = $"{(int)leftData.TaredWeight} kg";
                 }
                 else
                 {
-                    if (LeftCalibratedTxt != null) LeftCalibratedTxt.Text = "Not Calibrated";
                     if (LeftDisplayTxt != null) LeftDisplayTxt.Text = "Calibration Required";
                 }
                 
@@ -593,12 +565,10 @@ namespace SuspensionPCB_CAN_WPF
                 
                 if (rightCalibrated)
                 {
-                    if (RightCalibratedTxt != null) RightCalibratedTxt.Text = $"{(int)rightData.CalibratedWeight} kg";
                     if (RightDisplayTxt != null) RightDisplayTxt.Text = $"{(int)rightData.TaredWeight} kg";
                 }
                 else
                 {
-                    if (RightCalibratedTxt != null) RightCalibratedTxt.Text = "Not Calibrated";
                     if (RightDisplayTxt != null) RightDisplayTxt.Text = "Calibration Required";
                 }
                 
@@ -616,6 +586,9 @@ namespace SuspensionPCB_CAN_WPF
                     _dataLogger.LogDataPoint("Right", rightData.RawADC, rightData.CalibratedWeight, rightData.TaredWeight, 
                                            rightTareBaseline, _rightCalibration?.Slope ?? 0, _rightCalibration?.Intercept ?? 0, 0);
                 }
+                
+                // Update calibration status icons
+                UpdateCalibrationStatusIcons();
             }
             catch (Exception ex)
             {
@@ -653,6 +626,9 @@ namespace SuspensionPCB_CAN_WPF
             
             // Update WeightProcessor with new calibrations
             _weightProcessor.SetCalibration(_leftCalibration, _rightCalibration);
+            
+            // Update UI calibration status icons
+            UpdateCalibrationStatusIcons();
         }
         
         private void TareLeft_Click(object sender, RoutedEventArgs e)
@@ -937,9 +913,9 @@ namespace SuspensionPCB_CAN_WPF
             
             // Apply transmission rate from settings
             _currentTransmissionRate = _settingsManager.Settings.TransmissionRate;
-            if (TransmissionRateCombo != null)
+            if (HeaderRateCombo != null)
             {
-                TransmissionRateCombo.SelectedIndex = _settingsManager.Settings.TransmissionRateIndex;
+                HeaderRateCombo.SelectedIndex = _settingsManager.Settings.TransmissionRateIndex;
             }
             
             // Apply COM port from settings
@@ -994,10 +970,12 @@ namespace SuspensionPCB_CAN_WPF
             _clockTimer.Tick += (s, e) => UpdateClock();
             _clockTimer.Start();
 
-            // Initialize settings panel
-            if (TransmissionRateCombo != null)
+            // Initialize header transmission rate dropdown
+            if (HeaderRateCombo != null)
             {
-                TransmissionRateCombo.SelectionChanged += TransmissionRateCombo_SelectionChanged;
+                HeaderRateCombo.SelectionChanged += HeaderRateCombo_SelectionChanged;
+                // Set default to 1kHz (index 2)
+                HeaderRateCombo.SelectedIndex = 2;
             }
 
             // Initialize save directory UI
@@ -1256,7 +1234,7 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                var monitorWindow = new MonitorWindow(_canService, _logger, _tareManager, _leftCalibration, _rightCalibration);
+                var monitorWindow = new MonitorWindow();
                 monitorWindow.Owner = this;
                 monitorWindow.Show();
             }
@@ -1354,13 +1332,9 @@ namespace SuspensionPCB_CAN_WPF
                         ? "Internal ADC (12-bit)" 
                         : "ADS1115 (16-bit)";
                     
-                    // Update main ADC mode control panel
-                    if (CurrentModeTxt != null)
-                        CurrentModeTxt.Text = displayText;
-                    
-                    if (CurrentModeBorder != null)
-                        CurrentModeBorder.Background = new SolidColorBrush(
-                            (Color)ColorConverter.ConvertFromString(colorHex));
+                    // Update header ADC mode display
+                    if (HeaderAdcModeTxt != null)
+                        HeaderAdcModeTxt.Text = displayText;
                 });
             }
             catch (Exception ex)
@@ -1738,6 +1712,198 @@ namespace SuspensionPCB_CAN_WPF
                                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        #region UI Helper Methods
+
+        /// <summary>
+        /// Updates calibration status icons for both sides
+        /// </summary>
+        private void UpdateCalibrationStatusIcons()
+        {
+            try
+            {
+                // Left side
+                if (_leftCalibration != null && _leftCalibration.IsValid)
+                {
+                    LeftCalStatusIcon.Text = "✓";
+                    LeftCalStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(39, 174, 96)); // Green
+                }
+                else
+                {
+                    LeftCalStatusIcon.Text = "⚠";
+                    LeftCalStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(231, 76, 60)); // Red
+                }
+                
+                // Right side
+                if (_rightCalibration != null && _rightCalibration.IsValid)
+                {
+                    RightCalStatusIcon.Text = "✓";
+                    RightCalStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(39, 174, 96));
+                }
+                else
+                {
+                    RightCalStatusIcon.Text = "⚠";
+                    RightCalStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(231, 76, 60));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error updating calibration status icons: {ex.Message}", "UI");
+            }
+        }
+
+        /// <summary>
+        /// Updates ADC mode indicators in both control panel and header
+        /// </summary>
+        private void UpdateAdcModeIndicators(string mode)
+        {
+            try
+            {
+                if (mode == "Internal")
+                {
+                    InternalModeIndicator.Fill = new SolidColorBrush(Color.FromRgb(33, 150, 243)); // Blue
+                    ADS1115ModeIndicator.Fill = new SolidColorBrush(Color.FromRgb(204, 204, 204)); // Gray
+                    HeaderAdcModeTxt.Text = "Internal 12-bit";
+                }
+                else if (mode == "ADS1115")
+                {
+                    InternalModeIndicator.Fill = new SolidColorBrush(Color.FromRgb(204, 204, 204));
+                    ADS1115ModeIndicator.Fill = new SolidColorBrush(Color.FromRgb(76, 175, 80)); // Green
+                    HeaderAdcModeTxt.Text = "ADS1115 16-bit";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error updating ADC mode indicators: {ex.Message}", "UI");
+            }
+        }
+
+        /// <summary>
+        /// Unified mode switch handler for the Switch Mode button
+        /// </summary>
+        private void SwitchModeBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Toggle between modes based on current header text
+                if (HeaderAdcModeTxt.Text.Contains("Internal"))
+                {
+                    // Switch to ADS1115
+                    if (_canService != null)
+                    {
+                        _canService.SwitchToADS1115();
+                        UpdateAdcModeIndicators("ADS1115");
+                        _logger.LogInfo("Switched to ADS1115 mode", "ADC");
+                    }
+                }
+                else
+                {
+                    // Switch to Internal ADC
+                    if (_canService != null)
+                    {
+                        _canService.SwitchToInternalADC();
+                        UpdateAdcModeIndicators("Internal");
+                        _logger.LogInfo("Switched to Internal ADC mode", "ADC");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error switching ADC mode: {ex.Message}", "ADC");
+                MessageBox.Show($"Error switching ADC mode: {ex.Message}", 
+                               "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Updates sample counter display
+        /// </summary>
+        private void UpdateSampleCount()
+        {
+            try
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    var sampleCount = _dataLogger.GetLogLineCount();
+                    SampleCountTxt.Text = $"{sampleCount:N0} samples";
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error updating sample count: {ex.Message}", "UI");
+            }
+        }
+
+        /// <summary>
+        /// Updates transmission rate display in header
+        /// </summary>
+        private void UpdateHeaderTransmissionRate()
+        {
+            try
+            {
+                // This method is no longer needed since we removed TransmissionRateCombo
+                // Header rate is now managed directly by HeaderRateCombo_SelectionChanged
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error updating header transmission rate: {ex.Message}", "UI");
+            }
+        }
+
+        #endregion
+
+        #region Configuration Viewer
+
+        /// <summary>
+        /// Opens the Configuration Viewer window
+        /// </summary>
+        private void ViewConfigBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var configViewer = new ConfigurationViewer();
+                configViewer.Owner = this;
+                configViewer.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error opening configuration viewer: {ex.Message}", "UI");
+                MessageBox.Show($"Error opening configuration viewer: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Handles transmission rate changes from header dropdown
+        /// </summary>
+        private void HeaderRateCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                if (HeaderRateCombo?.SelectedIndex >= 0)
+                {
+                    _currentTransmissionRate = HeaderRateCombo.SelectedIndex switch
+                    {
+                        0 => 0x01, // 100Hz
+                        1 => 0x02, // 500Hz
+                        2 => 0x03, // 1kHz
+                        3 => 0x05, // 1Hz
+                        _ => 0x03  // Default 1kHz
+                    };
+                    
+                    // Save to settings
+                    _settingsManager.SetTransmissionRate(_currentTransmissionRate, HeaderRateCombo.SelectedIndex);
+                    
+                    _logger.LogInfo($"Transmission rate changed from header: {GetRateText(_currentTransmissionRate)}", "Settings");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Header rate selection error: {ex.Message}", "Settings");
+            }
+        }
+
+        #endregion
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected virtual void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
