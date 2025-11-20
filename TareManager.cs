@@ -136,13 +136,7 @@ namespace SuspensionPCB_CAN_WPF
                 SaveTime = DateTime.Now
             };
             
-            string dir = SettingsManager.Instance.Settings.SaveDirectory;
-            try
-            {
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            }
-            catch { }
-            string path = Path.Combine(dir, "tare_config.json");
+            string path = PathHelper.GetTareConfigPath(); // Portable: in Data directory
             string jsonString = JsonSerializer.Serialize(tareData, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(path, jsonString);
         }
@@ -153,8 +147,7 @@ namespace SuspensionPCB_CAN_WPF
         /// <returns>True if loaded successfully</returns>
         public bool LoadFromFile()
         {
-            string dir = SettingsManager.Instance.Settings.SaveDirectory;
-            string path = Path.Combine(dir, "tare_config.json");
+            string path = PathHelper.GetTareConfigPath(); // Portable: in Data directory
             if (!File.Exists(path))
                 return false;
                 
@@ -187,8 +180,7 @@ namespace SuspensionPCB_CAN_WPF
         /// </summary>
         public void DeleteConfig()
         {
-            string dir = SettingsManager.Instance.Settings.SaveDirectory;
-            string path = Path.Combine(dir, "tare_config.json");
+            string path = PathHelper.GetTareConfigPath(); // Portable: in Data directory
             if (File.Exists(path))
             {
                 try

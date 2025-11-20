@@ -79,16 +79,9 @@ namespace SuspensionPCB_CAN_WPF
 
         private ProductionLogger()
         {
-            // Create timestamped log file in proper user documents directory
+            // Create timestamped log file in portable logs directory (next to executable)
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string logsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SuspensionSystem", "Logs");
-            
-            try
-            {
-                if (!Directory.Exists(logsDir))
-                    Directory.CreateDirectory(logsDir);
-            }
-            catch { }
+            string logsDir = PathHelper.GetLogsDirectory(); // Portable: relative to executable
             
             _logFilePath = Path.Combine(logsDir, $"suspension_log_{timestamp}.txt");
         }

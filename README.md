@@ -30,16 +30,26 @@ A professional Windows WPF application for real-time weight monitoring and calib
 ## 📋 System Requirements
 
 - **OS**: Windows 10/11 (64-bit)
-- **Framework**: .NET 6.0 or later
+- **Framework**: .NET 8.0 runtime (included in portable version, no installation needed)
 - **Hardware**: USB-CAN adapter (250 kbps)
 - **Memory**: 4GB RAM minimum, 8GB recommended
-- **Storage**: 100MB for application and logs
+- **Storage**: 150MB for portable application (includes .NET runtime), 100MB for logs/data
 
 ## 🔧 Installation
 
-1. **Download** the latest release from the repository
-2. **Extract** to your preferred directory
-3. **Run** `SuspensionPCB_CAN_WPF.exe`
+### Portable Version (Recommended)
+1. **Download** the portable release package (ZIP file)
+2. **Extract** to any directory (desktop, USB drive, etc.)
+3. **Run** `SuspensionPCB_CAN_WPF.exe` - **No installation required!**
+4. **Connect** your USB-CAN adapter
+5. **Configure** COM port and transmission rate
+
+The portable version includes the .NET runtime and stores all data files next to the executable. See [PORTABLE_DEPLOYMENT.md](PORTABLE_DEPLOYMENT.md) for details.
+
+### Development/Source Version
+1. **Clone** the repository
+2. **Build** using `dotnet build` or Visual Studio
+3. **Run** from Visual Studio or `dotnet run`
 4. **Connect** your USB-CAN adapter
 5. **Configure** COM port and transmission rate
 

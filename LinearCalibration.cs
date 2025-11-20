@@ -99,13 +99,7 @@ namespace SuspensionPCB_CAN_WPF
         public void SaveToFile(string side)
         {
             Side = side;
-            string dir = SettingsManager.Instance.Settings.SaveDirectory;
-            try
-            {
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            }
-            catch { }
-            string filename = Path.Combine(dir, $"calibration_{side.ToLower()}.json");
+            string filename = PathHelper.GetCalibrationPath(side); // Portable: in Data directory
             string jsonString = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(filename, jsonString);
         }
@@ -117,8 +111,7 @@ namespace SuspensionPCB_CAN_WPF
         /// <returns>Loaded calibration or null if file doesn't exist</returns>
         public static LinearCalibration? LoadFromFile(string side)
         {
-            string dir = SettingsManager.Instance.Settings.SaveDirectory;
-            string filename = Path.Combine(dir, $"calibration_{side.ToLower()}.json");
+            string filename = PathHelper.GetCalibrationPath(side); // Portable: in Data directory
             if (!File.Exists(filename))
                 return null;
                 
@@ -142,8 +135,7 @@ namespace SuspensionPCB_CAN_WPF
         /// <returns>True if calibration file exists</returns>
         public static bool CalibrationExists(string side)
         {
-            string dir = SettingsManager.Instance.Settings.SaveDirectory;
-            string filename = Path.Combine(dir, $"calibration_{side.ToLower()}.json");
+            string filename = PathHelper.GetCalibrationPath(side); // Portable: in Data directory
             return File.Exists(filename);
         }
         
@@ -153,8 +145,7 @@ namespace SuspensionPCB_CAN_WPF
         /// <param name="side">"Left" or "Right"</param>
         public static void DeleteCalibration(string side)
         {
-            string dir = SettingsManager.Instance.Settings.SaveDirectory;
-            string filename = Path.Combine(dir, $"calibration_{side.ToLower()}.json");
+            string filename = PathHelper.GetCalibrationPath(side); // Portable: in Data directory
             if (File.Exists(filename))
             {
                 try

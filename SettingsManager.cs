@@ -12,7 +12,7 @@ namespace SuspensionPCB_CAN_WPF
         public string ComPort { get; set; } = "COM3";
         public byte TransmissionRate { get; set; } = 0x03; // Default 1kHz
         public int TransmissionRateIndex { get; set; } = 2; // ComboBox index
-        public string SaveDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SuspensionSystem", "Data");
+        public string SaveDirectory { get; set; } = PathHelper.GetDataDirectory(); // Portable: relative to executable
         public DateTime LastSaved { get; set; } = DateTime.Now;
         
         // System status persistence
@@ -34,11 +34,7 @@ namespace SuspensionPCB_CAN_WPF
 
         private SettingsManager()
         {
-            _settingsPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "SuspensionSystem",
-                "settings.json"
-            );
+            _settingsPath = PathHelper.GetSettingsPath(); // Portable: next to executable
             
             LoadSettings();
         }

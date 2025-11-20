@@ -47,11 +47,7 @@ namespace SuspensionPCB_CAN_WPF
         private void LoadApplicationSettings()
         {
             var settings = _settingsManager.Settings;
-            var settingsPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "SuspensionSystem",
-                "settings.json"
-            );
+            var settingsPath = PathHelper.GetSettingsPath(); // Portable: next to executable
 
             SettingsFileLocation.Text = settingsPath;
             SettingsComPort.Text = settings.ComPort;
@@ -185,11 +181,7 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                var settingsPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "SuspensionSystem",
-                    "settings.json"
-                );
+                var settingsPath = PathHelper.GetSettingsPath(); // Portable: next to executable
                 
                 if (File.Exists(settingsPath))
                 {
