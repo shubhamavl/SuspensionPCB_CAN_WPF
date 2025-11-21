@@ -54,11 +54,81 @@ namespace SuspensionPCB_CAN_WPF
 
         public bool IsConnected => _connected;
 
+        private ICanAdapter? _adapter;
+
         public CANService()
         {
             _connected = false;
             _instance = this;
         }
+
+        /// <summary>
+        /// Set the CAN adapter to use
+        /// </summary>
+        public void SetAdapter(ICanAdapter adapter)
+        {
+            if (_adapter != null)
+            {
+                _adapter.MessageReceived -= OnAdapterMessageReceived;
+                _adapter.DataTimeout -= OnAdapterDataTimeout;
+                _adapter.ConnectionStatusChanged -= OnAdapterConnectionStatusChanged;
+                _adapter.Disconnect();
+            }
+
+            _adapter = adapter;
+            _adapter.MessageReceived += OnAdapterMessageReceived;
+            _adapter.DataTimeout += OnAdapterDataTimeout;
+            _adapter.ConnectionStatusChanged += OnAdapterConnectionStatusChanged;
+        }
+
+        /// <summary>
+        /// Connect using adapter configuration
+        /// </summary>
+        public bool Connect(CanAdapterConfig config, out string errorMessage)
+        {
+            ICanAdapter? adapter = null;
+
+            if (config is UsbSerialCanAdapterConfig)
+            {
+                adapter = new UsbSerialCanAdapter();
+            }
+            else if (config is PcanCanAdapterConfig)
+            {
+                adapter = new PcanCanAdapter();
+            }
+            else
+            {
+                errorMessage = "Unknown adapter configuration type";
+                return false;
+            }
+
+            SetAdapter(adapter);
+            bool result = adapter.Connect(config, out errorMessage);
+            _connected = result;
+            return result;
+        }
+
+        #region Adapter Event Handlers
+        private void OnAdapterMessageReceived(CANMessage message)
+        {
+            MessageReceived?.Invoke(message);
+            // Fire specific events for protocol messages
+            if (message.Data != null && message.Data.Length > 0)
+            {
+                FireSpecificEvents(message.ID, message.Data);
+            }
+        }
+
+        private void OnAdapterDataTimeout(object? sender, string timeoutMessage)
+        {
+            DataTimeout?.Invoke(this, timeoutMessage);
+        }
+
+        private void OnAdapterConnectionStatusChanged(object? sender, bool connected)
+        {
+            _connected = connected;
+        }
+        #endregion
 
         public bool Connect(string portName, out string message, int baudRate = 2000000)
         {
@@ -244,7 +314,7 @@ namespace SuspensionPCB_CAN_WPF
 
         public bool SendMessage(uint id, byte[] data)
         {
-            if (!_connected || _serialPort == null) return false;
+            if (!_connected || _adapter == null) return false;
 
             try
             {
@@ -268,19 +338,17 @@ namespace SuspensionPCB_CAN_WPF
                     return false;
                 }
 
-                var frame = CreateFrame(id, data);
+                bool result = _adapter.SendMessage(id, data);
 
-                lock (_sendLock)
+                // Fire event for TX messages so they appear in monitor (adapter may already fire this, but ensure it's fired)
+                if (result)
                 {
-                    _serialPort.Write(frame, 0, frame.Length);
+                    var txMessage = new CANMessage(id, data);
+                    MessageReceived?.Invoke(txMessage);
                 }
 
-                // Fire event for TX messages so they appear in monitor
-                var txMessage = new CANMessage(id, data, "TX");
-                MessageReceived?.Invoke(txMessage);
-
-                ProductionLogger.Instance.LogInfo($"USB-CAN-A: Sent CAN frame ID=0x{id:X3}, Data={BitConverter.ToString(data ?? new byte[0])}", "CANService");
-                return true;
+                ProductionLogger.Instance.LogInfo($"CAN: Sent CAN frame ID=0x{id:X3}, Data={BitConverter.ToString(data ?? new byte[0])}", "CANService");
+                return result;
             }
             catch (Exception ex)
             {

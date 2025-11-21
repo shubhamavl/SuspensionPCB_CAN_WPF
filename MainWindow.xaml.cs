@@ -333,7 +333,217 @@ namespace SuspensionPCB_CAN_WPF
 
         private ushort GetBaudRateValue()
         {
+            try
+            {
+                if (BaudRateCombo?.SelectedItem is ComboBoxItem selectedItem)
+                {
+                    string baudRate = selectedItem.Content?.ToString() ?? "250 kbps";
+                    return baudRate switch
+                    {
+                        "1 Mbps" => 1000,
+                        "500 kbps" => 500,
+                        "250 kbps" => 250,
+                        "125 kbps" => 125,
+                        _ => 250
+                    };
+                }
+            }
+            catch { }
             return 250;
+        }
+
+        private void AdapterTypeCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            try
+            {
+                if (AdapterTypeCombo?.SelectedItem is ComboBoxItem selectedItem)
+                {
+                    string adapterType = selectedItem.Tag?.ToString() ?? "USB";
+                    if (adapterType == "PCAN")
+                    {
+                        if (PcanChannelCombo != null)
+                        {
+                            PcanChannelCombo.Visibility = Visibility.Visible;
+                            RefreshPcanChannels();
+                        }
+                        if (AdapterHintTxt != null)
+                        {
+                            AdapterHintTxt.Text = "PCAN adapter selected. Make sure PCANBasic.dll is available and PCAN driver is installed.";
+                        }
+                        if (PcanStatusTxt != null)
+                        {
+                            PcanStatusTxt.Visibility = Visibility.Visible;
+                            CheckPcanAvailability();
+                        }
+                    }
+                    else
+                    {
+                        if (PcanChannelCombo != null)
+                        {
+                            PcanChannelCombo.Visibility = Visibility.Collapsed;
+                        }
+                        if (AdapterHintTxt != null)
+                        {
+                            AdapterHintTxt.Text = "USB-CAN-A Serial adapter selected. Uses COM port communication.";
+                        }
+                        if (PcanStatusTxt != null)
+                        {
+                            PcanStatusTxt.Visibility = Visibility.Collapsed;
+                        }
+                    }
+                    SaveConfiguration();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Adapter type selection error: {ex.Message}", "UI");
+            }
+            }
+
+        private string GetSelectedAdapterType()
+            {
+                try
+                {
+                if (AdapterTypeCombo?.SelectedItem is ComboBoxItem selectedItem)
+                {
+                    return selectedItem.Content?.ToString() ?? "USB-CAN-A Serial";
+                }
+            }
+            catch { }
+            return "USB-CAN-A Serial";
+        }
+
+        private CanAdapterConfig? GetAdapterConfig()
+        {
+            try
+            {
+                if (AdapterTypeCombo?.SelectedItem is ComboBoxItem selectedItem)
+                {
+                    string adapterType = selectedItem.Tag?.ToString() ?? "USB";
+                    
+                    if (adapterType == "PCAN")
+                    {
+                        ushort channel = PcanCanAdapter.PCAN_USBBUS1;
+                        if (PcanChannelCombo?.SelectedItem is ComboBoxItem channelItem)
+                        {
+                            string channelTag = channelItem.Tag?.ToString() ?? "0x51";
+                            channel = Convert.ToUInt16(channelTag, 16);
+                        }
+
+                        ushort bitrate = GetPcanBitrate();
+                        return new PcanCanAdapterConfig
+                        {
+                            Channel = channel,
+                            PcanBitrate = bitrate,
+                            BitrateKbps = GetBaudRateValue()
+                        };
+                    }
+                    else // USB-CAN-A Serial
+                    {
+                        return new UsbSerialCanAdapterConfig
+                        {
+                            PortName = string.Empty, // Auto-detect
+                            SerialBaudRate = 2000000,
+                            BitrateKbps = GetBaudRateValue()
+                        };
+                    }
+                }
+                }
+                catch (Exception ex)
+                {
+                _logger.LogError($"Get adapter config error: {ex.Message}", "UI");
+            }
+            return null;
+        }
+
+        private ushort GetPcanBitrate()
+        {
+            return GetBaudRateValue() switch
+            {
+                1000 => PcanCanAdapter.PCAN_BAUD_1M,
+                500 => PcanCanAdapter.PCAN_BAUD_500K,
+                250 => PcanCanAdapter.PCAN_BAUD_250K,
+                125 => PcanCanAdapter.PCAN_BAUD_125K,
+                _ => PcanCanAdapter.PCAN_BAUD_500K
+            };
+        }
+
+        private void RefreshPcanChannels()
+        {
+            try
+            {
+                var adapter = new PcanCanAdapter();
+                string[] availableChannels = adapter.GetAvailableOptions();
+                
+                if (PcanChannelCombo != null)
+                {
+                    PcanChannelCombo.Items.Clear();
+                    foreach (string channel in availableChannels)
+                    {
+                        ushort channelValue = channel switch
+                        {
+                            "USB1" => PcanCanAdapter.PCAN_USBBUS1,
+                            "USB2" => PcanCanAdapter.PCAN_USBBUS2,
+                            "USB3" => PcanCanAdapter.PCAN_USBBUS3,
+                            "USB4" => PcanCanAdapter.PCAN_USBBUS4,
+                            "USB5" => PcanCanAdapter.PCAN_USBBUS5,
+                            "USB6" => PcanCanAdapter.PCAN_USBBUS6,
+                            "USB7" => PcanCanAdapter.PCAN_USBBUS7,
+                            "USB8" => PcanCanAdapter.PCAN_USBBUS8,
+                            _ => PcanCanAdapter.PCAN_USBBUS1
+                        };
+                        
+                        var item = new ComboBoxItem
+                        {
+                            Content = channel,
+                            Tag = $"0x{channelValue:X2}"
+                        };
+                        PcanChannelCombo.Items.Add(item);
+                    }
+                    
+                    if (PcanChannelCombo.Items.Count > 0)
+                        PcanChannelCombo.SelectedIndex = 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error refreshing PCAN channels: {ex.Message}", "UI");
+                if (PcanStatusTxt != null)
+                {
+                    PcanStatusTxt.Text = $"PCAN not available: {ex.Message}";
+                    PcanStatusTxt.Visibility = Visibility.Visible;
+                }
+            }
+        }
+
+        private void CheckPcanAvailability()
+        {
+            try
+            {
+                var adapter = new PcanCanAdapter();
+                string[] channels = adapter.GetAvailableOptions();
+                if (PcanStatusTxt != null)
+                {
+                    if (channels.Length > 0)
+                    {
+                        PcanStatusTxt.Text = $"✓ PCAN available ({channels.Length} channel(s) detected)";
+                        PcanStatusTxt.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
+                    }
+                    else
+                    {
+                        PcanStatusTxt.Text = "⚠ PCAN driver not detected. Please install PEAK PCAN driver from PEAK-System website.";
+                        PcanStatusTxt.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Orange);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (PcanStatusTxt != null)
+                {
+                    PcanStatusTxt.Text = $"✗ PCAN error: {ex.Message}";
+                    PcanStatusTxt.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+                }
+            }
         }
 
         private void ConnectionToggle_Click(object sender, RoutedEventArgs e)
@@ -348,23 +558,42 @@ namespace SuspensionPCB_CAN_WPF
 
                 if (ConnectionToggle != null) ConnectionToggle.IsEnabled = false;
 
-                string comPort = "COM3"; // Auto-detected by CANService
-                
-                _settingsManager.SetComPort(comPort);
+                // Check if already connected - toggle to disconnect
+                if (_canService.IsConnected)
+                {
+                    _canService.Disconnect();
+                    UpdateConnectionStatus(false);
+                    ShowStatusBanner("Disconnected", false);
+                    ShowInlineStatus("Disconnected from CAN adapter", false);
+                    if (ConnectionToggle != null) ConnectionToggle.IsChecked = false;
+                    return;
+                }
 
-                bool connected = _canService.Connect(0, GetBaudRateValue());
+                // Get adapter configuration
+                CanAdapterConfig? config = GetAdapterConfig();
+                if (config == null)
+                {
+                    ShowInlineStatus("Invalid adapter configuration.", true);
+                    return;
+                }
+
+                bool connected = _canService.Connect(config, out string errorMessage);
                 if (connected)
                 {
                     UpdateConnectionStatus(true);
                     ResetStatistics();
+                    string adapterName = GetSelectedAdapterType();
                     ShowStatusBanner("✓ Connected Successfully", true);
-                    ShowInlineStatus("USB-CAN Connected Successfully. Protocol: CAN v0.7", false);
+                    ShowInlineStatus($"{adapterName} Connected Successfully. Protocol: CAN v0.7", false);
+                    if (ConnectionToggle != null) ConnectionToggle.IsChecked = true;
+                    SaveConfiguration(); // Save adapter settings
                 }
                 else
                 {
                     UpdateConnectionStatus(false);
                     ShowStatusBanner("✗ Connection Failed", false);
-                    ShowInlineStatus("Connection Failed. Check USB-CAN device.", true);
+                    ShowInlineStatus($"Connection Failed: {errorMessage}", true);
+                    if (ConnectionToggle != null) ConnectionToggle.IsChecked = false;
                 }
             }
             catch (Exception ex)
@@ -372,6 +601,7 @@ namespace SuspensionPCB_CAN_WPF
                 UpdateConnectionStatus(false);
                 ShowStatusBanner($"✗ Connection Error: {ex.Message}", false);
                 ShowInlineStatus($"Connection Error: {ex.Message}", true);
+                if (ConnectionToggle != null) ConnectionToggle.IsChecked = false;
             }
             finally
             {
@@ -433,7 +663,7 @@ namespace SuspensionPCB_CAN_WPF
                 _logger.LogError($"CAN message received error: {ex.Message}", "CAN");
             }
         }
-        
+
         private void ProcessProtocolMessage(CANMessage message)
         {
             switch (message.ID)
@@ -923,6 +1153,9 @@ namespace SuspensionPCB_CAN_WPF
             
             _logger.LogInfo($"Settings loaded: COM={_settingsManager.Settings.ComPort}, Rate={GetRateText(_currentTransmissionRate)}", "Settings");
             
+            // Load adapter configuration
+            LoadConfiguration();
+            
             // Load existing calibrations and tare settings
             LoadCalibrations();
             _tareManager.LoadFromFile();
@@ -953,9 +1186,9 @@ namespace SuspensionPCB_CAN_WPF
             // UI update timer at 50ms intervals (20Hz) for better performance
             _uiUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             _uiUpdateTimer.Tick += (s, e) =>
+        {
+            try
             {
-                try
-                {
                     UpdateUI();
                     ProcessPendingMessages();
                 }
@@ -1034,9 +1267,9 @@ namespace SuspensionPCB_CAN_WPF
         }
 
         private void ShowStatusBanner(string message, bool isSuccess)
-        {
-            try
             {
+                try
+                {
                 if (StatusBanner != null && StatusBannerText != null)
                 {
                     StatusBannerText.Text = message;
@@ -1066,9 +1299,9 @@ namespace SuspensionPCB_CAN_WPF
                     };
                     timer.Start();
                 }
-            }
-            catch (Exception ex)
-            {
+                }
+                catch (Exception ex)
+                {
                 _logger.LogError($"Status banner error: {ex.Message}", "UI");
             }
         }
@@ -1167,9 +1400,9 @@ namespace SuspensionPCB_CAN_WPF
                     StopLoggingBtn.IsEnabled = true;
                     LoggingStatusTxt.Text = $"Logging to: {_dataLogger.GetLogFilePath()}";
                     LoggingStatusTxt.Foreground = System.Windows.Media.Brushes.Green;
-                }
-                else
-                {
+                    }
+                    else
+                    {
                     MessageBox.Show("Failed to start data logging.", "Logging Error", 
                                   MessageBoxButton.OK, MessageBoxImage.Error);
                 }
@@ -1197,7 +1430,7 @@ namespace SuspensionPCB_CAN_WPF
                               MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-        
+
         private void ExportLog_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -1404,11 +1637,11 @@ namespace SuspensionPCB_CAN_WPF
                 bool success = _canService.RequestSystemStatus();
                 FlashTxIndicator();
                 
-                if (success)
-                {
+                    if (success)
+                    {
                     _logger.LogInfo("Requested system status from STM32", "Status");
                     ShowInlineStatus("✓ Status request sent to STM32");
-                }
+                    }
                 else
                 {
                     _logger.LogError("Failed to send status request", "Status");
@@ -1795,9 +2028,9 @@ namespace SuspensionPCB_CAN_WPF
                         UpdateAdcModeIndicators("ADS1115");
                         _logger.LogInfo("Switched to ADS1115 mode", "ADC");
                     }
-                }
-                else
-                {
+                        }
+                        else
+                        {
                     // Switch to Internal ADC
                     if (_canService != null)
                     {
@@ -1900,6 +2133,110 @@ namespace SuspensionPCB_CAN_WPF
             catch (Exception ex)
             {
                 _logger.LogError($"Header rate selection error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void LoadConfiguration()
+        {
+            try
+            {
+                string configPath = System.IO.Path.Combine(Environment.CurrentDirectory, "Suspension_Config.json");
+                if (File.Exists(configPath))
+                {
+                    string jsonString = File.ReadAllText(configPath);
+                    var config = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(jsonString);
+                    if (config != null)
+                    {
+                        // Load adapter settings
+                        if (config.ContainsKey("AdapterType") && AdapterTypeCombo != null)
+                        {
+                            string adapterType = config["AdapterType"].ToString() ?? "USB";
+                            for (int i = 0; i < AdapterTypeCombo.Items.Count; i++)
+                            {
+                                if (AdapterTypeCombo.Items[i] is ComboBoxItem item && item.Tag?.ToString() == adapterType)
+                                {
+                                    AdapterTypeCombo.SelectedIndex = i;
+                                    // Trigger selection changed to update UI
+                                    AdapterTypeCombo_SelectionChanged(AdapterTypeCombo, new System.Windows.Controls.SelectionChangedEventArgs(System.Windows.Controls.Primitives.Selector.SelectionChangedEvent, Array.Empty<object>(), Array.Empty<object>()));
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (config.ContainsKey("PcanChannel") && PcanChannelCombo != null)
+                        {
+                            string channel = config["PcanChannel"].ToString() ?? "USB1";
+                            for (int i = 0; i < PcanChannelCombo.Items.Count; i++)
+                            {
+                                if (PcanChannelCombo.Items[i] is ComboBoxItem item && item.Content?.ToString() == channel)
+                                {
+                                    PcanChannelCombo.SelectedIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (config.ContainsKey("BaudRate") && BaudRateCombo != null)
+                        {
+                            string baudRate = config["BaudRate"].ToString() ?? "500 kbps";
+                            for (int i = 0; i < BaudRateCombo.Items.Count; i++)
+                            {
+                                if (BaudRateCombo.Items[i] is ComboBoxItem item && item.Content?.ToString() == baudRate)
+                                {
+                                    BaudRateCombo.SelectedIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Could not load adapter configuration: {ex.Message}", "Settings");
+            }
+        }
+
+        private void SaveConfiguration()
+        {
+            try
+            {
+                string configPath = System.IO.Path.Combine(Environment.CurrentDirectory, "Suspension_Config.json");
+                var config = new Dictionary<string, object>();
+                
+                // Load existing config if it exists
+                if (File.Exists(configPath))
+                {
+                    string jsonString = File.ReadAllText(configPath);
+                    var existingConfig = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(jsonString);
+                    if (existingConfig != null)
+                    {
+                        config = existingConfig;
+                    }
+                }
+                
+                // Save adapter settings
+                if (AdapterTypeCombo?.SelectedItem is ComboBoxItem adapterItem)
+                {
+                    config["AdapterType"] = adapterItem.Tag?.ToString() ?? "USB";
+                }
+                
+                if (PcanChannelCombo?.SelectedItem is ComboBoxItem channelItem)
+                {
+                    config["PcanChannel"] = channelItem.Content?.ToString() ?? "USB1";
+                }
+                
+                if (BaudRateCombo?.SelectedItem is ComboBoxItem baudItem)
+                {
+                    config["BaudRate"] = baudItem.Content?.ToString() ?? "500 kbps";
+                }
+                
+                string jsonStringOut = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(configPath, jsonStringOut);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Could not save adapter configuration: {ex.Message}", "Settings");
             }
         }
 

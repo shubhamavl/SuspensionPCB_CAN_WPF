@@ -30,11 +30,14 @@ namespace SuspensionPCB_CAN_WPF
                     else
                     {
                         // Fallback: Get the directory of the executable
-                        string? exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                        // Note: Assembly.Location returns empty string in single-file apps, so we use Process.MainModule first
+                        string? exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
                         if (string.IsNullOrEmpty(exePath))
                         {
-                            // Fallback for single-file deployments
-                            exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+#pragma warning disable IL3000 // Single-file apps: Assembly.Location returns empty string
+                            // Last resort fallback (will be empty in single-file apps)
+                            exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+#pragma warning restore IL3000
                         }
                         
                         if (!string.IsNullOrEmpty(exePath))

@@ -153,6 +153,40 @@
                 Background="#FFF0F0F0" BorderBrush="#FFCCCCCC" BorderThickness="1" 
                 Padding="15" Margin="15,0">
             <StackPanel>
+                <!-- CAN Adapter Selection -->
+                <GroupBox Header="CAN Adapter Configuration" Margin="0,0,0,10">
+                    <StackPanel Margin="10">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Adapter Type:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="AdapterTypeCombo" Width="180" Margin="0,0,10,0" SelectionChanged="AdapterTypeCombo_SelectionChanged">
+                                <ComboBoxItem Content="USB-CAN-A Serial" Tag="USB"/>
+                                <ComboBoxItem Content="PCAN" Tag="PCAN"/>
+                            </ComboBox>
+                            <ComboBox x:Name="PcanChannelCombo" Width="100" Margin="0,0,10,0" Visibility="Collapsed">
+                                <ComboBoxItem Content="USB1" Tag="0x51"/>
+                                <ComboBoxItem Content="USB2" Tag="0x52"/>
+                                <ComboBoxItem Content="USB3" Tag="0x53"/>
+                                <ComboBoxItem Content="USB4" Tag="0x54"/>
+                                <ComboBoxItem Content="USB5" Tag="0x55"/>
+                                <ComboBoxItem Content="USB6" Tag="0x56"/>
+                                <ComboBoxItem Content="USB7" Tag="0x57"/>
+                                <ComboBoxItem Content="USB8" Tag="0x58"/>
+                            </ComboBox>
+                            <ComboBox x:Name="BaudRateCombo" Width="120" SelectedIndex="1">
+                                <ComboBoxItem Content="125 kbps"/>
+                                <ComboBoxItem Content="250 kbps"/>
+                                <ComboBoxItem Content="500 kbps"/>
+                                <ComboBoxItem Content="1 Mbps"/>
+                            </ComboBox>
+                        </StackPanel>
+                        <TextBlock x:Name="AdapterHintTxt" Text="Select CAN adapter type. USB-CAN-A Serial uses COM port, PCAN uses PCANBasic.dll" 
+                                   FontSize="10" Foreground="#FF95A5A6" Margin="0,0,0,10"/>
+                        <TextBlock x:Name="PcanStatusTxt" Text="" FontSize="10" Foreground="#FFE74C3C" Visibility="Collapsed"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <Separator Margin="0,0,0,10"/>
+
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Save Directory:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
                     <TextBox x:Name="SaveDirectoryTxt" Width="380" IsReadOnly="True" Margin="0,0,10,0"/>
