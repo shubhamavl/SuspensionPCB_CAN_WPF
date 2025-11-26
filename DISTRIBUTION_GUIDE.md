@@ -4,7 +4,7 @@ This guide explains how to create a distributable package and how end users can 
 
 ## 📦 For Developers: Creating the Distribution Package
 
-### Step 1: Build the Portable Version
+### Step 1: Build the Portable Version (with WiFi Auto-Update Support)
 
 **Option A: Using the Build Script (Easiest)**
 1. Open Command Prompt or PowerShell in the project folder
@@ -48,6 +48,8 @@ Before distributing:
 2. Run `SuspensionPCB_CAN_WPF.exe`
 3. Verify it works correctly
 4. Check that it creates `Data/` and `Logs/` folders
+5. Confirm that `SuspensionPCB_Updater.exe` exists next to `SuspensionPCB_CAN_WPF.exe`
+6. From inside the app, click **Check for Updates** in the header and verify that the update check completes without errors (it will only offer an update if a newer GitHub Release exists)
 
 ### Step 5: Distribute
 

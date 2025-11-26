@@ -4,15 +4,16 @@
 
 ### Step 1: Build the Application (5 minutes)
 
-**Easiest way:**
+**Easiest way (includes WiFi auto-update helper):**
 1. Open Command Prompt in the project folder
 2. Type: `build-portable.bat` and press Enter
 3. Wait for "Build successful!" message
 
 **What this does:**
 - Creates a self-contained executable (includes .NET runtime)
+- Builds the external `SuspensionPCB_Updater.exe` helper and copies it next to the main EXE
 - No installation needed on end user's computer
-- All files ready for distribution
+- All files ready for distribution and auto-update
 
 ### Step 2: Create ZIP Package (2 minutes)
 

@@ -5,6 +5,8 @@ VisualStudioVersion = 17.14.36327.8 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuspensionPCB_CAN_WPF", "SuspensionPCB_CAN_WPF.csproj", "{4F036A03-EE59-B84B-6296-52A700196A02}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuspensionPCB_Updater", "SuspensionPCB_Updater\\SuspensionPCB_Updater.csproj", "{D6F0F6E8-1C7A-4B92-9F21-6E0C4D70F5B1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{4F036A03-EE59-B84B-6296-52A700196A02}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4F036A03-EE59-B84B-6296-52A700196A02}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4F036A03-EE59-B84B-6296-52A700196A02}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6F0F6E8-1C7A-4B92-9F21-6E0C4D70F5B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6F0F6E8-1C7A-4B92-9F21-6E0C4D70F5B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6F0F6E8-1C7A-4B92-9F21-6E0C4D70F5B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6F0F6E8-1C7A-4B92-9F21-6E0C4D70F5B1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

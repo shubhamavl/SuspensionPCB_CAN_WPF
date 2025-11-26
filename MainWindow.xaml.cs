@@ -50,6 +50,9 @@ namespace SuspensionPCB_CAN_WPF
         // Production logging
         private ProductionLogger _logger = ProductionLogger.Instance;
 
+        // Update service for WiFi-based auto-updates
+        private readonly UpdateService _updateService = new UpdateService();
+
         // Settings and performance management
         private SettingsManager _settingsManager = SettingsManager.Instance;
         private WeightProcessor _weightProcessor = new WeightProcessor();
@@ -1223,6 +1226,133 @@ namespace SuspensionPCB_CAN_WPF
 
             // Initialize streaming indicators
             UpdateStreamingIndicators();
+
+            // Background check for updates (non-blocking, best-effort)
+            _ = CheckForUpdatesInBackground();
+        }
+
+        private async Task CheckForUpdatesInBackground()
+        {
+            try
+            {
+                var info = await _updateService.CheckForUpdateAsync();
+                if (info == null || !info.IsUpdateAvailable)
+                    return;
+
+                // Non-intrusive notification in status bar only
+                ShowInlineStatus($"New version available: {info.LatestVersion}. Use 'Check for Updates' to install.");
+                _logger.LogInfo($"Update available. Current={info.CurrentVersion}, Latest={info.LatestVersion}", "Update");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"Background update check failed: {ex.Message}", "Update");
+            }
+        }
+
+        private async void CheckUpdatesBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                CheckUpdatesBtn.IsEnabled = false;
+                ShowInlineStatus("Checking for updates...");
+
+                var info = await _updateService.CheckForUpdateAsync();
+                if (info == null)
+                {
+                    MessageBox.Show("Could not check for updates. Please check your internet connection or try again later.",
+                        "Update Check Failed", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                if (!info.IsUpdateAvailable)
+                {
+                    MessageBox.Show(
+                        $"You are already running the latest version.\n\nCurrent version: {info.CurrentVersion}",
+                        "No Updates Available",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+
+                string message =
+                    $"A new version is available.\n\n" +
+                    $"Current version: {info.CurrentVersion}\n" +
+                    $"Latest version:  {info.LatestVersion}\n\n" +
+                    $"Do you want to download and install it now?";
+
+                var result = MessageBox.Show(message, "Update Available", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (result != MessageBoxResult.Yes)
+                {
+                    _logger.LogInfo("User declined update installation.", "Update");
+                    return;
+                }
+
+                var progress = new Progress<double>(p =>
+                {
+                    ShowInlineStatus($"Downloading update... {p:0}%");
+                });
+
+                string? packagePath = await _updateService.DownloadUpdateAsync(info, progress);
+                if (string.IsNullOrWhiteSpace(packagePath) || !File.Exists(packagePath))
+                {
+                    MessageBox.Show("Failed to download update package.", "Update Error",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                string updaterPath = PathHelper.GetUpdaterExecutablePath();
+                if (!File.Exists(updaterPath))
+                {
+                    MessageBox.Show(
+                        "Updater tool not found next to the application.\n\n" +
+                        "Please download the latest full package from GitHub Releases and update manually.",
+                        "Updater Missing",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Start external updater and exit this process
+                try
+                {
+                    var startInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = updaterPath,
+                        WorkingDirectory = PathHelper.ApplicationDirectory,
+                        UseShellExecute = true,
+                        ArgumentList =
+                        {
+                            PathHelper.ApplicationDirectory,
+                            packagePath,
+                            System.IO.Path.GetFileName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName
+                                                       ?? "SuspensionPCB_CAN_WPF.exe")
+                        }
+                    };
+
+                    System.Diagnostics.Process.Start(startInfo);
+                    Application.Current.Shutdown();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Failed to launch updater: {ex.Message}", "Update");
+                    MessageBox.Show(
+                        $"Failed to launch updater.\n\nYou can still update manually by extracting the downloaded package:\n{packagePath}",
+                        "Update Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Update workflow error: {ex.Message}", "Update");
+                MessageBox.Show($"Update failed: {ex.Message}", "Update Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (CheckUpdatesBtn != null)
+                    CheckUpdatesBtn.IsEnabled = true;
+            }
         }
 
         private void BrowseSaveDirBtn_Click(object sender, RoutedEventArgs e)

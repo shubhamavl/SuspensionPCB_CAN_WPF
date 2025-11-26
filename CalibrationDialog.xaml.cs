@@ -18,6 +18,8 @@ namespace SuspensionPCB_CAN_WPF
         private bool _point2Captured = false;
         private CANService? _canService;
         private ProductionLogger _logger = ProductionLogger.Instance;
+        private DateTime _lastRawLogTime = DateTime.MinValue;
+        private int _rawSamplesSinceLog = 0;
         
         // Properties for data binding
         private string _side = "";
@@ -107,7 +109,15 @@ namespace SuspensionPCB_CAN_WPF
                 if ((Side == "Left" && e.Side == 0) || (Side == "Right" && e.Side == 1))
                 {
                     _currentRawADC = e.RawADCSum;
-                    _logger.LogInfo($"Raw ADC updated for {Side} side: {_currentRawADC}", "CalibrationDialog");
+                    _rawSamplesSinceLog++;
+
+                    var now = DateTime.Now;
+                    if (_lastRawLogTime == DateTime.MinValue || (now - _lastRawLogTime).TotalSeconds >= 1)
+                    {
+                        _logger.LogInfo($"Raw ADC update ({Side}): {_currentRawADC} (samples since last log: {_rawSamplesSinceLog})", "CalibrationDialog");
+                        _rawSamplesSinceLog = 0;
+                        _lastRawLogTime = now;
+                    }
                 }
             }
             catch (Exception ex)

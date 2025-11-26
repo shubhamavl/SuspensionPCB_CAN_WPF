@@ -95,6 +95,34 @@ namespace SuspensionPCB_CAN_WPF
         {
             return Path.Combine(ApplicationDirectory, "settings.json");
         }
+
+        /// <summary>
+        /// Gets the path to the update working directory (portable, next to executable)
+        /// </summary>
+        public static string GetUpdateDirectory()
+        {
+            string updateDir = Path.Combine(ApplicationDirectory, "Update");
+            if (!Directory.Exists(updateDir))
+            {
+                try
+                {
+                    Directory.CreateDirectory(updateDir);
+                }
+                catch
+                {
+                    // Ignore directory creation failures here; caller will handle IO errors.
+                }
+            }
+            return updateDir;
+        }
+
+        /// <summary>
+        /// Gets the expected path to the external updater executable that performs file replacement.
+        /// </summary>
+        public static string GetUpdaterExecutablePath()
+        {
+            return Path.Combine(ApplicationDirectory, "SuspensionPCB_Updater.exe");
+        }
         
         /// <summary>
         /// Gets the path to a calibration file (portable, in Data directory)
