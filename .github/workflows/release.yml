@@ -61,7 +61,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore SuspensionPCB_CAN_WPF.sln
 
       - name: Derive version from tag
         id: version
@@ -73,7 +73,7 @@ jobs:
 
       - name: Publish main WPF application (portable, win-x64)
         run: >
-          dotnet publish SuspensionPCB_CAN_WPF/SuspensionPCB_CAN_WPF.csproj
+          dotnet publish SuspensionPCB_CAN_WPF.csproj
           -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
@@ -98,14 +98,14 @@ jobs:
       - name: Copy updater into app publish folder
         shell: pwsh
         run: |
-          $APP_PUBLISH = "SuspensionPCB_CAN_WPF/bin/Release/net8.0-windows/win-x64/publish"
+          $APP_PUBLISH = "bin/Release/net8.0-windows/win-x64/publish"
           $UPDATER_PUBLISH = "SuspensionPCB_Updater/bin/Release/net8.0-windows/win-x64/publish"
           Copy-Item "$UPDATER_PUBLISH/SuspensionPCB_Updater.exe" "$APP_PUBLISH/SuspensionPCB_Updater.exe"
 
       - name: Create portable ZIP package
         shell: pwsh
         run: |
-          $APP_PUBLISH = "SuspensionPCB_CAN_WPF/bin/Release/net8.0-windows/win-x64/publish"
+          $APP_PUBLISH = "bin/Release/net8.0-windows/win-x64/publish"
           $ZIP_NAME = "SuspensionPCB_CAN_WPF_Portable_${{ github.ref_name }}.zip"
           Compress-Archive -Path "$APP_PUBLISH/*" -DestinationPath $ZIP_NAME -Force
 
