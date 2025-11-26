@@ -1,0 +1,150 @@
+name: Build and Release Portable App
+
+on:
+  push:
+    tags:
+      - 'v*'   # e.g. v1.0.0, v1.1.3
+
+permissions:
+  contents: write   # needed to create releases and upload assets
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    env:
+      DOTNET_VERSION: '8.0.x'
+      # VERSION will be derived from the Git tag name (e.g. v1.2.3 -> 1.2.3)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # fetch full history to check branch
+
+      - name: Verify tag is on master branch
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          echo "Checking if tag $TAG_NAME is on master branch..."
+          
+          # Get the commit SHA that the tag points to
+          TAG_COMMIT=$(git rev-parse "$TAG_NAME"^{commit})
+          
+          # Check if this commit is on the master branch
+          if git branch -r --contains "$TAG_COMMIT" | grep -q "origin/master"; then
+            echo "✓ Tag $TAG_NAME is on master branch. Proceeding with release."
+          elif git branch -r --contains "$TAG_COMMIT" | grep -q "origin/main"; then
+            echo "✓ Tag $TAG_NAME is on main branch. Proceeding with release."
+          else
+            echo "❌ ERROR: Tag $TAG_NAME is NOT on master/main branch!"
+            echo ""
+            echo "Release tags can only be created on the master/main branch."
+            echo "This prevents accidental releases from feature branches."
+            echo ""
+            echo "To fix this:"
+            echo "  1. Make sure your changes are merged to master/main"
+            echo "  2. Checkout master/main: git checkout master"
+            echo "  3. Pull latest: git pull origin master"
+            echo "  4. Create tag on master: git tag $TAG_NAME"
+            echo "  5. Push tag: git push origin $TAG_NAME"
+            echo ""
+            echo "Branches containing this tag:"
+            git branch -r --contains "$TAG_COMMIT" || echo "  (none found)"
+            exit 1
+          fi
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          RAW_TAG="${GITHUB_REF_NAME}"          # e.g. v1.2.3
+          VERSION="${RAW_TAG#v}"                # strip leading 'v' -> 1.2.3
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Publish main WPF application (portable, win-x64)
+        run: >
+          dotnet publish SuspensionPCB_CAN_WPF/SuspensionPCB_CAN_WPF.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:PublishReadyToRun=true
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:AssemblyVersion=${{ steps.version.outputs.version }}.0
+          -p:FileVersion=${{ steps.version.outputs.version }}.0
+          -p:InformationalVersion=${{ steps.version.outputs.version }}
+
+      - name: Publish updater helper (portable, win-x64)
+        run: >
+          dotnet publish SuspensionPCB_Updater/SuspensionPCB_Updater.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:PublishReadyToRun=true
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:AssemblyVersion=${{ steps.version.outputs.version }}.0
+          -p:FileVersion=${{ steps.version.outputs.version }}.0
+          -p:InformationalVersion=${{ steps.version.outputs.version }}
+
+      - name: Copy updater into app publish folder
+        run: |
+          APP_PUBLISH="SuspensionPCB_CAN_WPF/bin/Release/net8.0-windows/win-x64/publish"
+          UPDATER_PUBLISH="SuspensionPCB_Updater/bin/Release/net8.0-windows/win-x64/publish"
+          cp "$UPDATER_PUBLISH/SuspensionPCB_Updater.exe" "$APP_PUBLISH/SuspensionPCB_Updater.exe"
+
+      - name: Create portable ZIP package
+        run: |
+          APP_PUBLISH="SuspensionPCB_CAN_WPF/bin/Release/net8.0-windows/win-x64/publish"
+          ZIP_NAME="SuspensionPCB_CAN_WPF_Portable_${GITHUB_REF_NAME}.zip"
+          cd "$APP_PUBLISH"
+          zip -r "../../../$ZIP_NAME" .
+
+      - name: Generate SHA-256 hash for security verification
+        id: hash
+        run: |
+          ZIP_NAME="SuspensionPCB_CAN_WPF_Portable_${GITHUB_REF_NAME}.zip"
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            SHA256=$(shasum -a 256 "$ZIP_NAME" | cut -d' ' -f1)
+          else
+            # Linux
+            SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
+          fi
+          echo "hash=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "SHA-256: $SHA256"
+          # Also save to file for release notes
+          echo "$SHA256" > "${ZIP_NAME}.sha256"
+          echo "Hash saved to ${ZIP_NAME}.sha256"
+
+      - name: Create GitHub Release and upload assets (ZIP + SHA-256)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## Security Verification
+            
+            **SHA-256 Hash:** `${{ steps.hash.outputs.hash }}`
+            
+            To verify the download integrity, compare the SHA-256 hash of your downloaded file with the hash above.
+            
+            **Verification command (Windows PowerShell):**
+            ```powershell
+            Get-FileHash -Path "SuspensionPCB_CAN_WPF_Portable_${{ github.ref_name }}.zip" -Algorithm SHA256
+            ```
+            
+            **Verification command (Linux/Mac):**
+            ```bash
+            sha256sum SuspensionPCB_CAN_WPF_Portable_${{ github.ref_name }}.zip
+            ```
+          files: |
+            SuspensionPCB_CAN_WPF_Portable_${{ github.ref_name }}.zip
+            SuspensionPCB_CAN_WPF_Portable_${{ github.ref_name }}.zip.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
