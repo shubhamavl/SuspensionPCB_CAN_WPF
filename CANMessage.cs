@@ -11,6 +11,7 @@ namespace SuspensionPCB_CAN_WPF
         public uint ID { get; set; }
         public byte[] Data { get; set; }
         public DateTime Timestamp { get; set; }
+        public string Direction { get; set; } = "RX";
         public int Length => Data?.Length ?? 0;
 
         public CANMessage()
@@ -18,20 +19,23 @@ namespace SuspensionPCB_CAN_WPF
             ID = 0;
             Data = new byte[0];
             Timestamp = DateTime.Now;
+            Direction = "RX";
         }
 
-        public CANMessage(uint id, byte[] data)
+        public CANMessage(uint id, byte[] data, string direction = "RX")
         {
             ID = id;
             Data = data ?? new byte[0];
             Timestamp = DateTime.Now;
+            Direction = direction;
         }
 
-        public CANMessage(uint id, byte[] data, DateTime timestamp)
+        public CANMessage(uint id, byte[] data, DateTime timestamp, string direction = "RX")
         {
             ID = id;
             Data = data ?? new byte[0];
             Timestamp = timestamp;
+            Direction = direction;
         }
 
         // Helper method to get hex string representation of data
@@ -47,6 +51,24 @@ namespace SuspensionPCB_CAN_WPF
         public string GetIDHexString()
         {
             return $"0x{ID:X3}";
+        }
+
+        // Get protocol description for semantic IDs
+        public string GetProtocolDescription()
+        {
+            return ID switch
+            {
+                0x200 => "LEFT_RAW_DATA",
+                0x201 => "RIGHT_RAW_DATA",
+                0x040 => "START_LEFT_STREAM",
+                0x041 => "START_RIGHT_STREAM",
+                0x044 => "STOP_ALL_STREAMS",
+                0x300 => "SYSTEM_STATUS",
+                0x032 => "STATUS_REQUEST",
+                0x030 => "MODE_INTERNAL",
+                0x031 => "MODE_ADS1115",
+                _ => $"UNKNOWN_0x{ID:X3}"
+            };
         }
 
         // Create a copy of the message
@@ -79,18 +101,7 @@ namespace SuspensionPCB_CAN_WPF
 
         public string ID => $"0x{_message.ID:X3}";
 
-        public string Direction
-        {
-            get
-            {
-                if (_rxMessageIds.Contains(_message.ID))
-                    return "RX";
-                else if (_txMessageIds.Contains(_message.ID))
-                    return "TX";
-                else
-                    return "??";
-            }
-        }
+        public string Direction => _message.Direction;
 
         public string Data
         {
@@ -105,6 +116,20 @@ namespace SuspensionPCB_CAN_WPF
         }
 
         public string Length => _message.Length.ToString();
+
+        public string MessageType
+        {
+            get
+            {
+                return _message.ID switch
+                {
+                    0x200 or 0x201 => "Raw Data",
+                    0x040 or 0x041 or 0x044 => "Stream Control",
+                    0x300 or 0x032 or 0x030 or 0x031 => "System",
+                    _ => "Unknown"
+                };
+            }
+        }
 
         public string Decoded
         {
@@ -121,237 +146,78 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        // Decode message based on CAN Protocol Specification v0.5
+        // Decode message based on CAN Protocol Specification v0.7
         private string DecodeMessage()
         {
+            // Handle empty messages properly (v0.7 protocol has empty messages)
             if (_message.Data == null || _message.Data.Length == 0)
-                return "No Data";
+            {
+                // For commands that expect empty data, show decoded name
+                switch (_message.ID)
+                {
+                    case 0x044: return "Stop All Streams (empty)";
+                    case 0x030: return "Switch to Internal ADC (empty)";
+                    case 0x031: return "Switch to ADS1115 (empty)";
+                    default: return "Empty Message";
+                }
+            }
 
             switch (_message.ID)
             {
-                case 0x000:
-                    return _message.Data[0] == 0x01 ? "Emergency Stop Command" : "Emergency Command";
-
-                case 0x001:
-                    return _message.Data[0] == 0x02 ? "System Shutdown Command" : "System Command";
-
-                case 0x030:
-                    return DecodeDataRequest("Suspension Weight Data", _message.Data);
-
-                case 0x031:
-                    return DecodeDataRequest("Axle Weight Data", _message.Data);
-
-                case 0x020:
-                    return DecodeVariableCalibrationStart(_message.Data);
-
-                case 0x022:
-                    return DecodeWeightCalibrationPoint(_message.Data);
-
-                case 0x023:
-                    return DecodePercentageCalibrationPoint(_message.Data);
-
-                case 0x024:
-                    return DecodeCompleteCalibration(_message.Data);
-
-                case 0x025:
-                    return "Save Calibration to Flash";
-
-                case 0x026:
-                    return "Load Calibration from Flash";
-
-                case 0x027:
-                    return DecodeLoadCellRating(_message.Data);
-
                 case 0x200:
-                    return DecodeSuspensionWeightData(_message.Data);
+                    return DecodeRawADCData("Left Side", _message.Data);
 
                 case 0x201:
-                    return DecodeAxleWeightData(_message.Data);
+                    return DecodeRawADCData("Right Side", _message.Data);
 
-                case 0x400:
-                    return DecodeVariableCalibrationData(_message.Data);
+                case 0x040:
+                    return DecodeStreamControl("Start Left Stream", _message.Data);
 
-                case 0x401:
-                    return DecodeCalibrationQuality(_message.Data);
+                case 0x041:
+                    return DecodeStreamControl("Start Right Stream", _message.Data);
 
-                case 0x402:
-                    return DecodeErrorResponse(_message.Data);
+                case 0x044:
+                    return "Stop All Streams";
 
-                case 0x500:
+                case 0x300:
                     return DecodeSystemStatus(_message.Data);
+
+                case 0x032:
+                    return "Request System Status";
+
+                case 0x030:
+                    return "Switch to Internal ADC Mode";
+
+                case 0x031:
+                    return "Switch to ADS1115 Mode";
 
                 default:
                     return $"Unknown Message ID: 0x{_message.ID:X3}";
             }
         }
 
-        private string DecodeDataRequest(string dataType, byte[] data)
+        private string DecodeRawADCData(string side, byte[] data)
         {
-            if (data.Length < 2) return $"Request {dataType} (Invalid Data)";
+            if (data.Length < 2) return $"{side} Raw ADC Data (Invalid)";
 
-            string action = data[0] == 0x01 ? "Start" : "Stop";
-            string rate = data[1] switch
+            ushort rawADC = (ushort)(data[0] | (data[1] << 8));
+            return $"{side} Raw ADC: {rawADC}";
+        }
+
+        private string DecodeStreamControl(string action, byte[] data)
+        {
+            if (data.Length < 1) return $"{action} (Invalid Data)";
+
+            string rate = data[0] switch
             {
                 0x01 => "100Hz",
-                0x02 => "500Hz",
-                0x03 => "1024Hz",
-                0x04 => "2048Hz",
-                _ => $"Unknown Rate (0x{data[1]:X2})"
+                0x02 => "500Hz", 
+                0x03 => "1kHz",
+                0x05 => "1Hz",
+                _ => $"Unknown Rate (0x{data[0]:X2})"
             };
 
-            return $"Request {dataType}: {action} at {rate}";
-        }
-
-        private string DecodeVariableCalibrationStart(byte[] data)
-        {
-            if (data.Length < 7) return "Start Variable Calibration (Invalid Data)";
-
-            byte pointCount = data[1];
-            string mode = data[2] == 0x01 ? "Weight-based" : data[2] == 0x02 ? "Percentage-based" : "Unknown";
-            byte polyOrder = data[3];
-            string autoSpacing = data[4] == 0x01 ? "Auto" : "Manual";
-            ushort maxWeight = (ushort)(data[5] | (data[6] << 8));
-
-            return $"Start Variable Calibration: {pointCount} points, {mode}, Order {polyOrder}, {autoSpacing} spacing, Max {maxWeight / 10.0:F1}kg";
-        }
-
-        private string DecodeWeightCalibrationPoint(byte[] data)
-        {
-            if (data.Length < 4) return "Set Weight Point (Invalid Data)";
-
-            byte pointIndex = data[1];
-            ushort weight = (ushort)(data[2] | (data[3] << 8));
-
-            return $"Set Weight Point {pointIndex}: {weight / 10.0:F1} kg";
-        }
-
-        private string DecodePercentageCalibrationPoint(byte[] data)
-        {
-            if (data.Length < 3) return "Set Percentage Point (Invalid Data)";
-
-            byte pointIndex = data[1];
-            byte percentage = data[2];
-
-            return $"Set Percentage Point {pointIndex}: {percentage}%";
-        }
-
-        private string DecodeCompleteCalibration(byte[] data)
-        {
-            if (data.Length < 4) return "Complete Calibration (Invalid Data)";
-
-            string autoAnalyze = data[2] == 0x01 ? "Auto Analyze" : "Manual";
-            string autoSave = data[3] == 0x01 ? "Auto Save" : "Manual";
-
-            return $"Complete Calibration: {autoAnalyze}, {autoSave}";
-        }
-
-        private string DecodeLoadCellRating(byte[] data)
-        {
-            if (data.Length < 6) return "Set Load Cell Rating (Invalid Data)";
-
-            ushort rating = (ushort)(data[2] | (data[3] << 8));
-            ushort voltage = (ushort)(data[4] | (data[5] << 8));
-
-            return $"Set Load Cell Rating: {rating / 10.0:F1} kg at {voltage / 10.0:F1} mV";
-        }
-
-        private string DecodeSuspensionWeightData(byte[] data)
-        {
-            if (data.Length < 8) return "Suspension Weight Data (Invalid)";
-
-            double fl = BitConverter.ToUInt16(data, 0) / 10.0;
-            double fr = BitConverter.ToUInt16(data, 2) / 10.0;
-            double rl = BitConverter.ToUInt16(data, 4) / 10.0;
-            double rr = BitConverter.ToUInt16(data, 6) / 10.0;
-
-            return $"Suspension Weights: FL={fl:F1} FR={fr:F1} RL={rl:F1} RR={rr:F1} kg";
-        }
-
-        private string DecodeAxleWeightData(byte[] data)
-        {
-            if (data.Length < 8) return "Axle Weight Data (Invalid)";
-
-            double fl = BitConverter.ToUInt16(data, 0) / 10.0;
-            double fr = BitConverter.ToUInt16(data, 2) / 10.0;
-            double rl = BitConverter.ToUInt16(data, 4) / 10.0;
-            double rr = BitConverter.ToUInt16(data, 6) / 10.0;
-
-            return $"Axle Weights: FL={fl:F1} FR={fr:F1} RL={rl:F1} RR={rr:F1} kg";
-        }
-
-        private string DecodeVariableCalibrationData(byte[] data)
-        {
-            if (data.Length < 6) return "Variable Calibration Data (Invalid)";
-
-            byte pointIndex = data[0];
-            byte status = data[1];
-            ushort weight = BitConverter.ToUInt16(data, 2);
-            ushort adcValue = BitConverter.ToUInt16(data, 4);
-
-            string statusText = status switch
-            {
-                0x00 => "Valid",
-                0x01 => "ADC Timeout",
-                0x02 => "Hardware Failure",
-                0x03 => "Weight Exceeds Max",
-                0x04 => "ADC Out of Range",
-                0x05 => "Unstable Reading",
-                0x06 => "Invalid Point Index",
-                0x07 => "Calibration Not Active",
-                _ => $"Error 0x{status:X2}"
-            };
-
-            return $"Calibration Point {pointIndex}: {statusText}, {weight / 10.0:F1}kg, ADC={adcValue}";
-        }
-
-        private string DecodeCalibrationQuality(byte[] data)
-        {
-            if (data.Length < 6) return "Calibration Quality (Invalid)";
-
-            ushort accuracy = BitConverter.ToUInt16(data, 0);
-            ushort maxError = BitConverter.ToUInt16(data, 2);
-            byte grade = data[4];
-            byte recommendation = data[5];
-
-            string gradeText = grade switch
-            {
-                0x01 => "Excellent",
-                0x02 => "Good",
-                0x03 => "Acceptable",
-                0x04 => "Poor",
-                0x05 => "Failed",
-                _ => "Unknown"
-            };
-
-            string recText = recommendation switch
-            {
-                0x01 => "Accept",
-                0x02 => "Retry",
-                0x03 => "Add Points",
-                _ => "None"
-            };
-
-            return $"Quality: {accuracy / 10.0:F1}% accuracy, {gradeText} grade, Rec: {recText}";
-        }
-
-        private string DecodeErrorResponse(byte[] data)
-        {
-            if (data.Length < 3) return "Error Response (Invalid)";
-
-            ushort errorCode = BitConverter.ToUInt16(data, 0);
-            byte severity = data[2];
-
-            string severityText = severity switch
-            {
-                0x01 => "INFO",
-                0x02 => "WARNING",
-                0x03 => "ERROR",
-                0x04 => "CRITICAL",
-                0x05 => "FATAL",
-                _ => "UNKNOWN"
-            };
-
-            return $"Error: Code=0x{errorCode:X4}, Severity={severityText}";
+            return $"{action}: {rate}";
         }
 
         private string DecodeSystemStatus(byte[] data)
@@ -360,18 +226,25 @@ namespace SuspensionPCB_CAN_WPF
 
             byte status = data[0];
             byte errorFlags = data[1];
-            byte nodeCount = data[2];
+            byte adcMode = data[2];
 
             string statusText = status switch
             {
                 0 => "OK",
-                1 => "Warning",
+                1 => "Warning", 
                 2 => "Error",
                 3 => "Critical",
                 _ => "Unknown"
             };
 
-            return $"System: {statusText}, Errors=0x{errorFlags:X2}, Nodes={nodeCount}";
+            string modeText = adcMode switch
+            {
+                0 => "Internal",
+                1 => "ADS1115",
+                _ => "Unknown"
+            };
+
+            return $"System: {statusText}, Errors=0x{errorFlags:X2}, ADC={modeText}";
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

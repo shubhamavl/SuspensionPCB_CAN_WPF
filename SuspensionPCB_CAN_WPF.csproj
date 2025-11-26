@@ -5,12 +5,36 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <PlatformTarget>x86</PlatformTarget>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Portable deployment settings -->
+    <!-- SelfContained=true means .NET runtime is INCLUDED - users DON'T need to install .NET separately -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishTrimmed>false</PublishTrimmed>
+    <!-- Application version used by auto-update (also reflected in GitHub release tags) -->
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.IO.Ports" Version="9.0.8" />
     <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="Peak.PCANBasic.NET" Version="4.10.1.968" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\AVL_Logo.jpg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\AVL_Logo.jpg" />
+    <Resource Include="Assets\AVL_Icon.ico" />
   </ItemGroup>
 
 </Project>

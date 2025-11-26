@@ -11,8 +11,10 @@ namespace SuspensionPCB_CAN_WPF
     // USB-CAN-A Binary Protocol Implementation for Suspension System
     public class CANService
     {
+        private const uint MAX_CAN_ID = 0x7FF; // 11-bit standard CAN ID maximum
+        
         private SerialPort? _serialPort;
-        private static CANService? _instance;
+        public static CANService? _instance;
         private readonly ConcurrentQueue<byte> _frameBuffer = new();
         public volatile bool _connected;
         private CancellationTokenSource? _cancellationTokenSource;
@@ -21,31 +23,112 @@ namespace SuspensionPCB_CAN_WPF
         private readonly TimeSpan _timeout = TimeSpan.FromSeconds(5);
         private bool _timeoutNotified = false;
 
-        private bool _suspensionRequestActive = false;
-        private bool _axleRequestActive = false;
+        // v0.7 Ultra-Minimal CAN Protocol - Semantic IDs & Maximum Efficiency
+        // Raw Data: 2 bytes only (75% reduction from 8 bytes)
+        // Stream Control: 1 byte only (87.5% reduction from 8 bytes)
+        // System Status: 3 bytes only (62.5% reduction from 8 bytes)
 
-        // Protocol constants
-        private const byte FRAME_HEADER = 0xAA;
-        private const byte FRAME_FOOTER = 0x55;
-        private const uint MAX_CAN_ID = 0x7FF;    // 11-bit CAN ID limit
+        // CAN Message IDs - Semantic IDs (message type encoded in ID)
+        private const uint CAN_MSG_ID_LEFT_RAW_DATA = 0x200;      // Left side raw ADC data (Ch0+Ch1)
+        private const uint CAN_MSG_ID_RIGHT_RAW_DATA = 0x201;     // Right side raw ADC data (Ch2+Ch3)
+        private const uint CAN_MSG_ID_START_LEFT_STREAM = 0x040;  // Start left side streaming
+        private const uint CAN_MSG_ID_START_RIGHT_STREAM = 0x041; // Start right side streaming
+        private const uint CAN_MSG_ID_STOP_ALL_STREAMS = 0x044;   // Stop all streaming (empty message)
+        private const uint CAN_MSG_ID_SYSTEM_STATUS = 0x300;      // System status (on-demand only)
+        private const uint CAN_MSG_ID_STATUS_REQUEST = 0x032;     // Request system status (empty message)
+        private const uint CAN_MSG_ID_MODE_INTERNAL = 0x030;      // Switch to Internal ADC mode (empty message)
+        private const uint CAN_MSG_ID_MODE_ADS1115 = 0x031;       // Switch to ADS1115 mode (empty message)
+
+        // Rate Selection Codes
+        private const byte CAN_RATE_100HZ = 0x01;  // 100Hz (10ms interval)
+        private const byte CAN_RATE_500HZ = 0x02;  // 500Hz (2ms interval)
+        private const byte CAN_RATE_1KHZ = 0x03;   // 1kHz (1ms interval)
+        private const byte CAN_RATE_1HZ = 0x05;    // 1Hz (1000ms interval)
 
         public event Action<CANMessage>? MessageReceived;
-        public event EventHandler<string> DataTimeout;
-
-        // ADDED: Static events for WeightCalibrationPoint
-        public static event EventHandler<WeightDataEventArgs> WeightDataReceived;
-        public static event EventHandler<ADCDataEventArgs> ADCDataReceived;
-        public static event EventHandler<CANErrorEventArgs> CommunicationError;
-        public static event EventHandler<CalibrationDataEventArgs> CalibrationDataReceived;
-        public static event EventHandler<CalibrationQualityEventArgs> CalibrationQualityReceived;
+        public event EventHandler<string>? DataTimeout;
+        
+        // v0.7 Events
+        public event EventHandler<RawDataEventArgs>? RawDataReceived;
+        public event EventHandler<SystemStatusEventArgs>? SystemStatusReceived;
 
         public bool IsConnected => _connected;
+
+        private ICanAdapter? _adapter;
 
         public CANService()
         {
             _connected = false;
             _instance = this;
         }
+
+        /// <summary>
+        /// Set the CAN adapter to use
+        /// </summary>
+        public void SetAdapter(ICanAdapter adapter)
+        {
+            if (_adapter != null)
+            {
+                _adapter.MessageReceived -= OnAdapterMessageReceived;
+                _adapter.DataTimeout -= OnAdapterDataTimeout;
+                _adapter.ConnectionStatusChanged -= OnAdapterConnectionStatusChanged;
+                _adapter.Disconnect();
+            }
+
+            _adapter = adapter;
+            _adapter.MessageReceived += OnAdapterMessageReceived;
+            _adapter.DataTimeout += OnAdapterDataTimeout;
+            _adapter.ConnectionStatusChanged += OnAdapterConnectionStatusChanged;
+        }
+
+        /// <summary>
+        /// Connect using adapter configuration
+        /// </summary>
+        public bool Connect(CanAdapterConfig config, out string errorMessage)
+        {
+            ICanAdapter? adapter = null;
+
+            if (config is UsbSerialCanAdapterConfig)
+            {
+                adapter = new UsbSerialCanAdapter();
+            }
+            else if (config is PcanCanAdapterConfig)
+            {
+                adapter = new PcanCanAdapter();
+            }
+            else
+            {
+                errorMessage = "Unknown adapter configuration type";
+                return false;
+            }
+
+            SetAdapter(adapter);
+            bool result = adapter.Connect(config, out errorMessage);
+            _connected = result;
+            return result;
+        }
+
+        #region Adapter Event Handlers
+        private void OnAdapterMessageReceived(CANMessage message)
+        {
+            MessageReceived?.Invoke(message);
+            // Fire specific events for protocol messages
+            if (message.Data != null && message.Data.Length > 0)
+            {
+                FireSpecificEvents(message.ID, message.Data);
+            }
+        }
+
+        private void OnAdapterDataTimeout(object? sender, string timeoutMessage)
+        {
+            DataTimeout?.Invoke(this, timeoutMessage);
+        }
+
+        private void OnAdapterConnectionStatusChanged(object? sender, bool connected)
+        {
+            _connected = connected;
+        }
+        #endregion
 
         public bool Connect(string portName, out string message, int baudRate = 2000000)
         {
@@ -59,13 +142,13 @@ namespace SuspensionPCB_CAN_WPF
                 _cancellationTokenSource = new CancellationTokenSource();
                 Task.Run(() => ReadMessagesAsync(_cancellationTokenSource.Token));
 
-                System.Diagnostics.Debug.WriteLine($"USB-CAN-A Connected on {portName}");
+                ProductionLogger.Instance.LogInfo($"USB-CAN-A Connected on {portName}", "CANService");
                 return true;
             }
             catch (Exception ex)
             {
                 message = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-                System.Diagnostics.Debug.WriteLine($"USB-CAN-A connection error: {ex.Message}");
+                ProductionLogger.Instance.LogError($"USB-CAN-A connection error: {ex.Message}", "CANService");
                 return false;
             }
         }
@@ -95,7 +178,7 @@ namespace SuspensionPCB_CAN_WPF
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"USB-CAN-A connection error: {ex.Message}");
+                ProductionLogger.Instance.LogError($"USB-CAN-A connection error: {ex.Message}", "CANService");
                 return false;
             }
         }
@@ -110,7 +193,7 @@ namespace SuspensionPCB_CAN_WPF
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = null;
 
-            System.Diagnostics.Debug.WriteLine("USB-CAN-A Disconnected");
+            ProductionLogger.Instance.LogInfo("USB-CAN-A Disconnected", "CANService");
         }
 
         private async Task ReadMessagesAsync(CancellationToken token)
@@ -199,40 +282,30 @@ namespace SuspensionPCB_CAN_WPF
                     // Fire specific events for WeightCalibrationPoint
                     FireSpecificEvents(canId, canData);
 
-                    System.Diagnostics.Debug.WriteLine($"Processed: ID=0x{canId:X3}, Data={BitConverter.ToString(canData)}");
+                    ProductionLogger.Instance.LogInfo($"Processed: ID=0x{canId:X3}, Data={BitConverter.ToString(canData)}", "CANService");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Decode error: {ex.Message}");
+                ProductionLogger.Instance.LogError($"Decode error: {ex.Message}", "CANService");
             }
         }
 
-        // Check if message ID belongs to suspension system protocol
+        // Check if message ID belongs to suspension system protocol (v0.7 - Semantic IDs)
         private bool IsSuspensionMessage(uint canId)
-
-
         {
-            // Explicitly block 0x500 messages
-            if (canId == 0x500)
-                return false;
-
-
             switch (canId)
             {
-                // Weight data responses
-                case 0x200:  // Suspension weight data
-                case 0x201:  // Axle weight data
-
-                // Calibration responses
-                case 0x400:  // Variable calibration data
-                case 0x401:  // Calibration quality analysis
-                case 0x402:  // Error response
+                // v0.7 Ultra-Minimal Protocol - Semantic IDs
+                case CAN_MSG_ID_LEFT_RAW_DATA:      // 0x200 - Left side raw ADC data
+                case CAN_MSG_ID_RIGHT_RAW_DATA:     // 0x201 - Right side raw ADC data
+                case CAN_MSG_ID_START_LEFT_STREAM:  // 0x040 - Start left side streaming
+                case CAN_MSG_ID_START_RIGHT_STREAM: // 0x041 - Start right side streaming
+                case CAN_MSG_ID_STOP_ALL_STREAMS:   // 0x044 - Stop all streaming
+                case CAN_MSG_ID_SYSTEM_STATUS:      // 0x300 - System status
+                case CAN_MSG_ID_MODE_INTERNAL:      // 0x030 - Switch to Internal ADC mode
+                case CAN_MSG_ID_MODE_ADS1115:       // 0x031 - Switch to ADS1115 mode
                     return true;
-                    // System status
-                    // case 0x500:  // System status summary
-
-                    // return true;
 
                 default:
                     return false;
@@ -241,37 +314,45 @@ namespace SuspensionPCB_CAN_WPF
 
         public bool SendMessage(uint id, byte[] data)
         {
-            if (!_connected || _serialPort == null) return false;
+            if (!_connected || _adapter == null) return false;
 
             try
             {
                 // Validate CAN ID (11-bit max for standard frame)
                 if (id > MAX_CAN_ID)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Invalid CAN ID: 0x{id:X3} (max 0x{MAX_CAN_ID:X3} for standard frame)");
+                    ProductionLogger.Instance.LogWarning($"Invalid CAN ID: 0x{id:X3} (max 0x{MAX_CAN_ID:X3} for standard frame)", "CANService");
                     return false;
                 }
 
                 // Validate data length
                 if (data != null && data.Length > 8)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Invalid data length: {data.Length} (max 8 bytes)");
+                    ProductionLogger.Instance.LogWarning($"Invalid data length: {data.Length} (max 8 bytes)", "CANService");
                     return false;
                 }
 
-                var frame = CreateFrame(id, data);
-
-                lock (_sendLock)
+                if (data == null)
                 {
-                    _serialPort.Write(frame, 0, frame.Length);
+                    ProductionLogger.Instance.LogWarning("Cannot send message: data is null", "CANService");
+                    return false;
                 }
 
-                System.Diagnostics.Debug.WriteLine($"USB-CAN-A: Sent CAN frame ID=0x{id:X3}, Data={BitConverter.ToString(data ?? new byte[0])}");
-                return true;
+                bool result = _adapter.SendMessage(id, data);
+
+                // Fire event for TX messages so they appear in monitor (adapter may already fire this, but ensure it's fired)
+                if (result)
+                {
+                    var txMessage = new CANMessage(id, data);
+                    MessageReceived?.Invoke(txMessage);
+                }
+
+                ProductionLogger.Instance.LogInfo($"CAN: Sent CAN frame ID=0x{id:X3}, Data={BitConverter.ToString(data ?? new byte[0])}", "CANService");
+                return result;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Send message error: {ex.Message}");
+                ProductionLogger.Instance.LogError($"Send message error: {ex.Message}", "CANService");
                 return false;
             }
         }
@@ -295,227 +376,127 @@ namespace SuspensionPCB_CAN_WPF
             return frame.ToArray();
         }
 
-        // Helper method to send suspension weight data request
-        public bool RequestSuspensionData(bool start, byte transmissionRate = 0x02)
+        // v0.7 Stream Control Methods - Semantic IDs
+        public bool StartLeftStream(byte rate)
         {
-            byte[] data = new byte[8];
-            data[0] = start ? (byte)0x01 : (byte)0x00;  // Start/Stop
-            data[1] = transmissionRate;  // 0x01=100Hz, 0x02=500Hz, 0x03=1024Hz, 0x04=2048Hz
-
-            if (start)
-            {
-                _suspensionRequestActive = true;
-                _axleRequestActive = false;
-            }
-            else
-            {
-                _suspensionRequestActive = false;
-            }
-
-            return SendMessage(0x030, data);
+            byte[] data = new byte[1];
+            data[0] = rate;  // Rate selection
+            
+            return SendMessage(CAN_MSG_ID_START_LEFT_STREAM, data);
         }
 
-        // Helper method to send axle weight data request
-        public bool RequestAxleData(bool start, byte transmissionRate = 0x02)
+        public bool StartRightStream(byte rate)
         {
-            byte[] data = new byte[8];
-            data[0] = start ? (byte)0x01 : (byte)0x00;  // Start/Stop
-            data[1] = transmissionRate;  // 0x01=100Hz, 0x02=500Hz, 0x03=1024Hz, 0x04=2048Hz
-
-            if (start)
-            {
-                _axleRequestActive = true;
-                _suspensionRequestActive = false;
-            }
-            else
-            {
-                _axleRequestActive = false;
-            }
-
-            return SendMessage(0x031, data);
+            byte[] data = new byte[1];
+            data[0] = rate;  // Rate selection
+            
+            return SendMessage(CAN_MSG_ID_START_RIGHT_STREAM, data);
         }
 
-        // Stop Suspension Data Transmission
-        public bool StopSuspensionData()
+        public bool StopAllStreams()
         {
-            byte[] data = new byte[8]; // All zeros: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-            return SendMessage(0x030, data);
+            // Empty message (0 bytes) for stop all streams
+            return SendMessage(CAN_MSG_ID_STOP_ALL_STREAMS, new byte[0]);
         }
 
-        // Stop Axle Data Transmission  
-        public bool StopAxleData()
+        public bool SwitchToInternalADC()
         {
-            byte[] data = new byte[8]; // All zeros: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-            return SendMessage(0x031, data);
+            // Empty message (0 bytes) for mode switch
+            return SendMessage(CAN_MSG_ID_MODE_INTERNAL, new byte[0]);
         }
 
-        // Helper method to start weight-based variable calibration only
-        public bool StartVariableCalibration(byte pointCount, byte polyOrder,
-                                           bool autoSpacing, ushort maxWeight, byte channelMask = 0x0F)
+        public bool SwitchToADS1115()
         {
-            if (pointCount < 2 || pointCount > 20)
-            {
-                System.Diagnostics.Debug.WriteLine("Invalid point count: must be 2-20");
-                return false;
-            }
-
-            byte[] data = new byte[8];
-            data[0] = 0x01;  // Start Calibration
-            data[1] = pointCount;
-            data[2] = 0x01;  // FIXED: Only Weight-based mode (0x01)
-            data[3] = polyOrder;  // 1-4
-            data[4] = autoSpacing ? (byte)0x01 : (byte)0x00;
-            data[5] = (byte)(maxWeight & 0xFF);        // Max weight low
-            data[6] = (byte)((maxWeight >> 8) & 0xFF); // Max weight high
-            data[7] = channelMask;
-
-            return SendMessage(0x020, data);
+            // Empty message (0 bytes) for mode switch
+            return SendMessage(CAN_MSG_ID_MODE_ADS1115, new byte[0]);
         }
 
+        /// <summary>
+        /// Request system status from STM32 (on-demand)
+        /// </summary>
+        /// <returns>True if request sent successfully</returns>
+        public bool RequestSystemStatus()
+        {
+            return SendMessage(CAN_MSG_ID_STATUS_REQUEST, new byte[0]);
+        }
 
         // Static methods for easy access from all windows
         public static bool SendStaticMessage(uint canId, byte[] data)
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"CAN TX: ID=0x{canId:X3}, Data=[{string.Join(",", Array.ConvertAll(data, b => $"0x{b:X2}"))}]");
+                ProductionLogger.Instance.LogInfo($"CAN TX: ID=0x{canId:X3}, Data=[{string.Join(",", Array.ConvertAll(data, b => $"0x{b:X2}"))}]", "CANService");
 
-                // Use actual instance to send via hardware
-                if (_instance != null && _instance._connected)
+                if (_instance != null)
                 {
-                    bool success = _instance.SendMessage(canId, data);
-
-                    // Also notify MainWindow for UI display
-                    if (success)
+                    if (_instance._connected)
                     {
-                        var message = new CANMessage(canId, data);
-                        _instance.MessageReceived?.Invoke(message);
+                        bool success = _instance.SendMessage(canId, data);
+                        return success;
                     }
-
-                    return success;
+                    else
+                    {
+                        ProductionLogger.Instance.LogWarning("CAN Send Error: Not connected to hardware", "CANService");
+                        return false;
+                    }
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("CAN Send Error: Not connected to hardware");
+                    ProductionLogger.Instance.LogWarning("CAN Send Error: CANService instance not available", "CANService");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"CAN Send Error: {ex.Message}");
+                ProductionLogger.Instance.LogError($"CAN Send Error: {ex.Message}", "CANService");
                 return false;
             }
         }
 
-        public static bool SendWeightCalibrationPoint(byte pointIndex, double weight, byte channelMask)
-        {
-            byte[] data = new byte[8];
-            data[0] = 0x03; // Command Type: Set Weight Point ✓
-            data[1] = pointIndex; // Point Index (0-based) ✓
-
-            ushort weightValue = (ushort)(weight * 10); // kg × 10 ✓
-            data[2] = (byte)(weightValue & 0xFF);        // Low byte ✓
-            data[3] = (byte)((weightValue >> 8) & 0xFF); // High byte ✓
-
-            data[4] = channelMask; // Channel Mask ✓
-            data[5] = 0x00; // Reserved ✓
-            data[6] = 0x00; // Reserved ✓
-            data[7] = 0x00; // Reserved ✓
-
-            return SendStaticMessage(0x022, data);
-        }
-
-        #region Event Firing Logic for WeightCalibrationPoint
+        #region Event Firing Logic for v0.7 Protocol - Semantic IDs
         private void FireSpecificEvents(uint canId, byte[] canData)
         {
             switch (canId)
             {
-                case 0x200: // Suspension weight data - Protocol Section 3.6.1
-                case 0x201: // Axle weight data - Protocol Section 3.6.2
-                    var weightArgs = new WeightDataEventArgs
+                case CAN_MSG_ID_LEFT_RAW_DATA: // 0x200 - Left side raw ADC data
+                    if (canData.Length >= 2)
                     {
-                        ChannelMask = 0x0F, // All 4 channels
-                        FrontLeftWeight = DecodeWeightFromProtocol(canData, 0),   // Bytes 0-1
-                        FrontRightWeight = DecodeWeightFromProtocol(canData, 2),  // Bytes 2-3
-                        RearLeftWeight = DecodeWeightFromProtocol(canData, 4),    // Bytes 4-5
-                        RearRightWeight = DecodeWeightFromProtocol(canData, 6),   // Bytes 6-7
-                        TotalVehicleWeight = DecodeWeightFromProtocol(canData, 0) + DecodeWeightFromProtocol(canData, 2) +
-                                           DecodeWeightFromProtocol(canData, 4) + DecodeWeightFromProtocol(canData, 6),
-                        Timestamp = DateTime.Now
-                    };
-                    WeightDataReceived?.Invoke(this, weightArgs);
-                    break;
-
-                case 0x400: // Variable Calibration Data Response - Protocol Section 3.7.1
-                    var calibrationArgs = new CalibrationDataEventArgs
-                    {
-                        PointIndex = canData[0],  // Protocol: Byte 0
-                        PointStatus = canData[1], // Protocol: Byte 1
-                        ReferenceWeight = BitConverter.ToUInt16(canData, 2) / 10.0, // Bytes 2-3, convert to kg
-                        ADCValue = BitConverter.ToUInt16(canData, 4), // Bytes 4-5
-                        Timestamp = DateTime.Now
-                    };
-                    CalibrationDataReceived?.Invoke(this, calibrationArgs);
-                    break;
-
-                case 0x401: // Calibration Quality Analysis Response - ENHANCED
-                    System.Diagnostics.Debug.WriteLine("Processing 0x401 - Calibration Quality Analysis");
-
-                    if (canData.Length >= 6)
-                    {
-                        var accuracyScore = BitConverter.ToUInt16(canData, 0) / 10.0;
-                        var maxError = BitConverter.ToUInt16(canData, 2) / 10.0;
-                        var qualityGrade = canData[4];
-                        var recommendation = canData[5];
-
-                        System.Diagnostics.Debug.WriteLine($"Quality Analysis: {accuracyScore:F1}% accuracy, Grade: {qualityGrade}, Rec: {recommendation}");
-
-                        // Fire calibration complete event
-                        var qualityArgs = new CalibrationQualityEventArgs
+                        ushort rawADC = (ushort)(canData[0] | (canData[1] << 8));
+                        RawDataReceived?.Invoke(this, new RawDataEventArgs
                         {
-                            AccuracyPercentage = accuracyScore,
-                            MaxErrorKg = maxError,
-                            QualityGrade = qualityGrade,
-                            Recommendation = recommendation,
-                            Timestamp = DateTime.Now
-                        };
-
-                        CalibrationQualityReceived?.Invoke(this, qualityArgs);
+                            Side = 0,  // Left side
+                            RawADCSum = rawADC,
+                            TimestampFull = DateTime.Now
+                        });
                     }
                     break;
 
-                case 0x402: // Error Response System - Protocol Section 3.9.1
-                    ushort errorCode = (ushort)(canData[0] | (canData[1] << 8));
-                    byte severity = canData[2];
-
-                    string severityText = severity switch
+                case CAN_MSG_ID_RIGHT_RAW_DATA: // 0x201 - Right side raw ADC data
+                    if (canData.Length >= 2)
                     {
-                        0x01 => "INFO",
-                        0x02 => "WARNING",
-                        0x03 => "ERROR",
-                        0x04 => "CRITICAL",
-                        0x05 => "FATAL",
-                        _ => "UNKNOWN"
-                    };
+                        ushort rawADC = (ushort)(canData[0] | (canData[1] << 8));
+                        RawDataReceived?.Invoke(this, new RawDataEventArgs
+                        {
+                            Side = 1,  // Right side
+                            RawADCSum = rawADC,
+                            TimestampFull = DateTime.Now
+                        });
+                    }
+                    break;
 
-                    var errorArgs = new CANErrorEventArgs
+                case CAN_MSG_ID_SYSTEM_STATUS: // 0x300 - System status
+                    if (canData.Length >= 3)
                     {
-                        ErrorMessage = $"[{severityText}] Hardware Error Code: 0x{errorCode:X4}",
-                        ErrorCode = errorCode,
-                        Timestamp = DateTime.Now
-                    };
-                    CommunicationError?.Invoke(this, errorArgs);
+                        SystemStatusReceived?.Invoke(this, new SystemStatusEventArgs
+                        {
+                            SystemStatus = canData[0],
+                            ErrorFlags = canData[1],
+                            ADCMode = canData[2],
+                            Timestamp = DateTime.Now
+                        });
+                    }
                     break;
             }
-        }
-
-        private double DecodeWeightFromProtocol(byte[] data, int startIndex)
-        {
-            if (startIndex + 1 >= data.Length) return 0.0;
-
-            // Protocol format: 16-bit, kg × 10 (0.1kg resolution)
-            ushort rawValue = (ushort)(data[startIndex] | (data[startIndex + 1] << 8));
-            return rawValue / 10.0; // Convert from protocol format to kg
         }
         #endregion
 
@@ -527,61 +508,27 @@ namespace SuspensionPCB_CAN_WPF
 
     }  // Class closing brace
 
-    #region Event Args Classes for WeightCalibrationPoint
-    public class WeightDataEventArgs : EventArgs
+    // v0.7 Event Args Classes - Ultra-Minimal
+    public class RawDataEventArgs : EventArgs
     {
-        public byte ChannelMask { get; set; }
-        // 4 Load Cells - Standard Configuration
-        public double FrontLeftWeight { get; set; }   // STM32 ADC Channel 0
-        public double FrontRightWeight { get; set; }  // STM32 ADC Channel 1
-        public double RearLeftWeight { get; set; }    // STM32 ADC Channel 2
-        public double RearRightWeight { get; set; }   // STM32 ADC Channel 3
-        public double TotalVehicleWeight { get; set; } // Sum of all 4
-        public DateTime Timestamp { get; set; }
+        public byte Side { get; set; }              // 0=Left, 1=Right
+        public ushort RawADCSum { get; set; }       // Raw ADC sum (Ch0+Ch1 or Ch2+Ch3)
+        public DateTime TimestampFull { get; set; } // PC3 reception timestamp
     }
 
-    public class ADCDataEventArgs : EventArgs
+    public class SystemStatusEventArgs : EventArgs
     {
-        // ADC values for all 4 channels
-        public int FrontLeftADC { get; set; }     // STM32 ADC Channel 0 (12-bit: 0-4095)
-        public int FrontRightADC { get; set; }    // STM32 ADC Channel 1 (12-bit: 0-4095)
-        public int RearLeftADC { get; set; }      // STM32 ADC Channel 2 (12-bit: 0-4095)
-        public int RearRightADC { get; set; }     // STM32 ADC Channel 3 (12-bit: 0-4095)
-        public double FrontLeftVoltage { get; set; }
-        public double FrontRightVoltage { get; set; }
-        public double RearLeftVoltage { get; set; }
-        public double RearRightVoltage { get; set; }
-        public DateTime Timestamp { get; set; }
+        public byte SystemStatus { get; set; }      // 0=OK, 1=Warning, 2=Error
+        public byte ErrorFlags { get; set; }        // Error flags
+        public byte ADCMode { get; set; }           // Current ADC mode (0=Internal, 1=ADS1115)
+        public DateTime Timestamp { get; set; }     // PC3 reception timestamp
     }
 
     public class CANErrorEventArgs : EventArgs
     {
-        public string ErrorMessage { get; set; }
+        public string? ErrorMessage { get; set; }
         public int ErrorCode { get; set; }
         public DateTime Timestamp { get; set; }
     }
-
-    public class CalibrationDataEventArgs : EventArgs
-    {
-        public byte PointIndex { get; set; }        // Protocol: Byte 0 (Point Index 0-19)
-        public byte PointStatus { get; set; }       // Protocol: Byte 1 (Status Code 0x00-0xFF)
-        public double ReferenceWeight { get; set; } // Protocol: Bytes 2-3 converted to kg
-        public int ADCValue { get; set; }           // Protocol: Bytes 4-5 (Raw ADC value)
-        public DateTime Timestamp { get; set; }
-    }
-
-    public class CalibrationQualityEventArgs : EventArgs
-    {
-        public double AccuracyPercentage { get; set; }
-        public double MaxErrorKg { get; set; }
-        public byte QualityGrade { get; set; }
-        public byte Recommendation { get; set; }
-        public DateTime Timestamp { get; set; }
-    }
-
-
-
-    #endregion
-
 
 }  // Namespace closing brace

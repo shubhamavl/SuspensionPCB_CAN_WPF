@@ -4,59 +4,246 @@
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <!-- AVL India Global Styles -->
-        <Style x:Key="AVLHeaderTextStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14"/>
+        <!-- Centralized Color Resources -->
+        <SolidColorBrush x:Key="PrimaryBlue" Color="#FF1B5E96"/>
+        <SolidColorBrush x:Key="PrimaryBlueDark" Color="#FF1A5588"/>
+        <SolidColorBrush x:Key="PrimaryBlueDarker" Color="#FF164A7A"/>
+        <SolidColorBrush x:Key="SuccessGreen" Color="#FF28A745"/>
+        <SolidColorBrush x:Key="SuccessGreenDark" Color="#FF218838"/>
+        <SolidColorBrush x:Key="DangerRed" Color="#FFDC3545"/>
+        <SolidColorBrush x:Key="DangerRedDark" Color="#FFC82333"/>
+        <SolidColorBrush x:Key="WarningOrange" Color="#FFFD7E14"/>
+        <SolidColorBrush x:Key="InfoCyan" Color="#FF17A2B8"/>
+        <SolidColorBrush x:Key="GrayLight" Color="#FFF8F9FA"/>
+        <SolidColorBrush x:Key="GrayMedium" Color="#FF6C757D"/>
+        <SolidColorBrush x:Key="GrayDark" Color="#FF2C3E50"/>
+        <SolidColorBrush x:Key="GrayDarker" Color="#FF1A252F"/>
+        <SolidColorBrush x:Key="GrayDisabled" Color="#FFB0B0B0"/>
+        <SolidColorBrush x:Key="GrayDisabledText" Color="#FF666666"/>
+
+        <!-- Typography Resources -->
+        <Style x:Key="HeaderLarge" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="22"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="#FF1B5E96"/>
-            <Setter Property="Margin" Value="0,0,0,5"/>
+            <Setter Property="Foreground" Value="White"/>
         </Style>
-
-        <Style x:Key="AVLValueTextStyle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Consolas"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="#FF34495E"/>
-        </Style>
-
-        <Style x:Key="AVLGroupBoxStyle" TargetType="GroupBox">
-            <Setter Property="BorderBrush" Value="#FF1B5E96"/>
-            <Setter Property="BorderThickness" Value="2"/>
-            <Setter Property="Foreground" Value="#FF1B5E96"/>
+        
+        <Style x:Key="HeaderMedium" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18"/>
             <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{StaticResource PrimaryBlue}"/>
+        </Style>
+        
+        <Style x:Key="HeaderSmall" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource PrimaryBlue}"/>
         </Style>
 
-        <!-- AVL Button Style -->
-        <Style x:Key="AVLButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#FF1B5E96"/>
+        <!-- Modern Button Style -->
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PrimaryBlue}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Padding" Value="16,10"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="6"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}" 
-                                CornerRadius="3" 
-                                BorderThickness="{TemplateBinding BorderThickness}">
+                                CornerRadius="6" 
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                BorderBrush="{TemplateBinding BorderBrush}">
                             <ContentPresenter HorizontalAlignment="Center" 
-                                            VerticalAlignment="Center"/>
+                                            VerticalAlignment="Center" 
+                                            Margin="{TemplateBinding Padding}"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#FF1A5588"/>
+                                <Setter Property="Background" Value="{StaticResource PrimaryBlueDark}"/>
+                                <Setter Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect BlurRadius="8" ShadowDepth="2" Color="#40000000"/>
+                                    </Setter.Value>
+                                </Setter>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#FF164A7A"/>
+                                <Setter Property="Background" Value="{StaticResource PrimaryBlueDarker}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Background" Value="#FFB0B0B0"/>
-                                <Setter Property="Foreground" Value="#FF666666"/>
+                                <Setter Property="Background" Value="{StaticResource GrayDisabled}"/>
+                                <Setter Property="Foreground" Value="{StaticResource GrayDisabledText}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Success Button Style -->
+        <Style x:Key="SuccessButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
+            <Setter Property="Background" Value="{StaticResource SuccessGreen}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource SuccessGreenDark}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Danger Button Style -->
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
+            <Setter Property="Background" Value="{StaticResource DangerRed}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource DangerRedDark}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Info Button Style -->
+        <Style x:Key="InfoButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
+            <Setter Property="Background" Value="{StaticResource InfoCyan}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FF138496"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Warning Button Style -->
+        <Style x:Key="WarningButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
+            <Setter Property="Background" Value="{StaticResource WarningOrange}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FFE0A800"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Toggle Button Style -->
+        <Style x:Key="ToggleButton" TargetType="ToggleButton">
+            <Setter Property="Background" Value="{StaticResource SuccessGreen}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="6"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="6" 
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                BorderBrush="{TemplateBinding BorderBrush}">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center" 
+                                            Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource PrimaryBlueDark}"/>
+                                <Setter Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect BlurRadius="8" ShadowDepth="2" Color="#40000000"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{StaticResource PrimaryBlueDarker}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="{StaticResource DangerRed}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Background" Value="{StaticResource GrayDisabled}"/>
+                                <Setter Property="Foreground" Value="{StaticResource GrayDisabledText}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Responsive GroupBox Style -->
+        <Style x:Key="ResponsiveGroupBox" TargetType="GroupBox">
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Margin" Value="0,0,0,20"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#FFE0E0E0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GroupBox">
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}" 
+                                    BorderBrush="{TemplateBinding BorderBrush}" 
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="8">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Color="#20000000"/>
+                                </Border.Effect>
+                            </Border>
+                            <StackPanel>
+                                <TextBlock Text="{TemplateBinding Header}" 
+                                         FontWeight="Bold" 
+                                         FontSize="16"
+                                         Foreground="{StaticResource PrimaryBlue}" 
+                                         Margin="20,15,20,10"/>
+                                <ContentPresenter Margin="{TemplateBinding Padding}"/>
+                            </StackPanel>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Data Card Style -->
+        <Style x:Key="DataCard" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#FFE0E0E0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Margin" Value="10"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Color="#20000000"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Legacy AVL Styles (for compatibility) -->
+        <Style x:Key="AVLHeaderTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{StaticResource PrimaryBlue}"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
+        </Style>
+
+        <Style x:Key="AVLValueTextStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource GrayDark}"/>
+        </Style>
+
+        <Style x:Key="AVLGroupBoxStyle" TargetType="GroupBox">
+            <Setter Property="BorderBrush" Value="{StaticResource PrimaryBlue}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="Foreground" Value="{StaticResource PrimaryBlue}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
+        <Style x:Key="AVLButtonStyle" TargetType="Button" BasedOn="{StaticResource ModernButton}"/>
     </Application.Resources>
 </Application>
