@@ -37,4 +37,12 @@
     <Resource Include="Assets\AVL_Icon.ico" />
   </ItemGroup>
 
+  <!-- Exclude SuspensionPCB_Updater directory from compilation (it's a separate project) -->
+  <ItemGroup>
+    <Compile Remove="SuspensionPCB_Updater\**" />
+    <Content Remove="SuspensionPCB_Updater\**" />
+    <EmbeddedResource Remove="SuspensionPCB_Updater\**" />
+    <None Remove="SuspensionPCB_Updater\**" />
+  </ItemGroup>
+
 </Project>
