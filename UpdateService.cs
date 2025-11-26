@@ -6,6 +6,9 @@ using System.Text.Json.Serialization;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
+using System.Text.RegularExpressions;
+using System.Linq;
 
 namespace SuspensionPCB_CAN_WPF
 {
@@ -27,6 +30,13 @@ namespace SuspensionPCB_CAN_WPF
         private const string AssetNameSubstring = "SuspensionPCB_CAN_WPF_Portable";
         private const string AssetExtension = ".zip";
 
+        // Allowed download domains for security (only GitHub)
+        private static readonly string[] AllowedDomains = { "github.com", "githubusercontent.com" };
+
+        // Rate limiting: minimum time between update checks (1 hour)
+        private static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromHours(1);
+        private static readonly string LastCheckTimeFile = Path.Combine(PathHelper.ApplicationDirectory, "Data", "last_update_check.txt");
+
         private readonly ProductionLogger _logger = ProductionLogger.Instance;
 
         public sealed class UpdateInfo
@@ -36,18 +46,27 @@ namespace SuspensionPCB_CAN_WPF
             public string DownloadUrl { get; init; } = string.Empty;
             public string AssetFileName { get; init; } = string.Empty;
             public string? ReleaseNotes { get; init; }
+            public string? ExpectedSha256Hash { get; init; }  // SHA-256 hash for integrity verification
 
             public bool IsUpdateAvailable => LatestVersion > CurrentVersion;
         }
 
         /// <summary>
         /// Queries GitHub Releases API for the latest release and compares it with the current app version.
-        /// Returns null on failure (network errors, parse errors, etc.).
+        /// Returns null on failure (network errors, parse errors, rate limiting, etc.).
+        /// Implements rate limiting to prevent excessive API calls.
         /// </summary>
         public async Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken cancellationToken = default)
         {
             try
             {
+                // Rate limiting: check if enough time has passed since last check
+                if (!ShouldAllowUpdateCheck())
+                {
+                    _logger.LogInfo("Update check skipped due to rate limiting (minimum 1 hour between checks)", "UpdateService");
+                    return null;
+                }
+
                 var currentVersion = GetCurrentVersion();
                 var latest = await GetLatestReleaseAsync(cancellationToken).ConfigureAwait(false);
                 if (latest == null)
@@ -68,7 +87,20 @@ namespace SuspensionPCB_CAN_WPF
                     return null;
                 }
 
+                // Validate download URL is from allowed domain
+                if (!IsValidDownloadUrl(asset.BrowserDownloadUrl))
+                {
+                    _logger.LogError($"Download URL validation failed: {asset.BrowserDownloadUrl}", "UpdateService");
+                    return null;
+                }
+
                 var latestVersion = ParseVersionFromTag(latest.TagName) ?? currentVersion;
+
+                // Extract SHA-256 hash from release notes (format: SHA-256: `hash` or **SHA-256 Hash:** `hash`)
+                var expectedHash = ExtractSha256FromReleaseNotes(latest.Body);
+
+                // Record successful check time for rate limiting
+                RecordUpdateCheckTime();
 
                 return new UpdateInfo
                 {
@@ -76,7 +108,8 @@ namespace SuspensionPCB_CAN_WPF
                     LatestVersion = latestVersion,
                     DownloadUrl = asset.BrowserDownloadUrl ?? string.Empty,
                     AssetFileName = asset.Name ?? "update.zip",
-                    ReleaseNotes = latest.Body
+                    ReleaseNotes = latest.Body,
+                    ExpectedSha256Hash = expectedHash
                 };
             }
             catch (Exception ex)
@@ -87,13 +120,21 @@ namespace SuspensionPCB_CAN_WPF
         }
 
         /// <summary>
-        /// Downloads the update package to the local Update directory.
+        /// Downloads the update package to the local Update directory and verifies its integrity.
         /// Returns the full path to the downloaded file, or null on failure.
+        /// Performs SHA-256 hash verification if hash is available in UpdateInfo.
         /// </summary>
         public async Task<string?> DownloadUpdateAsync(UpdateInfo info, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
         {
             if (info == null || string.IsNullOrWhiteSpace(info.DownloadUrl))
                 return null;
+
+            // Validate URL again before downloading
+            if (!IsValidDownloadUrl(info.DownloadUrl))
+            {
+                _logger.LogError($"Download URL validation failed: {info.DownloadUrl}", "UpdateService");
+                return null;
+            }
 
             try
             {
@@ -127,6 +168,23 @@ namespace SuspensionPCB_CAN_WPF
                 }
 
                 _logger.LogInfo($"Update package downloaded to {targetPath}", "UpdateService");
+
+                // Verify SHA-256 hash if available
+                if (!string.IsNullOrWhiteSpace(info.ExpectedSha256Hash))
+                {
+                    if (!VerifyFileHash(targetPath, info.ExpectedSha256Hash))
+                    {
+                        _logger.LogError($"SHA-256 hash verification failed for downloaded file. File may be corrupted or tampered with.", "UpdateService");
+                        try { File.Delete(targetPath); } catch { }
+                        return null;
+                    }
+                    _logger.LogInfo("SHA-256 hash verification passed", "UpdateService");
+                }
+                else
+                {
+                    _logger.LogWarning("No SHA-256 hash available for verification. Download integrity not verified.", "UpdateService");
+                }
+
                 return targetPath;
             }
             catch (Exception ex)
@@ -210,6 +268,175 @@ namespace SuspensionPCB_CAN_WPF
                 return version;
 
             return null;
+        }
+
+        /// <summary>
+        /// Validates that the download URL is from an allowed domain (GitHub only).
+        /// </summary>
+        private static bool IsValidDownloadUrl(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return false;
+
+            try
+            {
+                var uri = new Uri(url);
+                var host = uri.Host.ToLowerInvariant();
+
+                // Check if host matches any allowed domain
+                foreach (var allowedDomain in AllowedDomains)
+                {
+                    if (host == allowedDomain || host.EndsWith($".{allowedDomain}", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Extracts SHA-256 hash from release notes.
+        /// Looks for patterns like: "SHA-256: `hash`" or "**SHA-256 Hash:** `hash`"
+        /// </summary>
+        private static string? ExtractSha256FromReleaseNotes(string? releaseNotes)
+        {
+            if (string.IsNullOrWhiteSpace(releaseNotes))
+                return null;
+
+            // Pattern 1: SHA-256: `hash` or **SHA-256 Hash:** `hash`
+            var pattern1 = new Regex(@"SHA-256[:\s]+`?([a-fA-F0-9]{64})`?", RegexOptions.IgnoreCase);
+            var match1 = pattern1.Match(releaseNotes);
+            if (match1.Success && match1.Groups.Count > 1)
+            {
+                return match1.Groups[1].Value.ToUpperInvariant();
+            }
+
+            // Pattern 2: Just a 64-character hex string (less reliable, but fallback)
+            var pattern2 = new Regex(@"\b([a-fA-F0-9]{64})\b");
+            var match2 = pattern2.Match(releaseNotes);
+            if (match2.Success && match2.Groups.Count > 1)
+            {
+                return match2.Groups[1].Value.ToUpperInvariant();
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Verifies the SHA-256 hash of a file against the expected hash.
+        /// </summary>
+        private static bool VerifyFileHash(string filePath, string expectedHash)
+        {
+            try
+            {
+                if (!File.Exists(filePath))
+                    return false;
+
+                using var sha256 = SHA256.Create();
+                using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var computedHash = sha256.ComputeHash(fileStream);
+                var computedHashString = BitConverter.ToString(computedHash).Replace("-", "").ToUpperInvariant();
+
+                var expectedHashUpper = expectedHash.Trim().ToUpperInvariant().Replace("-", "").Replace(" ", "");
+
+                return string.Equals(computedHashString, expectedHashUpper, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Checks if enough time has passed since the last update check (rate limiting).
+        /// </summary>
+        private static bool ShouldAllowUpdateCheck()
+        {
+            try
+            {
+                if (!File.Exists(LastCheckTimeFile))
+                    return true;  // First check, allow it
+
+                var lastCheckText = File.ReadAllText(LastCheckTimeFile).Trim();
+                if (string.IsNullOrWhiteSpace(lastCheckText))
+                    return true;
+
+                if (DateTime.TryParse(lastCheckText, out var lastCheckTime))
+                {
+                    var timeSinceLastCheck = DateTime.UtcNow - lastCheckTime;
+                    return timeSinceLastCheck >= MinimumCheckInterval;
+                }
+
+                return true;  // If we can't parse, allow the check
+            }
+            catch
+            {
+                return true;  // On error, allow the check (fail open)
+            }
+        }
+
+        /// <summary>
+        /// Records the current time as the last update check time for rate limiting.
+        /// </summary>
+        private static void RecordUpdateCheckTime()
+        {
+            try
+            {
+                var dataDir = PathHelper.GetDataDirectory();
+                var filePath = Path.Combine(dataDir, "last_update_check.txt");
+                File.WriteAllText(filePath, DateTime.UtcNow.ToString("O"));  // ISO 8601 format
+            }
+            catch
+            {
+                // Silently fail - rate limiting is best-effort
+            }
+        }
+
+        /// <summary>
+        /// Verifies code signing of an executable file (if code signing is enabled).
+        /// Returns true if verification passes or if code signing is not configured.
+        /// Returns false if code signing verification fails.
+        /// 
+        /// NOTE: This requires a code signing certificate. See documentation for setup.
+        /// </summary>
+        private static bool VerifyCodeSignature(string exePath)
+        {
+            // TODO: Implement code signing verification when certificate is obtained
+            // For now, this is a placeholder that always returns true
+            // 
+            // Implementation would use:
+            // - System.Security.Cryptography.X509Certificates
+            // - Authenticode verification APIs
+            // - Or external tools like signtool.exe
+            //
+            // Example approach:
+            // 1. Extract certificate from signed executable
+            // 2. Verify certificate chain against trusted root CAs
+            // 3. Check certificate hasn't expired
+            // 4. Verify certificate subject matches expected publisher
+            //
+            // When ready, uncomment and implement:
+            /*
+            try
+            {
+                // Use signtool or .NET APIs to verify signature
+                // Return true only if signature is valid
+                return true;  // Placeholder
+            }
+            catch
+            {
+                return false;
+            }
+            */
+
+            // For now, skip verification (fail open) until certificate is obtained
+            return true;
         }
 
         #region GitHub DTOs
