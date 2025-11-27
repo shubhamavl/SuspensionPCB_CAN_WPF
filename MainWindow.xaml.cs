@@ -12,8 +12,10 @@ using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Windows.Input;
 using System.Windows.Controls;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32;
+using SuspensionPCB_CAN_WPF.Services;
 
 namespace SuspensionPCB_CAN_WPF
 {
@@ -25,6 +27,10 @@ namespace SuspensionPCB_CAN_WPF
         private volatile int _totalMessages, _txMessages, _rxMessages;
         private readonly object _dataLock = new object();
         private CANService? _canService;  // Changed from USBCANManager to CANService
+        private FirmwareUpdateService? _firmwareUpdateService;
+        private CancellationTokenSource? _firmwareUpdateCts;
+        private string? _selectedFirmwarePath;
+        private bool _firmwareUpdateInProgress;
         private readonly object _statisticsLock = new object();
 
         // v0.7 Calibration and Tare functionality
@@ -622,6 +628,7 @@ namespace SuspensionPCB_CAN_WPF
                     ShowInlineStatus($"{adapterName} Connected Successfully. Protocol: CAN v0.7", false);
                     if (ConnectionToggle != null) ConnectionToggle.IsChecked = true;
                     SaveConfiguration(); // Save adapter settings
+                    _canService.RequestBootloaderInfo();
                 }
                 else
                 {
@@ -1209,6 +1216,8 @@ namespace SuspensionPCB_CAN_WPF
                 _canService.MessageReceived += OnCANMessageReceived;
                 _canService.RawDataReceived += OnRawDataReceived;
                 _canService.SystemStatusReceived += HandleSystemStatus;
+                _canService.BootStatusReceived += OnBootStatusReceived;
+                _firmwareUpdateService = new FirmwareUpdateService(_canService);
                 _logger.LogInfo("CAN Service initialized successfully", "CANService");
             }
             catch (Exception ex)
@@ -1655,6 +1664,70 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
+        private bool EnsureCanConnection(string actionDescription)
+        {
+            if (_canService?.IsConnected != true)
+            {
+                ShowInlineStatus($"{actionDescription} requires an active CAN connection.", true);
+                return false;
+            }
+            return true;
+        }
+
+        private void SetFirmwareControlsEnabled(bool enabled)
+        {
+            if (BrowseFirmwareBtn != null) BrowseFirmwareBtn.IsEnabled = enabled;
+            if (StartFirmwareUpdateBtn != null) StartFirmwareUpdateBtn.IsEnabled = enabled;
+            if (EnterBootloaderBtn != null) EnterBootloaderBtn.IsEnabled = enabled;
+            if (QueryBootInfoBtn != null) QueryBootInfoBtn.IsEnabled = enabled;
+        }
+
+        private void OnBootStatusReceived(object? sender, BootStatusEventArgs e)
+        {
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    var status = e.RawData.Length > 0
+                        ? (BootloaderProtocol.BootloaderStatus)e.RawData[0]
+                        : BootloaderProtocol.BootloaderStatus.Idle;
+                    uint detail = e.RawData.Length >= 5 ? BitConverter.ToUInt32(e.RawData, 1) : 0;
+
+                    if (FirmwareStatusText != null)
+                    {
+                        string message = $"Status: {BootloaderProtocol.DescribeStatus(status)}";
+                        if (status == BootloaderProtocol.BootloaderStatus.InProgress)
+                        {
+                            message += detail > 0 ? $" ({detail}%)" : " (working)";
+                        }
+                        else if (detail != 0)
+                        {
+                            message += $" (code 0x{detail:X})";
+                        }
+                        FirmwareStatusText.Text = message;
+                    }
+
+                    if (FirmwareProgressBar != null && FirmwareProgressLabel != null)
+                    {
+                        if (status == BootloaderProtocol.BootloaderStatus.InProgress)
+                        {
+                            FirmwareProgressBar.Value = Math.Min(100, detail);
+                            FirmwareProgressLabel.Text = $"{Math.Min(100, detail)}%";
+                        }
+                        else if (status == BootloaderProtocol.BootloaderStatus.Success)
+                        {
+                            FirmwareProgressBar.Value = 100;
+                            FirmwareProgressLabel.Text = "100%";
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Boot status handling error: {ex.Message}", "FW");
+            }
+        }
+
         private void OnClosing(object sender, CancelEventArgs e)
         {
             try
@@ -1663,6 +1736,11 @@ namespace SuspensionPCB_CAN_WPF
                 _clockTimer?.Stop();
                 _weightProcessor?.Stop();
                 _canService?.Disconnect();
+                _firmwareUpdateCts?.Cancel();
+                if (_canService != null)
+                {
+                    _canService.BootStatusReceived -= OnBootStatusReceived;
+                }
                 _logger.LogInfo("Application closing", "Main");
             }
             catch (Exception ex)
@@ -1694,6 +1772,101 @@ namespace SuspensionPCB_CAN_WPF
             {
                 if (ConnectionToggle != null) ConnectionToggle.IsEnabled = true;
             }
+        }
+
+        private void BrowseFirmwareBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Filter = "Firmware Binary (*.bin)|*.bin|All Files (*.*)|*.*",
+                    Title = "Select Firmware Binary"
+                };
+                if (dialog.ShowDialog() == true)
+                {
+                    _selectedFirmwarePath = dialog.FileName;
+                    if (FirmwareFilePathText != null)
+                    {
+                        FirmwareFilePathText.Text = $"Selected file: {Path.GetFileName(dialog.FileName)}";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Firmware browse error: {ex.Message}", "FW");
+                ShowInlineStatus($"Failed to select firmware: {ex.Message}", true);
+            }
+        }
+
+        private async void StartFirmwareUpdateBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_firmwareUpdateService == null)
+            {
+                ShowInlineStatus("Firmware update service not ready.", true);
+                return;
+            }
+            if (!EnsureCanConnection("Firmware update"))
+            {
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(_selectedFirmwarePath) || !File.Exists(_selectedFirmwarePath))
+            {
+                ShowInlineStatus("Select a firmware .bin file first.", true);
+                return;
+            }
+            if (_firmwareUpdateInProgress)
+            {
+                ShowInlineStatus("Firmware update already in progress.", true);
+                return;
+            }
+
+            _firmwareUpdateInProgress = true;
+            _firmwareUpdateCts = new CancellationTokenSource();
+            SetFirmwareControlsEnabled(false);
+            if (FirmwareProgressBar != null) FirmwareProgressBar.Value = 0;
+            if (FirmwareProgressLabel != null) FirmwareProgressLabel.Text = "0%";
+            if (FirmwareStatusText != null) FirmwareStatusText.Text = "Status: Sending...";
+
+            var progress = new Progress<FirmwareProgress>(p =>
+            {
+                if (FirmwareProgressBar != null) FirmwareProgressBar.Value = p.Percentage;
+                if (FirmwareProgressLabel != null) FirmwareProgressLabel.Text = $"{p.Percentage:0}% ({p.ChunksSent}/{p.TotalChunks})";
+            });
+
+            try
+            {
+                bool success = await _firmwareUpdateService.UpdateFirmwareAsync(_selectedFirmwarePath, progress, _firmwareUpdateCts.Token);
+                ShowStatusBanner(success ? "✓ Firmware transfer complete. Awaiting bootloader verification." : "✗ Firmware transfer failed.", success);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Firmware update error: {ex.Message}", "FW");
+                ShowStatusBanner($"✗ Firmware update error: {ex.Message}", false);
+            }
+            finally
+            {
+                _firmwareUpdateInProgress = false;
+                _firmwareUpdateCts?.Dispose();
+                _firmwareUpdateCts = null;
+                SetFirmwareControlsEnabled(true);
+            }
+        }
+
+        private void QueryBootInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (!EnsureCanConnection("Bootloader query"))
+                return;
+            bool sent = _canService?.RequestBootloaderInfo() ?? false;
+            ShowInlineStatus(sent ? "Boot info requested." : "Failed to request boot info.", !sent);
+        }
+
+        private void EnterBootloaderBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (!EnsureCanConnection("Bootloader entry"))
+                return;
+            bool sent = _canService?.RequestEnterBootloader() ?? false;
+            ShowInlineStatus(sent ? "Bootloader entry requested." : "Failed to request bootloader entry.", !sent);
         }
         
         private void StartLogging_Click(object sender, RoutedEventArgs e)

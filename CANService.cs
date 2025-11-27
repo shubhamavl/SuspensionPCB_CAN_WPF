@@ -39,6 +39,12 @@ namespace SuspensionPCB_CAN_WPF
         private const uint CAN_MSG_ID_MODE_INTERNAL = 0x030;      // Switch to Internal ADC mode (empty message)
         private const uint CAN_MSG_ID_MODE_ADS1115 = 0x031;       // Switch to ADS1115 mode (empty message)
 
+        // Bootloader protocol IDs
+        private const uint CAN_MSG_ID_BOOT_COMMAND = BootloaderProtocol.CanIdBootCommand;
+        private const uint CAN_MSG_ID_BOOT_DATA = BootloaderProtocol.CanIdBootData;
+        private const uint CAN_MSG_ID_BOOT_STATUS = BootloaderProtocol.CanIdBootStatus;
+        private const uint CAN_MSG_ID_BOOT_INFO = BootloaderProtocol.CanIdBootInfo;
+
         // Rate Selection Codes
         private const byte CAN_RATE_100HZ = 0x01;  // 100Hz (10ms interval)
         private const byte CAN_RATE_500HZ = 0x02;  // 500Hz (2ms interval)
@@ -51,6 +57,7 @@ namespace SuspensionPCB_CAN_WPF
         // v0.7 Events
         public event EventHandler<RawDataEventArgs>? RawDataReceived;
         public event EventHandler<SystemStatusEventArgs>? SystemStatusReceived;
+        public event EventHandler<BootStatusEventArgs>? BootStatusReceived;
 
         public bool IsConnected => _connected;
 
@@ -305,6 +312,8 @@ namespace SuspensionPCB_CAN_WPF
                 case CAN_MSG_ID_SYSTEM_STATUS:      // 0x300 - System status
                 case CAN_MSG_ID_MODE_INTERNAL:      // 0x030 - Switch to Internal ADC mode
                 case CAN_MSG_ID_MODE_ADS1115:       // 0x031 - Switch to ADS1115 mode
+                case CAN_MSG_ID_BOOT_STATUS:
+                case CAN_MSG_ID_BOOT_INFO:
                     return true;
 
                 default:
@@ -453,6 +462,18 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
+        public bool RequestBootloaderInfo()
+        {
+            byte[] data = new byte[] { BootloaderProtocol.AppCmdQueryBootInfo };
+            return SendMessage(CAN_MSG_ID_BOOT_COMMAND, data);
+        }
+
+        public bool RequestEnterBootloader()
+        {
+            byte[] data = new byte[] { BootloaderProtocol.AppCmdEnterBootloader };
+            return SendMessage(CAN_MSG_ID_BOOT_COMMAND, data);
+        }
+
         #region Event Firing Logic for v0.7 Protocol - Semantic IDs
         private void FireSpecificEvents(uint canId, byte[] canData)
         {
@@ -496,6 +517,14 @@ namespace SuspensionPCB_CAN_WPF
                         });
                     }
                     break;
+                case CAN_MSG_ID_BOOT_STATUS:
+                case CAN_MSG_ID_BOOT_INFO:
+                    BootStatusReceived?.Invoke(this, new BootStatusEventArgs
+                    {
+                        RawData = canData.ToArray(),
+                        Timestamp = DateTime.Now
+                    });
+                    break;
             }
         }
         #endregion
@@ -522,6 +551,12 @@ namespace SuspensionPCB_CAN_WPF
         public byte ErrorFlags { get; set; }        // Error flags
         public byte ADCMode { get; set; }           // Current ADC mode (0=Internal, 1=ADS1115)
         public DateTime Timestamp { get; set; }     // PC3 reception timestamp
+    }
+
+    public class BootStatusEventArgs : EventArgs
+    {
+        public byte[] RawData { get; set; } = Array.Empty<byte>();
+        public DateTime Timestamp { get; set; }
     }
 
     public class CANErrorEventArgs : EventArgs
