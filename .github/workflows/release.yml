@@ -121,26 +121,99 @@ jobs:
           $SHA256 | Out-File -FilePath "${ZIP_NAME}.sha256" -NoNewline -Encoding utf8
           Write-Host "Hash saved to ${ZIP_NAME}.sha256"
 
+      - name: Extract release notes from CHANGELOG.md
+        id: changelog
+        shell: pwsh
+        run: |
+          $TAG_NAME = "${{ github.ref_name }}"  # e.g. v1.2.3
+          $VERSION = $TAG_NAME -replace '^v', ''  # e.g. 1.2.3
+          $CHANGELOG_PATH = "CHANGELOG.md"
+          
+          if (-not (Test-Path $CHANGELOG_PATH)) {
+            Write-Host "CHANGELOG.md not found, using default release notes"
+            "" | Out-File -FilePath "release_notes.txt" -Encoding utf8 -NoNewline
+            exit 0
+          }
+          
+          $content = Get-Content $CHANGELOG_PATH -Raw
+          
+          # Pattern to match version section: ## [1.2.3] or ## [1.2.3] - 2025-01-XX
+          # Match everything from ## [version] until the next ## [version] or end of file
+          # Use positive lookahead to stop at next ## [ or end of string
+          $escapedVersion = [regex]::Escape($VERSION)
+          $pattern = "(?s)##\s*\[$escapedVersion\](?:\s*-\s*\d{4}-\d{2}-\d{2})?\s*\n(.*?)(?=\n##\s*\[|$)"
+          $match = [regex]::Match($content, $pattern)
+          
+          if ($match.Success -and $match.Groups.Count -gt 1) {
+            $notes = $match.Groups[1].Value.Trim()
+            Write-Host "Found release notes for version $VERSION"
+            $previewLength = [Math]::Min(200, $notes.Length)
+            if ($previewLength -gt 0) {
+              Write-Host "Notes preview: $($notes.Substring(0, $previewLength))..."
+            }
+          } else {
+            Write-Host "No release notes found for version $VERSION in CHANGELOG.md"
+            Write-Host "Using default release notes"
+            $notes = ""
+          }
+          
+          # Save to file for next step (multiline strings are tricky in GitHub Actions)
+          $RELEASE_NOTES_FILE = "release_notes.txt"
+          if ($notes) {
+            # Preserve newlines by using UTF8 encoding without BOM
+            $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+            $fullPath = Join-Path $PWD $RELEASE_NOTES_FILE
+            [System.IO.File]::WriteAllText($fullPath, $notes, $utf8NoBom)
+            Write-Host "Release notes saved to $RELEASE_NOTES_FILE (length: $($notes.Length) characters)"
+          } else {
+            "" | Out-File -FilePath $RELEASE_NOTES_FILE -Encoding utf8 -NoNewline
+            Write-Host "Empty release notes file created"
+          }
+
+      - name: Generate release body with notes and security info
+        id: release_body
+        shell: pwsh
+        run: |
+          $RELEASE_NOTES_FILE = "release_notes.txt"
+          $SHA256 = "${{ steps.hash.outputs.hash }}"
+          $TAG_NAME = "${{ github.ref_name }}"
+          
+          $body = ""
+          
+          # Add release notes if available
+          if (Test-Path $RELEASE_NOTES_FILE) {
+            $notes = Get-Content $RELEASE_NOTES_FILE -Raw
+            if ($notes -and $notes.Trim()) {
+              $body = $notes.Trim() + "`n`n---`n`n"
+            }
+          }
+          
+          # Add security verification section
+          $securitySection = "## Security Verification`n`n" +
+            "**SHA-256 Hash:** ``$SHA256```n`n" +
+            "To verify the download integrity, compare the SHA-256 hash of your downloaded file with the hash above.`n`n" +
+            "**Verification command (Windows PowerShell):**`n" +
+            "``````powershell`n" +
+            "Get-FileHash -Path `"SuspensionPCB_CAN_WPF_Portable_$TAG_NAME.zip`" -Algorithm SHA256`n" +
+            "```````n`n" +
+            "**Verification command (Linux/Mac):**`n" +
+            "``````bash`n" +
+            "sha256sum SuspensionPCB_CAN_WPF_Portable_$TAG_NAME.zip`n" +
+            "```````n"
+          
+          $body += $securitySection
+          
+          # Save to file for GitHub Actions using UTF8 without BOM
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          $fullPath = Join-Path $PWD "release_body.txt"
+          [System.IO.File]::WriteAllText($fullPath, $body, $utf8NoBom)
+          Write-Host "Release body generated (length: $($body.Length) characters)"
+
       - name: Create GitHub Release and upload assets (ZIP + SHA-256)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          body: |
-            ## Security Verification
-            
-            **SHA-256 Hash:** `${{ steps.hash.outputs.hash }}`
-            
-            To verify the download integrity, compare the SHA-256 hash of your downloaded file with the hash above.
-            
-            **Verification command (Windows PowerShell):**
-            ```powershell
-            Get-FileHash -Path "SuspensionPCB_CAN_WPF_Portable_${{ github.ref_name }}.zip" -Algorithm SHA256
-            ```
-            
-            **Verification command (Linux/Mac):**
-            ```bash
-            sha256sum SuspensionPCB_CAN_WPF_Portable_${{ github.ref_name }}.zip
-            ```
+          body_path: release_body.txt
           files: |
             SuspensionPCB_CAN_WPF_Portable_${{ github.ref_name }}.zip
             SuspensionPCB_CAN_WPF_Portable_${{ github.ref_name }}.zip.sha256
