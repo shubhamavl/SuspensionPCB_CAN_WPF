@@ -321,6 +321,38 @@ namespace SuspensionPCB_CAN_WPF
                 _logger.LogError($"Inline status error: {ex.Message}", "UI");
             }
         }
+
+        private void ShowDownloadStatus(string message)
+        {
+            try
+            {
+                if (DownloadStatusText != null)
+                {
+                    DownloadStatusText.Text = message;
+                    DownloadStatusText.Visibility = Visibility.Visible;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Download status error: {ex.Message}", "UI");
+            }
+        }
+
+        private void HideDownloadStatus()
+        {
+            try
+            {
+                if (DownloadStatusText != null)
+                {
+                    DownloadStatusText.Visibility = Visibility.Collapsed;
+                    DownloadStatusText.Text = "";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Hide download status error: {ex.Message}", "UI");
+            }
+        }
         
         private string GetRateText(byte rate)
         {
@@ -1235,13 +1267,30 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                var info = await _updateService.CheckForUpdateAsync();
-                if (info == null || !info.IsUpdateAvailable)
+                var result = await _updateService.CheckForUpdateAsync();
+                if (!result.IsSuccess || result.Info == null || !result.Info.IsUpdateAvailable)
                     return;
 
-                // Non-intrusive notification in status bar only
-                ShowInlineStatus($"New version available: {info.LatestVersion}. Use 'Check for Updates' to install.");
-                _logger.LogInfo($"Update available. Current={info.CurrentVersion}, Latest={info.LatestVersion}", "Update");
+                _logger.LogInfo($"Update available. Current={result.Info.CurrentVersion}, Latest={result.Info.LatestVersion}", "Update");
+
+                // Show popup notification on UI thread
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    string message =
+                        $"A new version is available!\n\n" +
+                        $"Current version: {result.Info.CurrentVersion}\n" +
+                        $"Latest version:  {result.Info.LatestVersion}\n\n" +
+                        $"Would you like to download and install it now?";
+
+                    var dialogResult = MessageBox.Show(message, "Update Available",
+                        MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+                    if (dialogResult == MessageBoxResult.Yes)
+                    {
+                        // Start download directly without showing popup again
+                        _ = StartUpdateDownloadAsync(result.Info);
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -1254,18 +1303,36 @@ namespace SuspensionPCB_CAN_WPF
             try
             {
                 CheckUpdatesBtn.IsEnabled = false;
-                ShowInlineStatus("Checking for updates...");
+                ShowDownloadStatus("Checking for updates...");
 
-                var info = await _updateService.CheckForUpdateAsync();
+                var result = await _updateService.CheckForUpdateAsync();
+                if (!result.IsSuccess)
+                {
+                    HideDownloadStatus();
+                    string errorMessage = result.ErrorMessage ?? "Could not check for updates.";
+                    
+                    if (result.IsNetworkError)
+                    {
+                        errorMessage += "\n\nPlease verify your internet connection and try again.";
+                    }
+                    
+                    MessageBox.Show(errorMessage,
+                        "Update Check Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                HideDownloadStatus();
+
+                var info = result.Info;
                 if (info == null)
                 {
-                    MessageBox.Show("Could not check for updates. Please check your internet connection or try again later.",
-                        "Update Check Failed", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show("Update check completed, but no version information was available.",
+                        "Update Check Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
                 if (!info.IsUpdateAvailable)
                 {
+                    HideDownloadStatus();
                     MessageBox.Show(
                         $"You are already running the latest version.\n\nCurrent version: {info.CurrentVersion}",
                         "No Updates Available",
@@ -1274,47 +1341,145 @@ namespace SuspensionPCB_CAN_WPF
                     return;
                 }
 
-                string message =
+                string updateMessage =
                     $"A new version is available.\n\n" +
                     $"Current version: {info.CurrentVersion}\n" +
                     $"Latest version:  {info.LatestVersion}\n\n" +
                     $"Do you want to download and install it now?";
 
-                var result = MessageBox.Show(message, "Update Available", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (result != MessageBoxResult.Yes)
+                var dialogResult = MessageBox.Show(updateMessage, "Update Available", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (dialogResult != MessageBoxResult.Yes)
                 {
+                    HideDownloadStatus();
                     _logger.LogInfo("User declined update installation.", "Update");
                     return;
                 }
 
+                // Start download process
+                await StartUpdateDownloadAsync(info);
+            }
+            catch (Exception ex)
+            {
+                HideDownloadStatus();
+                _logger.LogError($"Update workflow error: {ex.Message}", "Update");
+                MessageBox.Show($"Update failed: {ex.Message}", "Update Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (CheckUpdatesBtn != null)
+                    CheckUpdatesBtn.IsEnabled = true;
+            }
+        }
+
+        private async Task StartUpdateDownloadAsync(UpdateService.UpdateInfo info)
+        {
+            try
+            {
                 var progress = new Progress<double>(p =>
                 {
-                    ShowInlineStatus($"Downloading update... {p:0}%");
+                    ShowDownloadStatus($"Downloading update... {p:0}%");
                 });
 
-                string? packagePath = await _updateService.DownloadUpdateAsync(info, progress);
-                if (string.IsNullOrWhiteSpace(packagePath) || !File.Exists(packagePath))
+                var downloadResult = await _updateService.DownloadUpdateAsync(info, progress);
+                
+                if (!downloadResult.IsSuccess)
                 {
-                    MessageBox.Show("Failed to download update package.", "Update Error",
+                    HideDownloadStatus();
+                    string errorMessage = downloadResult.ErrorMessage ?? "Failed to download update package.";
+                    
+                    if (downloadResult.IsNetworkError)
+                    {
+                        errorMessage += "\n\nPlease check your internet connection and try again.";
+                    }
+                    else if (downloadResult.IsHashMismatch)
+                    {
+                        errorMessage += "\n\nThe downloaded file may be corrupted. Please try again.";
+                    }
+                    
+                    MessageBox.Show(errorMessage, "Update Download Failed",
                         MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
+                string? packagePath = downloadResult.FilePath;
+                if (string.IsNullOrWhiteSpace(packagePath) || !File.Exists(packagePath))
+                {
+                    HideDownloadStatus();
+                    MessageBox.Show("Download completed but file was not found.", "Update Error",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+                HideDownloadStatus();
+
+                // Verify package file before proceeding
+                var packageInfo = new FileInfo(packagePath);
+                if (!packageInfo.Exists || packageInfo.Length == 0)
+                {
+                    MessageBox.Show(
+                        $"Downloaded package is invalid or empty.\n\nFile: {packagePath}\nSize: {packageInfo.Length} bytes",
+                        "Update Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    return;
+                }
+
+                _logger.LogInfo($"Package verified: {packagePath} ({packageInfo.Length} bytes)", "Update");
+
                 string updaterPath = PathHelper.GetUpdaterExecutablePath();
                 if (!File.Exists(updaterPath))
                 {
-                    MessageBox.Show(
-                        "Updater tool not found next to the application.\n\n" +
-                        "Please download the latest full package from GitHub Releases and update manually.",
-                        "Updater Missing",
+                    // Check if running in development mode (dotnet run or Debug build)
+                    var mainModule = System.Diagnostics.Process.GetCurrentProcess().MainModule;
+                    string? exePath = mainModule?.FileName;
+                    string appDir = PathHelper.ApplicationDirectory;
+                    
+                    bool isDevelopment = 
+                        (exePath != null && (exePath.Contains("dotnet") || exePath.Contains("\\Debug\\"))) ||
+                        appDir.Contains("\\Debug\\") ||
+                        appDir.Contains("\\bin\\Debug\\") ||
+                        !File.Exists(System.IO.Path.Combine(appDir, "SuspensionPCB_CAN_WPF.exe"));
+                    
+                    string updaterMessage = isDevelopment
+                        ? "Auto-update is not available when running in development/debug mode.\n\n" +
+                          "To test the auto-update feature:\n" +
+                          "1. Run: build-portable.bat\n" +
+                          "2. Run the EXE from: bin\\Release\\net8.0-windows\\win-x64\\publish\\\n\n" +
+                          $"Downloaded package location:\n{packagePath}\n\n" +
+                          $"You can manually extract the ZIP file to test the update, but the updater tool is only included in published releases."
+                        : "Updater tool not found next to the application.\n\n" +
+                          "Please download the latest full package from GitHub Releases and update manually.\n\n" +
+                          $"Downloaded package location:\n{packagePath}\n\n" +
+                          $"You can manually extract the ZIP file to update the application.";
+                    
+                    MessageBox.Show(updaterMessage,
+                        isDevelopment ? "Development Mode" : "Updater Missing",
                         MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
+                        MessageBoxImage.Information);
                     return;
                 }
+
+                // Verify updater executable
+                var updaterInfo = new FileInfo(updaterPath);
+                if (!updaterInfo.Exists || updaterInfo.Length == 0)
+                {
+                    MessageBox.Show(
+                        $"Updater executable is invalid or corrupted.\n\nFile: {updaterPath}",
+                        "Update Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    return;
+                }
+
+                _logger.LogInfo($"Starting updater: {updaterPath}", "Update");
+                _logger.LogInfo($"Package: {packagePath}", "Update");
+                _logger.LogInfo($"Target directory: {PathHelper.ApplicationDirectory}", "Update");
 
                 // Start external updater and exit this process
                 try
                 {
+                    string mainExeName = System.IO.Path.GetFileName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "SuspensionPCB_CAN_WPF.exe");
+                    
                     var startInfo = new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = updaterPath,
@@ -1324,19 +1489,34 @@ namespace SuspensionPCB_CAN_WPF
                         {
                             PathHelper.ApplicationDirectory,
                             packagePath,
-                            System.IO.Path.GetFileName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName
-                                                       ?? "SuspensionPCB_CAN_WPF.exe")
+                            mainExeName
                         }
                     };
 
-                    System.Diagnostics.Process.Start(startInfo);
+                    _logger.LogInfo($"Launching updater with arguments: {PathHelper.ApplicationDirectory}, {packagePath}, {mainExeName}", "Update");
+                    
+                    var updaterProcess = System.Diagnostics.Process.Start(startInfo);
+                    if (updaterProcess == null)
+                    {
+                        throw new Exception("Failed to start updater process. Process.Start returned null.");
+                    }
+
+                    _logger.LogInfo($"Updater process started (PID: {updaterProcess.Id}). Shutting down main application.", "Update");
+                    
+                    // Give the updater a moment to start, then shutdown
+                    await System.Threading.Tasks.Task.Delay(500);
                     Application.Current.Shutdown();
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError($"Failed to launch updater: {ex.Message}", "Update");
+                    _logger.LogError($"Failed to launch updater: {ex.Message}\n{ex.StackTrace}", "Update");
                     MessageBox.Show(
-                        $"Failed to launch updater.\n\nYou can still update manually by extracting the downloaded package:\n{packagePath}",
+                        $"Failed to launch updater: {ex.Message}\n\n" +
+                        $"You can still update manually:\n" +
+                        $"1. Close this application\n" +
+                        $"2. Extract the ZIP file: {packagePath}\n" +
+                        $"3. Copy all files to: {PathHelper.ApplicationDirectory}\n" +
+                        $"4. Restart the application",
                         "Update Error",
                         MessageBoxButton.OK,
                         MessageBoxImage.Error);
@@ -1344,14 +1524,10 @@ namespace SuspensionPCB_CAN_WPF
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Update workflow error: {ex.Message}", "Update");
+                HideDownloadStatus();
+                _logger.LogError($"Update download error: {ex.Message}", "Update");
                 MessageBox.Show($"Update failed: {ex.Message}", "Update Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                if (CheckUpdatesBtn != null)
-                    CheckUpdatesBtn.IsEnabled = true;
             }
         }
 
