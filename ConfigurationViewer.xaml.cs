@@ -68,8 +68,19 @@ namespace SuspensionPCB_CAN_WPF
                 LeftCalStatus.Text = "✓ Valid";
                 LeftCalSlope.Text = _leftCalibration.Slope.ToString("F6");
                 LeftCalIntercept.Text = _leftCalibration.Intercept.ToString("F6");
-                LeftCalZeroPoint.Text = _leftCalibration.Point1.RawADC.ToString();
-                LeftCalKnownWeight.Text = _leftCalibration.Point2.RawADC.ToString();
+                // Display first and last points if available
+                if (_leftCalibration.Points != null && _leftCalibration.Points.Count > 0)
+                {
+                    var firstPoint = _leftCalibration.Points.First();
+                    var lastPoint = _leftCalibration.Points.Last();
+                    LeftCalZeroPoint.Text = firstPoint.RawADC.ToString();
+                    LeftCalKnownWeight.Text = lastPoint.RawADC.ToString();
+                }
+                else
+                {
+                    LeftCalZeroPoint.Text = "N/A";
+                    LeftCalKnownWeight.Text = "N/A";
+                }
                 LeftCalCalibrated.Text = _leftCalibration.CalibrationDate.ToString("yyyy-MM-dd HH:mm:ss");
             }
             else
@@ -91,8 +102,19 @@ namespace SuspensionPCB_CAN_WPF
                 RightCalStatus.Text = "✓ Valid";
                 RightCalSlope.Text = _rightCalibration.Slope.ToString("F6");
                 RightCalIntercept.Text = _rightCalibration.Intercept.ToString("F6");
-                RightCalZeroPoint.Text = _rightCalibration.Point1.RawADC.ToString();
-                RightCalKnownWeight.Text = _rightCalibration.Point2.RawADC.ToString();
+                // Display first and last points if available
+                if (_rightCalibration.Points != null && _rightCalibration.Points.Count > 0)
+                {
+                    var firstPoint = _rightCalibration.Points.First();
+                    var lastPoint = _rightCalibration.Points.Last();
+                    RightCalZeroPoint.Text = firstPoint.RawADC.ToString();
+                    RightCalKnownWeight.Text = lastPoint.RawADC.ToString();
+                }
+                else
+                {
+                    RightCalZeroPoint.Text = "N/A";
+                    RightCalKnownWeight.Text = "N/A";
+                }
                 RightCalCalibrated.Text = _rightCalibration.CalibrationDate.ToString("yyyy-MM-dd HH:mm:ss");
             }
             else
