@@ -51,27 +51,61 @@ namespace SuspensionPCB_CAN_WPF
             public bool IsUpdateAvailable => LatestVersion > CurrentVersion;
         }
 
+        public sealed class UpdateCheckResult
+        {
+            public UpdateInfo? Info { get; init; }
+            public string? ErrorMessage { get; init; }
+            public bool IsRateLimited { get; init; }
+            public bool IsNetworkError { get; init; }
+            public bool IsSuccess => Info != null && ErrorMessage == null;
+
+            public static UpdateCheckResult Success(UpdateInfo info) => new() { Info = info };
+            public static UpdateCheckResult RateLimited() => new() { ErrorMessage = "Update check was performed recently. Please wait at least 1 hour between checks.", IsRateLimited = true };
+            public static UpdateCheckResult NetworkError(string message) => new() { ErrorMessage = message, IsNetworkError = true };
+            public static UpdateCheckResult Error(string message) => new() { ErrorMessage = message };
+        }
+
         /// <summary>
         /// Queries GitHub Releases API for the latest release and compares it with the current app version.
-        /// Returns null on failure (network errors, parse errors, rate limiting, etc.).
-        /// Implements rate limiting to prevent excessive API calls.
+        /// Returns detailed result with error information for better user feedback.
+        /// Rate limiting is currently disabled but can be re-enabled if needed.
         /// </summary>
-        public async Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken cancellationToken = default)
+        public async Task<UpdateCheckResult> CheckForUpdateAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                // Rate limiting: check if enough time has passed since last check
-                if (!ShouldAllowUpdateCheck())
-                {
-                    _logger.LogInfo("Update check skipped due to rate limiting (minimum 1 hour between checks)", "UpdateService");
-                    return null;
-                }
+                // Rate limiting disabled for now - can be re-enabled if needed
+                // if (!ShouldAllowUpdateCheck())
+                // {
+                //     _logger.LogInfo("Update check skipped due to rate limiting (minimum 1 hour between checks)", "UpdateService");
+                //     return UpdateCheckResult.RateLimited();
+                // }
 
                 var currentVersion = GetCurrentVersion();
-                var latest = await GetLatestReleaseAsync(cancellationToken).ConfigureAwait(false);
+                GithubReleaseDto? latest;
+                try
+                {
+                    latest = await GetLatestReleaseAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (HttpRequestException httpEx)
+                {
+                    _logger.LogWarning($"Network error during update check: {httpEx.Message}", "UpdateService");
+                    return UpdateCheckResult.NetworkError($"Network error: {httpEx.Message}. Please check your internet connection.");
+                }
+                catch (TaskCanceledException)
+                {
+                    _logger.LogWarning("Update check timed out", "UpdateService");
+                    return UpdateCheckResult.NetworkError("Update check timed out. Please check your internet connection and try again.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"Error fetching release from GitHub: {ex.Message}", "UpdateService");
+                    return UpdateCheckResult.Error($"Failed to connect to GitHub: {ex.Message}");
+                }
+
                 if (latest == null)
                 {
-                    return null;
+                    return UpdateCheckResult.Error("No releases found on GitHub. The repository may not have any published releases yet.");
                 }
 
                 // Find a suitable asset
@@ -84,25 +118,30 @@ namespace SuspensionPCB_CAN_WPF
                 if (asset == null)
                 {
                     _logger.LogWarning("Latest GitHub release found, but no matching portable ZIP asset.", "UpdateService");
-                    return null;
+                    return UpdateCheckResult.Error($"Release '{latest.TagName}' found, but no matching portable ZIP file was found. Expected filename containing '{AssetNameSubstring}'.");
                 }
 
                 // Validate download URL is from allowed domain
                 if (!IsValidDownloadUrl(asset.BrowserDownloadUrl))
                 {
                     _logger.LogError($"Download URL validation failed: {asset.BrowserDownloadUrl}", "UpdateService");
-                    return null;
+                    return UpdateCheckResult.Error("Download URL validation failed. The release asset URL is not from a trusted source.");
                 }
 
-                var latestVersion = ParseVersionFromTag(latest.TagName) ?? currentVersion;
+                var latestVersion = ParseVersionFromTag(latest.TagName);
+                if (latestVersion == null)
+                {
+                    _logger.LogWarning($"Could not parse version from tag: {latest.TagName}", "UpdateService");
+                    return UpdateCheckResult.Error($"Could not parse version from release tag '{latest.TagName}'. Expected format: v1.2.3 or 1.2.3");
+                }
 
                 // Extract SHA-256 hash from release notes (format: SHA-256: `hash` or **SHA-256 Hash:** `hash`)
                 var expectedHash = ExtractSha256FromReleaseNotes(latest.Body);
 
-                // Record successful check time for rate limiting
-                RecordUpdateCheckTime();
+                // Record successful check time for rate limiting (disabled for now, but kept for future use)
+                // RecordUpdateCheckTime();
 
-                return new UpdateInfo
+                return UpdateCheckResult.Success(new UpdateInfo
                 {
                     CurrentVersion = currentVersion,
                     LatestVersion = latestVersion,
@@ -110,30 +149,44 @@ namespace SuspensionPCB_CAN_WPF
                     AssetFileName = asset.Name ?? "update.zip",
                     ReleaseNotes = latest.Body,
                     ExpectedSha256Hash = expectedHash
-                };
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogWarning($"Update check failed: {ex.Message}", "UpdateService");
-                return null;
+                _logger.LogError($"Unexpected error during update check: {ex.Message}", "UpdateService");
+                return UpdateCheckResult.Error($"Unexpected error: {ex.Message}");
             }
+        }
+
+        public sealed class DownloadResult
+        {
+            public string? FilePath { get; init; }
+            public string? ErrorMessage { get; init; }
+            public bool IsSuccess => FilePath != null && ErrorMessage == null;
+            public bool IsNetworkError { get; init; }
+            public bool IsHashMismatch { get; init; }
+
+            public static DownloadResult Success(string filePath) => new() { FilePath = filePath };
+            public static DownloadResult NetworkError(string message) => new() { ErrorMessage = message, IsNetworkError = true };
+            public static DownloadResult HashMismatch(string message) => new() { ErrorMessage = message, IsHashMismatch = true };
+            public static DownloadResult Error(string message) => new() { ErrorMessage = message };
         }
 
         /// <summary>
         /// Downloads the update package to the local Update directory and verifies its integrity.
-        /// Returns the full path to the downloaded file, or null on failure.
+        /// Returns detailed result with error information for better diagnostics.
         /// Performs SHA-256 hash verification if hash is available in UpdateInfo.
         /// </summary>
-        public async Task<string?> DownloadUpdateAsync(UpdateInfo info, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        public async Task<DownloadResult> DownloadUpdateAsync(UpdateInfo info, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
         {
             if (info == null || string.IsNullOrWhiteSpace(info.DownloadUrl))
-                return null;
+                return DownloadResult.Error("Invalid update information: download URL is missing.");
 
             // Validate URL again before downloading
             if (!IsValidDownloadUrl(info.DownloadUrl))
             {
                 _logger.LogError($"Download URL validation failed: {info.DownloadUrl}", "UpdateService");
-                return null;
+                return DownloadResult.Error($"Download URL validation failed. URL is not from a trusted source: {info.DownloadUrl}");
             }
 
             try
@@ -141,57 +194,222 @@ namespace SuspensionPCB_CAN_WPF
                 string updateDir = PathHelper.GetUpdateDirectory();
                 string targetPath = Path.Combine(updateDir, info.AssetFileName);
 
-                using var response = await HttpClient.GetAsync(info.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                    .ConfigureAwait(false);
-
-                response.EnsureSuccessStatusCode();
-
-                var contentLength = response.Content.Headers.ContentLength;
-
-                await using var sourceStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                await using var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None);
-
-                var buffer = new byte[81920];
-                long totalRead = 0;
-                int read;
-
-                while ((read = await sourceStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                // Check if directory exists and is writable
+                try
                 {
-                    await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                    totalRead += read;
-
-                    if (contentLength.HasValue && contentLength.Value > 0 && progress != null)
+                    if (!Directory.Exists(updateDir))
                     {
-                        double percent = (double)totalRead / contentLength.Value * 100.0;
-                        progress.Report(percent);
+                        Directory.CreateDirectory(updateDir);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Failed to create update directory: {ex.Message}", "UpdateService");
+                    return DownloadResult.Error($"Cannot create update directory: {ex.Message}. Check file permissions.");
+                }
+
+                // Delete existing file if it exists
+                if (File.Exists(targetPath))
+                {
+                    try
+                    {
+                        File.Delete(targetPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning($"Could not delete existing update file: {ex.Message}", "UpdateService");
                     }
                 }
 
-                _logger.LogInfo($"Update package downloaded to {targetPath}", "UpdateService");
+                _logger.LogInfo($"Starting download from: {info.DownloadUrl}", "UpdateService");
+                _logger.LogInfo($"Target path: {targetPath}", "UpdateService");
+
+                using var response = await HttpClient.GetAsync(info.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var statusCode = (int)response.StatusCode;
+                    var errorMsg = $"HTTP {statusCode}: {response.ReasonPhrase}";
+                    _logger.LogError($"Download failed with status {statusCode}: {errorMsg}", "UpdateService");
+                    
+                    if (statusCode == 404)
+                        return DownloadResult.Error($"Update file not found on server (404). The release asset may have been removed.");
+                    if (statusCode == 403)
+                        return DownloadResult.Error($"Access denied (403). GitHub may be rate limiting requests.");
+                    if (statusCode >= 500)
+                        return DownloadResult.NetworkError($"Server error ({statusCode}). Please try again later.");
+                    
+                    return DownloadResult.Error($"Download failed: {errorMsg}");
+                }
+
+                var contentLength = response.Content.Headers.ContentLength;
+                _logger.LogInfo($"Content length: {contentLength} bytes", "UpdateService");
+
+                // Download to temporary file first, then rename to avoid file locking issues
+                string tempPath = targetPath + ".tmp";
+                
+                await using var sourceStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                await using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    var buffer = new byte[81920];
+                    long totalRead = 0;
+                    int read;
+
+                    while ((read = await sourceStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                    {
+                        await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                        totalRead += read;
+
+                        if (contentLength.HasValue && contentLength.Value > 0 && progress != null)
+                        {
+                            double percent = (double)totalRead / contentLength.Value * 100.0;
+                            progress.Report(percent);
+                        }
+                    }
+                }
+
+                // File stream is now closed, rename temp file to final location
+                if (File.Exists(targetPath))
+                {
+                    try
+                    {
+                        File.Delete(targetPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning($"Could not delete existing file before rename: {ex.Message}", "UpdateService");
+                    }
+                }
+
+                File.Move(tempPath, targetPath);
+                _logger.LogInfo($"Update package downloaded successfully: {targetPath}", "UpdateService");
+
+                // Verify file exists and has content
+                if (!File.Exists(targetPath))
+                {
+                    return DownloadResult.Error("Download completed but file was not found on disk.");
+                }
+
+                var fileInfo = new FileInfo(targetPath);
+                if (fileInfo.Length == 0)
+                {
+                    try { File.Delete(targetPath); } catch { }
+                    return DownloadResult.Error("Downloaded file is empty (0 bytes). The file may be corrupted.");
+                }
 
                 // Verify SHA-256 hash if available
                 if (!string.IsNullOrWhiteSpace(info.ExpectedSha256Hash))
                 {
-                    if (!VerifyFileHash(targetPath, info.ExpectedSha256Hash))
+                    _logger.LogInfo("Verifying SHA-256 hash...", "UpdateService");
+                    var hashResult = await VerifyFileHashAsync(targetPath, info.ExpectedSha256Hash);
+                    if (!hashResult.IsValid)
                     {
-                        _logger.LogError($"SHA-256 hash verification failed for downloaded file. File may be corrupted or tampered with.", "UpdateService");
+                        _logger.LogError($"SHA-256 hash verification failed. Expected: {info.ExpectedSha256Hash}, Computed: {hashResult.ComputedHash}", "UpdateService");
                         try { File.Delete(targetPath); } catch { }
-                        return null;
+                        return DownloadResult.HashMismatch(
+                            $"File integrity check failed. The downloaded file does not match the expected SHA-256 hash.\n\n" +
+                            $"Expected: {info.ExpectedSha256Hash}\n" +
+                            $"Computed: {hashResult.ComputedHash}\n\n" +
+                            $"This could indicate:\n" +
+                            $"• File corruption during download\n" +
+                            $"• Network interference\n" +
+                            $"• Incorrect hash in release notes\n\n" +
+                            $"Please try downloading again.");
                     }
-                    _logger.LogInfo("SHA-256 hash verification passed", "UpdateService");
+                    _logger.LogInfo($"SHA-256 hash verification passed: {hashResult.ComputedHash}", "UpdateService");
                 }
                 else
                 {
                     _logger.LogWarning("No SHA-256 hash available for verification. Download integrity not verified.", "UpdateService");
                 }
 
-                return targetPath;
+                return DownloadResult.Success(targetPath);
+            }
+            catch (HttpRequestException httpEx)
+            {
+                _logger.LogError($"Network error during download: {httpEx.Message}", "UpdateService");
+                return DownloadResult.NetworkError($"Network error: {httpEx.Message}. Please check your internet connection and try again.");
+            }
+            catch (TaskCanceledException)
+            {
+                _logger.LogError("Download timed out", "UpdateService");
+                return DownloadResult.NetworkError("Download timed out. Please check your internet connection and try again.");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogError($"Permission error: {ex.Message}", "UpdateService");
+                return DownloadResult.Error($"Permission denied: {ex.Message}. Please run the application with administrator privileges or check file permissions.");
+            }
+            catch (IOException ioEx)
+            {
+                _logger.LogError($"I/O error: {ioEx.Message}", "UpdateService");
+                return DownloadResult.Error($"File system error: {ioEx.Message}. Check disk space and file permissions.");
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Update download failed: {ex.Message}", "UpdateService");
-                return null;
+                _logger.LogError($"Unexpected error during download: {ex.Message}\n{ex.StackTrace}", "UpdateService");
+                return DownloadResult.Error($"Unexpected error: {ex.Message}");
             }
+        }
+
+        private sealed class HashVerificationResult
+        {
+            public bool IsValid { get; init; }
+            public string ComputedHash { get; init; } = string.Empty;
+        }
+
+        private async Task<HashVerificationResult> VerifyFileHashAsync(string filePath, string expectedHash)
+        {
+            const int maxRetries = 3;
+            const int retryDelayMs = 500;
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    if (!File.Exists(filePath))
+                        return new HashVerificationResult { IsValid = false, ComputedHash = "FILE_NOT_FOUND" };
+
+                    // Use FileShare.ReadWrite to allow other processes to read while we verify
+                    using var sha256 = SHA256.Create();
+                    await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    var computedHash = sha256.ComputeHash(fileStream);
+                    var computedHashString = BitConverter.ToString(computedHash).Replace("-", "").ToUpperInvariant();
+
+                    var expectedHashUpper = expectedHash.Trim().ToUpperInvariant().Replace("-", "").Replace(" ", "");
+
+                    return new HashVerificationResult
+                    {
+                        IsValid = string.Equals(computedHashString, expectedHashUpper, StringComparison.OrdinalIgnoreCase),
+                        ComputedHash = computedHashString
+                    };
+                }
+                catch (IOException ioEx) when (ioEx.Message.Contains("being used by another process") && attempt < maxRetries)
+                {
+                    _logger.LogWarning($"File locked on attempt {attempt}, retrying in {retryDelayMs * attempt}ms...", "UpdateService");
+                    await Task.Delay(retryDelayMs * attempt); // Exponential backoff
+                    continue;
+                }
+                catch (UnauthorizedAccessException) when (attempt < maxRetries)
+                {
+                    _logger.LogWarning($"Access denied on attempt {attempt}, retrying in {retryDelayMs * attempt}ms...", "UpdateService");
+                    await Task.Delay(retryDelayMs * attempt);
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    if (attempt == maxRetries)
+                    {
+                        _logger.LogError($"Hash verification failed after {maxRetries} attempts: {ex.Message}", "UpdateService");
+                        return new HashVerificationResult { IsValid = false, ComputedHash = $"ERROR: {ex.Message}" };
+                    }
+                    _logger.LogWarning($"Hash verification attempt {attempt} failed, retrying: {ex.Message}", "UpdateService");
+                    await Task.Delay(retryDelayMs * attempt);
+                }
+            }
+
+            return new HashVerificationResult { IsValid = false, ComputedHash = "ERROR: Max retries exceeded" };
         }
 
         private static HttpClient CreateHttpClient()
@@ -214,7 +432,18 @@ namespace SuspensionPCB_CAN_WPF
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning($"GitHub latest release API returned {(int)response.StatusCode}", "UpdateService");
+                var statusCode = (int)response.StatusCode;
+                _logger.LogWarning($"GitHub latest release API returned {statusCode}", "UpdateService");
+                
+                if (statusCode == 404)
+                {
+                    _logger.LogWarning($"Repository or releases not found: {RepositoryOwner}/{RepositoryName}", "UpdateService");
+                }
+                else if (statusCode == 403)
+                {
+                    _logger.LogWarning("GitHub API rate limit may have been exceeded", "UpdateService");
+                }
+                
                 return null;
             }
 
@@ -309,49 +538,33 @@ namespace SuspensionPCB_CAN_WPF
             if (string.IsNullOrWhiteSpace(releaseNotes))
                 return null;
 
-            // Pattern 1: SHA-256: `hash` or **SHA-256 Hash:** `hash`
-            var pattern1 = new Regex(@"SHA-256[:\s]+`?([a-fA-F0-9]{64})`?", RegexOptions.IgnoreCase);
+            // Pattern 1: **SHA-256 Hash:** `hash` (GitHub release format)
+            var pattern1 = new Regex(@"\*\*SHA-256\s+Hash:\*\*\s*`([a-fA-F0-9]{64})`", RegexOptions.IgnoreCase);
             var match1 = pattern1.Match(releaseNotes);
             if (match1.Success && match1.Groups.Count > 1)
             {
                 return match1.Groups[1].Value.ToUpperInvariant();
             }
 
-            // Pattern 2: Just a 64-character hex string (less reliable, but fallback)
-            var pattern2 = new Regex(@"\b([a-fA-F0-9]{64})\b");
+            // Pattern 2: SHA-256: `hash` or SHA-256 Hash: `hash`
+            var pattern2 = new Regex(@"SHA-256[:\s]+`?([a-fA-F0-9]{64})`?", RegexOptions.IgnoreCase);
             var match2 = pattern2.Match(releaseNotes);
             if (match2.Success && match2.Groups.Count > 1)
             {
                 return match2.Groups[1].Value.ToUpperInvariant();
             }
 
+            // Pattern 3: Just a 64-character hex string (less reliable, but fallback)
+            var pattern3 = new Regex(@"\b([a-fA-F0-9]{64})\b");
+            var match3 = pattern3.Match(releaseNotes);
+            if (match3.Success && match3.Groups.Count > 1)
+            {
+                return match3.Groups[1].Value.ToUpperInvariant();
+            }
+
             return null;
         }
 
-        /// <summary>
-        /// Verifies the SHA-256 hash of a file against the expected hash.
-        /// </summary>
-        private static bool VerifyFileHash(string filePath, string expectedHash)
-        {
-            try
-            {
-                if (!File.Exists(filePath))
-                    return false;
-
-                using var sha256 = SHA256.Create();
-                using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                var computedHash = sha256.ComputeHash(fileStream);
-                var computedHashString = BitConverter.ToString(computedHash).Replace("-", "").ToUpperInvariant();
-
-                var expectedHashUpper = expectedHash.Trim().ToUpperInvariant().Replace("-", "").Replace(" ", "");
-
-                return string.Equals(computedHashString, expectedHashUpper, StringComparison.OrdinalIgnoreCase);
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
 
         /// <summary>
         /// Checks if enough time has passed since the last update check (rate limiting).

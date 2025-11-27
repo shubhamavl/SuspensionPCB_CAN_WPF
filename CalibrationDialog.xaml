@@ -235,204 +235,198 @@
             </Grid>
         </Border>
 
-        <!-- Stepper Only (Instructions moved to popup) -->
+        <!-- Point Count and Add Button -->
         <Border Grid.Row="1" Grid.ColumnSpan="2" Background="#FFF8F9FA" CornerRadius="8" 
                 BorderBrush="#FF1B5E96" BorderThickness="2" Padding="20,15" Margin="0,0,0,15">
             <Border.Effect>
                 <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="2" Opacity="0.2" BlurRadius="6"/>
             </Border.Effect>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <!-- Step 1 -->
-                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="0,0,25,0">
-                        <Grid Width="40" Height="40" HorizontalAlignment="Center" Margin="0,0,0,8">
-                            <Ellipse x:Name="Step1Circle" Style="{StaticResource StepperCircleActive}" 
-                                     HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Ellipse.Effect>
-                                    <DropShadowEffect Color="#FF1B5E96" Direction="270" ShadowDepth="2" Opacity="0.4" BlurRadius="4"/>
-                                </Ellipse.Effect>
-                            </Ellipse>
-                            <TextBlock Text="1" FontWeight="Bold" FontSize="16" Foreground="White" 
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Grid>
-                        <TextBlock Text="Capture Point 1" FontSize="11" FontWeight="SemiBold" 
-                                   HorizontalAlignment="Center" Foreground="#FF1B5E96"/>
-                        <TextBlock Text="Empty Platform" FontSize="10" 
-                                   HorizontalAlignment="Center" Foreground="#FF6C757D" Margin="0,2,0,0"/>
-                    </StackPanel>
-                    
-                    <!-- Connecting Line -->
-                    <Rectangle x:Name="Step1Line" Width="30" Height="3" Fill="#FFE9ECEF" 
-                               VerticalAlignment="Center" Margin="0,0,25,0">
-                        <Rectangle.Effect>
-                            <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="1" Opacity="0.2" BlurRadius="2"/>
-                        </Rectangle.Effect>
-                    </Rectangle>
-                    
-                    <!-- Step 2 -->
-                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
-                        <Grid Width="40" Height="40" HorizontalAlignment="Center" Margin="0,0,0,8">
-                            <Ellipse x:Name="Step2Circle" Style="{StaticResource StepperCircle}" 
-                                     HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Ellipse.Effect>
-                                    <DropShadowEffect Color="#FF6C757D" Direction="270" ShadowDepth="2" Opacity="0.3" BlurRadius="4"/>
-                                </Ellipse.Effect>
-                            </Ellipse>
-                            <TextBlock Text="2" FontWeight="Bold" FontSize="16" Foreground="#FF6C757D" 
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Grid>
-                        <TextBlock Text="Capture Point 2" FontSize="11" FontWeight="SemiBold" 
-                                   HorizontalAlignment="Center" Foreground="#FF1B5E96"/>
-                        <TextBlock Text="Known Weight" FontSize="10" 
-                                   HorizontalAlignment="Center" Foreground="#FF6C757D" Margin="0,2,0,0"/>
-                    </StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Calibration Points: " FontSize="12" FontWeight="SemiBold" Foreground="#FF495057" Margin="0,0,5,0"/>
+                    <TextBlock Text="{Binding CapturedPointCount}" FontSize="12" FontWeight="Bold" Foreground="#FF1B5E96" Margin="0,0,3,0"/>
+                    <TextBlock Text="/" FontSize="12" Foreground="#FF6C757D" Margin="0,0,3,0"/>
+                    <TextBlock Text="{Binding Points.Count}" FontSize="12" FontWeight="Bold" Foreground="#FF6C757D"/>
                 </StackPanel>
-            </Border>
+                <Button Grid.Column="1" x:Name="AddPointBtn" Content="➕ Add Point" 
+                        Background="#FF28A745" Foreground="White" 
+                        BorderThickness="0" Padding="12,6" FontSize="11" FontWeight="SemiBold"
+                        Click="AddPoint_Click" Cursor="Hand" VerticalAlignment="Center">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}" 
+                                    CornerRadius="6" 
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#FF218838"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+        </Border>
 
-        <!-- Main Content Area -->
-        <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="0,0,0,15" MinHeight="250">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="300"/>
-                <ColumnDefinition Width="20"/>
-                <ColumnDefinition Width="*" MinWidth="300"/>
-            </Grid.ColumnDefinitions>
-            
-            <!-- Left Side - Point 1 -->
-            <Border Grid.Column="0" Background="White" CornerRadius="8" 
-                    BorderBrush="#FF1B5E96" BorderThickness="2" Padding="15" Margin="3">
-                <Border.Effect>
-                    <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="3" Opacity="0.2" BlurRadius="8"/>
-                </Border.Effect>
-                <StackPanel>
-                    <!-- Header -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <Ellipse x:Name="Step1Ellipse" Width="22" Height="22" Fill="#FF1B5E96" Margin="0,0,6,0"/>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Step 1: Empty Platform" FontSize="13" FontWeight="Bold" 
-                                       Foreground="#FF1B5E96"/>
-                            <TextBlock Text="Capture baseline measurement" FontSize="9" 
-                                       Foreground="#FF6C757D"/>
-                        </StackPanel>
-                    </StackPanel>
-                    
-                    <!-- Current Raw ADC -->
-                    <StackPanel Margin="0,0,0,8">
-                        <TextBlock Text="Current Raw ADC Value:" FontSize="11" FontWeight="SemiBold" 
-                                   Foreground="#FF495057" Margin="0,0,0,3"/>
-                        <TextBox x:Name="Point1RawTxt" FontSize="14" FontWeight="Bold" 
-                                Text="{Binding Point1RawADC}" IsReadOnly="True" 
-                                Background="#FFF8F9FA" BorderBrush="#FF17A2B8" BorderThickness="2"
-                                Padding="6,4" TextAlignment="Center" Foreground="#FF17A2B8"
-                                Width="100" HorizontalAlignment="Left"/>
-                        <TextBlock Text="🔄 Live ADC reading from CAN" FontSize="8" 
-                                   Foreground="#FF6C757D" HorizontalAlignment="Left" Margin="0,1,0,0"/>
-                    </StackPanel>
-                    
-                    <!-- Known Weight Input -->
-                    <StackPanel Margin="0,0,0,8">
-                        <TextBlock Text="Known Weight (kg):" FontSize="11" FontWeight="SemiBold" 
-                                   Foreground="#FF495057" Margin="0,0,0,3"/>
-                        <TextBox x:Name="Point1WeightTxt" FontSize="14" FontWeight="Bold" 
-                                Text="{Binding Point1KnownWeight, UpdateSourceTrigger=PropertyChanged}" 
-                                Background="#FFF8F9FA" BorderBrush="#FF1B5E96" BorderThickness="2"
-                                Padding="6,4" TextAlignment="Center" Foreground="#FF1B5E96"
-                                Width="100" HorizontalAlignment="Left"/>
-                        <TextBlock Text="💡 Type 0 for empty platform" FontSize="9" 
-                                   Foreground="#FF28A745" HorizontalAlignment="Left" Margin="0,3,0,0" FontWeight="SemiBold"/>
-                    </StackPanel>
-                    
-                    <!-- Capture Button -->
-                    <Button x:Name="CapturePoint1Btn" Content="📸 CAPTURE POINT 1" 
-                            Style="{StaticResource SuccessButton}" 
-                            Click="CapturePoint1_Click" FontSize="12" FontWeight="Bold"
-                            Height="30" Margin="0,6,0,0" Padding="10,4" HorizontalAlignment="Left"/>
-                    
-                    <!-- Status -->
-                    <TextBlock x:Name="Point1StatusTxt" Text="Ready to capture" FontSize="9" 
-                               Foreground="#FF28A745" HorizontalAlignment="Left" 
-                               Margin="0,6,0,0" FontWeight="SemiBold"/>
-                    
-                    <!-- Live ADC Display -->
-                    <Border Margin="0,8,0,0" Background="#FFF0F8FF" CornerRadius="4" Padding="6" HorizontalAlignment="Left">
-                        <StackPanel>
-                            <TextBlock Text="🔄 Live ADC Reading" FontSize="9" FontWeight="Bold" 
-                                       Foreground="#FF1B5E96" HorizontalAlignment="Left" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="Point1LiveADCTxt" Text="0" FontSize="12" FontWeight="Bold" 
-                                       Foreground="#FF17A2B8" HorizontalAlignment="Left"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </Border>
-
-            <!-- Divider -->
-            <Rectangle Grid.Column="1" Fill="#FFE9ECEF" Width="2" HorizontalAlignment="Center"/>
-            
-            <!-- Right Side - Point 2 -->
-            <Border Grid.Column="2" Background="White" CornerRadius="8" 
-                    BorderBrush="#FF1B5E96" BorderThickness="2" Padding="15" Margin="3">
-                <Border.Effect>
-                    <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="3" Opacity="0.2" BlurRadius="8"/>
-                </Border.Effect>
-                <StackPanel>
-                    <!-- Header -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <Ellipse x:Name="Step2Ellipse" Width="22" Height="22" Fill="#FF6C757D" Margin="0,0,6,0"/>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Step 2: Known Weight" FontSize="13" FontWeight="Bold" 
-                                       Foreground="#FF1B5E96"/>
-                            <TextBlock Text="Add calibrated weight" FontSize="9" 
-                                       Foreground="#FF6C757D"/>
-                        </StackPanel>
-                    </StackPanel>
-                    
-                    <!-- Current Raw ADC -->
-                    <StackPanel Margin="0,0,0,8">
-                        <TextBlock Text="Current Raw ADC Value:" FontSize="11" FontWeight="SemiBold" 
-                                   Foreground="#FF495057" Margin="0,0,0,3"/>
-                        <TextBox x:Name="Point2RawTxt" FontSize="14" FontWeight="Bold" 
-                                Text="{Binding Point2RawADC}" IsReadOnly="True" 
-                                Background="#FFF8F9FA" BorderBrush="#FF17A2B8" BorderThickness="2"
-                                Padding="6,4" TextAlignment="Center" Foreground="#FF17A2B8"
-                                Width="100" HorizontalAlignment="Left"/>
-                        <TextBlock Text="🔄 Live ADC reading from CAN" FontSize="8" 
-                                   Foreground="#FF6C757D" HorizontalAlignment="Left" Margin="0,1,0,0"/>
-                    </StackPanel>
-                    
-                    <!-- Known Weight Input -->
-                    <StackPanel Margin="0,0,0,8">
-                        <TextBlock Text="Known Weight (kg):" FontSize="11" FontWeight="SemiBold" 
-                                   Foreground="#FF495057" Margin="0,0,0,3"/>
-                        <TextBox x:Name="Point2WeightTxt" FontSize="14" FontWeight="Bold" 
-                                Text="{Binding Point2KnownWeight, UpdateSourceTrigger=PropertyChanged}" 
-                                Background="#FFF8F9FA" BorderBrush="#FF1B5E96" BorderThickness="2"
-                                Padding="6,4" TextAlignment="Center" Foreground="#FF1B5E96"
-                                Width="100" HorizontalAlignment="Left"/>
-                        <TextBlock Text="💡 Type weight you added (e.g., 1000)" FontSize="9" 
-                                   Foreground="#FF28A745" HorizontalAlignment="Left" Margin="0,3,0,0" FontWeight="SemiBold"/>
-                    </StackPanel>
-                    
-                    <!-- Capture Button -->
-                    <Button x:Name="CapturePoint2Btn" Content="📸 CAPTURE POINT 2" 
-                            Style="{StaticResource SuccessButton}" 
-                            Click="CapturePoint2_Click" FontSize="12" FontWeight="Bold"
-                            Height="30" Margin="0,6,0,0" Padding="10,4" IsEnabled="False" HorizontalAlignment="Left"/>
-                    
-                    <!-- Status -->
-                    <TextBlock x:Name="Point2StatusTxt" Text="Waiting for Step 1" FontSize="9" 
-                               Foreground="#FF6C757D" HorizontalAlignment="Left" 
-                               Margin="0,6,0,0" FontWeight="SemiBold"/>
-                    
-                    <!-- Live ADC Display -->
-                    <Border Margin="0,8,0,0" Background="#FFF0F8FF" CornerRadius="4" Padding="6" HorizontalAlignment="Left">
-                        <StackPanel>
-                            <TextBlock Text="🔄 Live ADC Reading" FontSize="9" FontWeight="Bold" 
-                                       Foreground="#FF1B5E96" HorizontalAlignment="Left" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="Point2LiveADCTxt" Text="0" FontSize="12" FontWeight="Bold" 
-                                       Foreground="#FF17A2B8" HorizontalAlignment="Left"/>
-                        </StackPanel>
-                    </Border>
-            </StackPanel>
-            </Border>
-        </Grid>
+        <!-- Main Content Area - Dynamic Point List -->
+        <Border Grid.Row="2" Grid.ColumnSpan="2" Background="White" CornerRadius="8" 
+                BorderBrush="#FF1B5E96" BorderThickness="2" Padding="15" Margin="0,0,0,15" MinHeight="300">
+            <Border.Effect>
+                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="3" Opacity="0.2" BlurRadius="8"/>
+            </Border.Effect>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="PointsList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="#FFF8F9FA" CornerRadius="6" BorderBrush="#FFDEE2E6" 
+                                    BorderThickness="2" Padding="15" Margin="0,0,0,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Point Number Badge -->
+                                    <Border Grid.Column="0" Width="40" Height="40" 
+                                            CornerRadius="20" Margin="0,0,15,0" VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#FF1B5E96"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsCaptured}" Value="True">
+                                                        <Setter Property="Background" Value="#FF28A745"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding PointNumber}" FontSize="16" FontWeight="Bold" 
+                                                   Foreground="White" HorizontalAlignment="Center" 
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                    
+                                    <!-- Point Details -->
+                                    <StackPanel Grid.Column="1">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                            <TextBlock Text="Point " FontSize="13" FontWeight="Bold" Foreground="#FF1B5E96"/>
+                                            <TextBlock Text="{Binding PointNumber}" FontSize="13" FontWeight="Bold" Foreground="#FF1B5E96"/>
+                                        </StackPanel>
+                                        
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <!-- Live ADC -->
+                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                <TextBlock Text="Live ADC:" FontSize="10" Foreground="#FF6C757D" Margin="0,0,0,3"/>
+                                                <TextBox Text="{Binding RawADC, Mode=OneWay}" IsReadOnly="True" 
+                                                         Background="#FFF0F8FF" BorderBrush="#FF17A2B8" 
+                                                         BorderThickness="1" Padding="4" TextAlignment="Center" 
+                                                         FontSize="12" FontWeight="Bold" Foreground="#FF17A2B8"/>
+                                            </StackPanel>
+                                            
+                                            <!-- Weight Input -->
+                                            <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                                                <TextBlock Text="Weight (kg):" FontSize="10" Foreground="#FF6C757D" Margin="0,0,0,3"/>
+                                                <TextBox Text="{Binding KnownWeight, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" 
+                                                         Background="White" BorderBrush="#FF1B5E96" 
+                                                         BorderThickness="1" Padding="4" TextAlignment="Center" 
+                                                         FontSize="12" FontWeight="Bold" Foreground="#FF1B5E96"/>
+                                            </StackPanel>
+                                            
+                                            <!-- Capture Button -->
+                                            <Button Grid.Column="2" Content="📸 Capture" 
+                                                    Background="#FF28A745" Foreground="White" 
+                                                    BorderThickness="0" Padding="10,6" FontSize="10" FontWeight="SemiBold"
+                                                    Click="CapturePoint_Click" DataContext="{Binding}"
+                                                    VerticalAlignment="Bottom" Height="28">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="IsEnabled" Value="True"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsCaptured}" Value="True">
+                                                                <Setter Property="IsEnabled" Value="False"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                                <Button.Template>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}" 
+                                                                CornerRadius="4" 
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center" 
+                                                                            VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="Background" Value="#FF218838"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsEnabled" Value="False">
+                                                                <Setter Property="Background" Value="#FFB0B0B0"/>
+                                                                <Setter Property="Foreground" Value="#FF666666"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Button.Template>
+                                            </Button>
+                                        </Grid>
+                                        
+                                        <!-- Status -->
+                                        <TextBlock Text="{Binding StatusText}" FontSize="9" 
+                                                   FontWeight="SemiBold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="#FF6C757D"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCaptured}" Value="True">
+                                                            <Setter Property="Foreground" Value="#FF28A745"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    
+                                    <!-- Delete Button -->
+                                    <Button Grid.Column="2" Content="✕" FontSize="12" FontWeight="Bold"
+                                            Background="#FFDC3545" Foreground="White" 
+                                            BorderThickness="0" Width="25" Height="25" 
+                                            Click="RemovePoint_Click" DataContext="{Binding}"
+                                            ToolTip="Remove this point" Margin="5,0,0,0"
+                                            VerticalAlignment="Top">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" 
+                                                        CornerRadius="12" Width="25" Height="25">
+                                                    <ContentPresenter HorizontalAlignment="Center" 
+                                                                    VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="#FFC82333"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
 
 
         <!-- Action Buttons -->
@@ -478,10 +472,10 @@
                 </Button>
                 
                 <!-- Calculate Button (Centered) -->
-                <Button Grid.Column="2" Content="🧮 Calculate" 
+                <Button Grid.Column="2" x:Name="CalculateBtn" Content="🧮 Calculate" 
                         Style="{StaticResource SuccessButton}" 
                         Click="CalculateCalibration_Click" FontSize="12" 
-                        Height="32" Width="150" HorizontalAlignment="Center"/>
+                        Height="32" Width="150" HorizontalAlignment="Center" IsEnabled="False"/>
                 
                 <!-- Save and Cancel Buttons -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
@@ -536,36 +530,24 @@
                     </Button>
                 </StackPanel>
                 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <!-- Step 1 Instructions -->
-                    <StackPanel Grid.Column="0" Margin="0,0,20,0">
-                        <TextBlock Text="Step 1: Empty Platform" FontSize="14" FontWeight="Bold" 
-                                   Foreground="#FF1B5E96" Margin="0,0,0,10"/>
-                        <TextBlock Text="1. Remove all weight from platform" FontSize="12" 
-                                   Foreground="#FF495057" Margin="0,0,0,5"/>
-                        <TextBlock Text="2. Type '0' in left weight field" FontSize="12" 
-                                   Foreground="#FF495057" Margin="0,0,0,5"/>
-                        <TextBlock Text="3. Click 'Capture Point 1'" FontSize="12" 
-                                   Foreground="#FF495057"/>
-                    </StackPanel>
-                    
-                    <!-- Step 2 Instructions -->
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Step 2: Known Weight" FontSize="14" FontWeight="Bold" 
-                                   Foreground="#FF1B5E96" Margin="0,0,0,10"/>
-                        <TextBlock Text="1. Add known weight to platform" FontSize="12" 
-                                   Foreground="#FF495057" Margin="0,0,0,5"/>
-                        <TextBlock Text="2. Type weight in right field" FontSize="12" 
-                                   Foreground="#FF495057" Margin="0,0,0,5"/>
-                        <TextBlock Text="3. Click 'Capture Point 2'" FontSize="12" 
-                                   Foreground="#FF495057"/>
-                    </StackPanel>
-                </Grid>
+                <StackPanel>
+                    <TextBlock Text="Multi-Point Calibration Instructions" FontSize="14" FontWeight="Bold" 
+                               Foreground="#FF1B5E96" Margin="0,0,0,15"/>
+                    <TextBlock Text="1. Click 'Add Point' to create a new calibration point" FontSize="12" 
+                               Foreground="#FF495057" Margin="0,0,0,8"/>
+                    <TextBlock Text="2. Enter the known weight (kg) for this point" FontSize="12" 
+                               Foreground="#FF495057" Margin="0,0,0,8"/>
+                    <TextBlock Text="3. Wait for stable ADC reading, then click 'Capture'" FontSize="12" 
+                               Foreground="#FF495057" Margin="0,0,0,8"/>
+                    <TextBlock Text="4. Repeat steps 1-3 for additional points (minimum 1 point required)" FontSize="12" 
+                               Foreground="#FF495057" Margin="0,0,0,8"/>
+                    <TextBlock Text="5. Click 'Calculate' to perform least-squares linear regression" FontSize="12" 
+                               Foreground="#FF495057" Margin="0,0,0,8"/>
+                    <TextBlock Text="6. Review R² value and quality metrics in results" FontSize="12" 
+                               Foreground="#FF495057" Margin="0,0,0,8"/>
+                    <TextBlock Text="💡 Tip: More points (3-5+) improve accuracy and reduce noise" FontSize="11" 
+                               Foreground="#FF17A2B8" FontStyle="Italic" Margin="0,10,0,0"/>
+                </StackPanel>
             </StackPanel>
         </Border>
     </Popup>

@@ -107,11 +107,6 @@
                     <Button Content="Open Logs" Style="{StaticResource ModernButton}" 
                             Background="{StaticResource GrayMedium}" Click="OpenLogsWindow_Click"
                             Height="36" MinWidth="100" Margin="0,0,6,0"/>
-                    <Button x:Name="CheckUpdatesBtn" Content="Check for Updates"
-                            Style="{StaticResource ModernButton}"
-                            Background="{StaticResource PrimaryBlue}"
-                            Click="CheckUpdatesBtn_Click"
-                            Height="36" MinWidth="130"/>
                 </StackPanel>
                 
                 <!-- Status on Right -->
@@ -446,8 +441,41 @@
             <StatusBarItem>
                 <TextBlock x:Name="MessageCountBar" Text="RX: 0" />
             </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <Button x:Name="CheckUpdatesBtn" Content="Check for Updates"
+                        Click="CheckUpdatesBtn_Click"
+                        Background="Transparent" BorderThickness="0" Foreground="White"
+                        FontSize="10" Padding="5,2" Cursor="Hand"
+                        ToolTip="Check for application updates">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" 
+                                                Padding="{TemplateBinding Padding}"
+                                                CornerRadius="2">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#33FFFFFF"/>
+                                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
-                <TextBlock x:Name="TimestampText" Text="" />
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="DownloadStatusText" Text="" FontSize="10" Visibility="Collapsed" Margin="0,0,10,0"/>
+                    <TextBlock x:Name="TimestampText" Text="" />
+                </StackPanel>
             </StatusBarItem>
             <Separator/>
             <StatusBarItem HorizontalAlignment="Right">
