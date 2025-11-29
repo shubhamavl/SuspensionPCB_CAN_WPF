@@ -119,6 +119,12 @@ namespace SuspensionPCB_CAN_WPF
                     {
                         LoadFilterSettings();
                     }
+                    // Load display settings when panel opens
+                    LoadDisplaySettings();
+                    // Load UI visibility settings when panel opens
+                    LoadUIVisibilitySettings();
+                    // Load advanced settings when panel opens
+                    LoadAdvancedSettings();
                 }
             }
             catch (Exception ex)
@@ -294,9 +300,10 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     TxIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
                     
-                    // Flash back to red after 200ms
+                    // Flash back to red after configured duration
                     var timer = new System.Windows.Threading.DispatcherTimer();
-                    timer.Interval = TimeSpan.FromMilliseconds(200);
+                    int flashMs = _settingsManager.Settings.TXIndicatorFlashMs;
+                    timer.Interval = TimeSpan.FromMilliseconds(flashMs);
                     timer.Tick += (s, e) =>
                     {
                         TxIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
@@ -829,12 +836,13 @@ namespace SuspensionPCB_CAN_WPF
         private void ProcessPendingMessages()
         {
             int processed = 0;
-            // Increased batch size from 10 to 50 for better 1kHz performance
-            while (_messageQueue.TryDequeue(out var vm) && processed < 50)
+            int batchSize = _settingsManager.Settings.BatchProcessingSize;
+            int messageLimit = _settingsManager.Settings.MessageHistoryLimit;
+            while (_messageQueue.TryDequeue(out var vm) && processed < batchSize)
             {
                 Messages.Add(vm);
                 processed++;
-                if (Messages.Count > 1000) Messages.RemoveAt(0);
+                if (Messages.Count > messageLimit) Messages.RemoveAt(0);
             }
 
             if (processed > 0) ApplyMessageFilter();
@@ -1196,7 +1204,8 @@ namespace SuspensionPCB_CAN_WPF
                 }
                 
                 // Open calibration dialog (works with or without stream)
-                var calibrationDialog = new CalibrationDialog(sideToCalibrate, currentADCMode);
+                int calibrationDelayMs = _settingsManager.Settings.CalibrationCaptureDelayMs;
+                var calibrationDialog = new CalibrationDialog(sideToCalibrate, currentADCMode, calibrationDelayMs);
                 calibrationDialog.Owner = this;
                 if (calibrationDialog.ShowDialog() == true)
                 {
@@ -1372,6 +1381,12 @@ namespace SuspensionPCB_CAN_WPF
             // Load display settings
             LoadDisplaySettings();
             
+            // Load UI visibility settings
+            LoadUIVisibilitySettings();
+            
+            // Load advanced settings
+            LoadAdvancedSettings();
+            
             // Load existing calibrations and tare settings
             LoadCalibrations();
             _tareManager.LoadFromFile();
@@ -1426,7 +1441,8 @@ namespace SuspensionPCB_CAN_WPF
             };
             _uiUpdateTimer.Start();
 
-            _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            int clockIntervalMs = _settingsManager.Settings.ClockUpdateIntervalMs;
+            _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(clockIntervalMs) };
             _clockTimer.Tick += (s, e) => UpdateClock();
             _clockTimer.Start();
 
@@ -1911,6 +1927,1142 @@ namespace SuspensionPCB_CAN_WPF
             ApplyDisplaySettings();
         }
 
+        // UI Visibility Settings Methods
+        private void LoadUIVisibilitySettings()
+        {
+            try
+            {
+                var settings = _settingsManager.Settings;
+                
+                // Set status banner duration
+                if (StatusBannerDurationSlider != null)
+                {
+                    StatusBannerDurationSlider.Value = settings.StatusBannerDurationMs / 1000.0; // Convert ms to seconds
+                    if (StatusBannerDurationValueTxt != null)
+                    {
+                        int seconds = settings.StatusBannerDurationMs / 1000;
+                        StatusBannerDurationValueTxt.Text = $"{seconds} second{(seconds == 1 ? "" : "s")}";
+                    }
+                }
+                
+                // Set message history limit
+                if (MessageHistoryLimitSlider != null)
+                {
+                    MessageHistoryLimitSlider.Value = settings.MessageHistoryLimit;
+                    if (MessageHistoryLimitValueTxt != null)
+                    {
+                        MessageHistoryLimitValueTxt.Text = $"{settings.MessageHistoryLimit} messages";
+                    }
+                }
+                
+                // Set show/hide checkboxes
+                if (ShowRawADCCheckBox != null)
+                    ShowRawADCCheckBox.IsChecked = settings.ShowRawADC;
+                if (ShowCalibratedWeightCheckBox != null)
+                    ShowCalibratedWeightCheckBox.IsChecked = settings.ShowCalibratedWeight;
+                if (ShowStreamingIndicatorsCheckBox != null)
+                    ShowStreamingIndicatorsCheckBox.IsChecked = settings.ShowStreamingIndicators;
+                if (ShowCalibrationIconsCheckBox != null)
+                    ShowCalibrationIconsCheckBox.IsChecked = settings.ShowCalibrationIcons;
+                
+                // Apply visibility settings immediately
+                ApplyUIVisibilitySettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Failed to load UI visibility settings: {ex.Message}", "Settings");
+            }
+        }
+
+        private void ApplyUIVisibilitySettings()
+        {
+            try
+            {
+                int statusBannerDuration = (int)(StatusBannerDurationSlider?.Value ?? 3) * 1000; // Convert to ms
+                int messageHistoryLimit = (int)(MessageHistoryLimitSlider?.Value ?? 1000);
+                bool showRawADC = ShowRawADCCheckBox?.IsChecked ?? true;
+                bool showCalibratedWeight = ShowCalibratedWeightCheckBox?.IsChecked ?? false;
+                bool showStreamingIndicators = ShowStreamingIndicatorsCheckBox?.IsChecked ?? true;
+                bool showCalibrationIcons = ShowCalibrationIconsCheckBox?.IsChecked ?? true;
+                
+                // Save settings
+                _settingsManager.SetUIVisibilitySettings(statusBannerDuration, messageHistoryLimit, 
+                    showRawADC, showCalibratedWeight, showStreamingIndicators, showCalibrationIcons);
+                
+                // Apply visibility to UI elements
+                if (RawTxt != null)
+                {
+                    var parent = RawTxt.Parent as FrameworkElement;
+                    if (parent != null)
+                    {
+                        parent.Visibility = showRawADC ? Visibility.Visible : Visibility.Collapsed;
+                    }
+                }
+                
+                // Apply visibility to streaming indicators
+                if (StreamIndicator != null)
+                {
+                    StreamIndicator.Visibility = showStreamingIndicators ? Visibility.Visible : Visibility.Collapsed;
+                }
+                if (StreamStatusTxt != null)
+                {
+                    StreamStatusTxt.Visibility = showStreamingIndicators ? Visibility.Visible : Visibility.Collapsed;
+                }
+                
+                // Apply visibility to calibration icons
+                if (CalStatusIcon != null)
+                {
+                    CalStatusIcon.Visibility = showCalibrationIcons ? Visibility.Visible : Visibility.Collapsed;
+                }
+                if (CalStatusText != null)
+                {
+                    CalStatusText.Visibility = showCalibrationIcons ? Visibility.Visible : Visibility.Collapsed;
+                }
+                
+                // Note: Calibrated weight display would need a UI element - for now just save the setting
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Failed to apply UI visibility settings: {ex.Message}", "Settings");
+            }
+        }
+
+        private void StatusBannerDurationSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (StatusBannerDurationValueTxt != null)
+                {
+                    int seconds = (int)e.NewValue;
+                    StatusBannerDurationValueTxt.Text = $"{seconds} second{(seconds == 1 ? "" : "s")}";
+                }
+                ApplyUIVisibilitySettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Status banner duration slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void MessageHistoryLimitSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (MessageHistoryLimitValueTxt != null)
+                {
+                    int limit = (int)e.NewValue;
+                    MessageHistoryLimitValueTxt.Text = $"{limit} messages";
+                }
+                ApplyUIVisibilitySettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Message history limit slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void ShowRawADCCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyUIVisibilitySettings();
+        }
+
+        private void ShowCalibratedWeightCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyUIVisibilitySettings();
+        }
+
+        private void ShowStreamingIndicatorsCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyUIVisibilitySettings();
+        }
+
+        private void ShowCalibrationIconsCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyUIVisibilitySettings();
+        }
+
+        // Advanced Settings Methods
+        private void LoadAdvancedSettings()
+        {
+            try
+            {
+                var settings = _settingsManager.Settings;
+                
+                // Set TX indicator flash duration
+                if (TXIndicatorFlashSlider != null)
+                {
+                    TXIndicatorFlashSlider.Value = settings.TXIndicatorFlashMs;
+                    if (TXIndicatorFlashValueTxt != null)
+                    {
+                        TXIndicatorFlashValueTxt.Text = $"{settings.TXIndicatorFlashMs} ms";
+                    }
+                }
+                
+                // Set batch processing size
+                if (BatchProcessingSizeSlider != null)
+                {
+                    BatchProcessingSizeSlider.Value = settings.BatchProcessingSize;
+                    if (BatchProcessingSizeValueTxt != null)
+                    {
+                        BatchProcessingSizeValueTxt.Text = $"{settings.BatchProcessingSize} messages";
+                    }
+                }
+                
+                // Set clock update interval
+                if (ClockUpdateIntervalSlider != null)
+                {
+                    ClockUpdateIntervalSlider.Value = settings.ClockUpdateIntervalMs;
+                    if (ClockUpdateIntervalValueTxt != null)
+                    {
+                        ClockUpdateIntervalValueTxt.Text = $"{settings.ClockUpdateIntervalMs} ms";
+                    }
+                }
+                
+                // Set calibration capture delay
+                if (CalibrationCaptureDelaySlider != null)
+                {
+                    CalibrationCaptureDelaySlider.Value = settings.CalibrationCaptureDelayMs;
+                    if (CalibrationCaptureDelayValueTxt != null)
+                    {
+                        CalibrationCaptureDelayValueTxt.Text = $"{settings.CalibrationCaptureDelayMs} ms";
+                    }
+                }
+                
+                // Set log format
+                if (LogFormatCombo != null)
+                {
+                    foreach (System.Windows.Controls.ComboBoxItem item in LogFormatCombo.Items)
+                    {
+                        if (item.Tag?.ToString() == settings.LogFileFormat)
+                        {
+                            LogFormatCombo.SelectedItem = item;
+                            break;
+                        }
+                    }
+                }
+                
+                // Set show calibration quality metrics
+                if (ShowCalibrationQualityMetricsCheckBox != null)
+                    ShowCalibrationQualityMetricsCheckBox.IsChecked = settings.ShowCalibrationQualityMetrics;
+                
+                // Apply advanced settings immediately
+                ApplyAdvancedSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Failed to load advanced settings: {ex.Message}", "Settings");
+            }
+        }
+
+        private void ApplyAdvancedSettings()
+        {
+            try
+            {
+                int txFlashMs = (int)(TXIndicatorFlashSlider?.Value ?? 200);
+                string logFormat = "CSV"; // Default to CSV for now
+                if (LogFormatCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem formatItem)
+                {
+                    logFormat = formatItem.Tag?.ToString() ?? "CSV";
+                }
+                int batchSize = (int)(BatchProcessingSizeSlider?.Value ?? 50);
+                int clockInterval = (int)(ClockUpdateIntervalSlider?.Value ?? 1000);
+                int calibrationDelay = (int)(CalibrationCaptureDelaySlider?.Value ?? 500);
+                bool showQualityMetrics = ShowCalibrationQualityMetricsCheckBox?.IsChecked ?? true;
+                
+                // Save settings
+                _settingsManager.SetAdvancedSettings(txFlashMs, logFormat, batchSize, clockInterval, calibrationDelay, showQualityMetrics);
+                
+                // Apply clock update interval to timer
+                if (_clockTimer != null)
+                {
+                    _clockTimer.Interval = TimeSpan.FromMilliseconds(clockInterval);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Failed to apply advanced settings: {ex.Message}", "Settings");
+            }
+        }
+
+        private void TXIndicatorFlashSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (TXIndicatorFlashValueTxt != null)
+                {
+                    int flashMs = (int)e.NewValue;
+                    TXIndicatorFlashValueTxt.Text = $"{flashMs} ms";
+                }
+                ApplyAdvancedSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"TX indicator flash slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void BatchProcessingSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (BatchProcessingSizeValueTxt != null)
+                {
+                    int batchSize = (int)e.NewValue;
+                    BatchProcessingSizeValueTxt.Text = $"{batchSize} messages";
+                }
+                ApplyAdvancedSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Batch processing size slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void ClockUpdateIntervalSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (ClockUpdateIntervalValueTxt != null)
+                {
+                    int intervalMs = (int)e.NewValue;
+                    ClockUpdateIntervalValueTxt.Text = $"{intervalMs} ms";
+                }
+                ApplyAdvancedSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Clock update interval slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void CalibrationCaptureDelaySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (CalibrationCaptureDelayValueTxt != null)
+                {
+                    int delayMs = (int)e.NewValue;
+                    CalibrationCaptureDelayValueTxt.Text = $"{delayMs} ms";
+                }
+                ApplyAdvancedSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Calibration capture delay slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void LogFormatCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            ApplyAdvancedSettings();
+        }
+
+        private void ShowCalibrationQualityMetricsCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyAdvancedSettings();
+        }
+
+        // Info Button Event Handlers
+        private void WeightFilteringInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            string content = @"WEIGHT FILTERING SETTINGS
+
+These settings help reduce noise and jitter in weight measurements from ADC (Analog-to-Digital Converter) readings.
+
+ENABLE WEIGHT FILTERING
+• Purpose: Master switch to enable or disable all filtering
+• When to use: Disable if you need raw, unfiltered data for analysis
+• Default: Enabled
+• Impact: When disabled, weight values will show more variation due to ADC noise
+
+FILTER TYPE
+• None: No filtering applied - shows raw calibrated values
+  → Use when: You need maximum responsiveness and can tolerate noise
+  → Best for: Real-time analysis, debugging, or when external filtering is used
+
+• EMA (Exponential Moving Average): Recommended for most cases
+  → How it works: Gives more weight to recent values, responds quickly to changes
+  → Alpha value: Controls smoothing (0.0 = very smooth/slow, 1.0 = no filtering)
+  → Default Alpha: 0.15 (good balance)
+  → Lower Alpha (0.05-0.10): Smoother, slower response - good for stable loads
+  → Higher Alpha (0.20-0.30): Faster response, more noise - good for dynamic loads
+  → Use when: You want smooth display with quick response to weight changes
+  → Best for: General purpose use, most applications
+
+• SMA (Simple Moving Average): Simple averaging of last N samples
+  → How it works: Averages the last N weight values equally
+  → Window Size: Number of samples to average (more = smoother but slower)
+  → Default Window: 10 samples
+  → Small Window (5-10): Faster response, some noise
+  → Large Window (20-50): Very smooth, slower response
+  → Use when: You want consistent smoothing regardless of recent values
+  → Best for: Static loads, when consistent smoothing is more important than responsiveness
+
+WHY FILTERING IS NEEDED
+ADC readings naturally fluctuate due to:
+• Electrical noise in the system
+• Temperature variations
+• Power supply ripple
+• Load cell signal conditioning
+• ADC quantization errors
+
+Without filtering, weight values can jump ±0.1-0.5 kg even when the load is stable.
+
+FILTERING RECOMMENDATIONS
+• For stable loads (static weighing): EMA with Alpha 0.10-0.15, or SMA with Window 15-20
+• For dynamic loads (moving objects): EMA with Alpha 0.20-0.30, or SMA with Window 5-10
+• For maximum accuracy: EMA with Alpha 0.10-0.15 (recommended)
+• For debugging: Disable filtering to see raw ADC behavior
+
+FILTER RESET
+Filters automatically reset when:
+• Tare is applied
+• Tare is reset
+• Calibration is updated
+
+This ensures filters start fresh with new calibration or tare values.";
+
+            ShowSettingsInfo("Weight Filtering Settings", content);
+        }
+
+        private void DisplaySettingsInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            string content = @"DISPLAY SETTINGS
+
+These settings control how weight values are displayed and how the UI updates.
+
+WEIGHT DISPLAY FORMAT
+• Integer (50 kg): Rounds to nearest whole number
+  → Use when: You need simple, easy-to-read values
+  → Best for: General use, when precision beyond 1 kg isn't needed
+  → Example: 50.7 kg displays as ""51 kg""
+
+• One Decimal (50.3 kg): Shows one decimal place
+  → Use when: You need moderate precision
+  → Best for: Most applications, good balance of readability and precision
+  → Example: 50.67 kg displays as ""50.7 kg""
+
+• Two Decimals (50.25 kg): Shows two decimal places
+  → Use when: You need high precision for analysis
+  → Best for: Calibration, testing, when small differences matter
+  → Example: 50.678 kg displays as ""50.68 kg""
+
+Note: The actual precision depends on your calibration accuracy and filtering settings.
+
+UI UPDATE RATE
+Controls how often the weight display refreshes on screen.
+
+• Range: 10ms (100 Hz) to 200ms (5 Hz)
+• Default: 50ms (20 Hz)
+• Lower values (10-30ms): Faster updates, smoother display
+  → Use when: You want real-time feel, high-frequency monitoring
+  → Trade-off: Higher CPU usage, may cause UI lag on slower systems
+
+• Medium values (40-80ms): Balanced performance
+  → Use when: General purpose use (recommended)
+  → Trade-off: Good balance of responsiveness and performance
+
+• Higher values (100-200ms): Better performance, less frequent updates
+  → Use when: System performance is critical, or updates aren't critical
+  → Trade-off: Less responsive feel, but smoother on slower systems
+
+Note: This only affects UI display rate. Data processing still happens at full speed (1kHz).
+
+DATA TIMEOUT
+Controls how long the system waits before reporting ""No Data"" when CAN messages stop.
+
+• Range: 1-30 seconds
+• Default: 5 seconds
+• Short timeout (1-3 seconds): Quick detection of connection issues
+  → Use when: You need immediate feedback if data stops
+  → Trade-off: May trigger false alarms during brief interruptions
+
+• Medium timeout (4-8 seconds): Balanced detection
+  → Use when: General purpose use (recommended)
+  → Trade-off: Good balance of responsiveness and tolerance
+
+• Long timeout (10-30 seconds): Tolerant of brief interruptions
+  → Use when: Network may have occasional delays, or you want fewer alerts
+  → Trade-off: Slower detection of real connection problems
+
+AUTO-START LOGGING
+When enabled, automatically starts data logging when you begin a stream (Left or Right).
+
+• Enabled: Logging starts automatically when stream begins
+  → Use when: You always want to log data during testing
+  → Benefit: No need to remember to start logging manually
+
+• Disabled: Manual logging start required
+  → Use when: You only want to log specific tests
+  → Benefit: More control over when logging occurs
+
+Note: Logging still stops manually or when stream stops.";
+
+            ShowSettingsInfo("Display Settings", content);
+        }
+
+        private void UIVisibilityInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            string content = @"UI VISIBILITY SETTINGS
+
+These settings control which UI elements are visible, helping you customize the interface to your needs.
+
+STATUS BANNER DURATION
+Controls how long status messages (success/error notifications) are displayed.
+
+• Range: 1-10 seconds
+• Default: 3 seconds
+• Short duration (1-2 seconds): Quick notifications, less screen clutter
+  → Use when: You want brief, non-intrusive notifications
+  → Trade-off: May miss notifications if you're not watching
+
+• Medium duration (3-5 seconds): Balanced visibility
+  → Use when: General purpose use (recommended)
+  → Trade-off: Good balance of visibility and screen space
+
+• Long duration (6-10 seconds): Maximum visibility
+  → Use when: You want to ensure you see all notifications
+  → Trade-off: Notifications stay longer, may cover content
+
+MESSAGE HISTORY LIMIT
+Controls how many CAN messages are stored in memory for the message history display.
+
+• Range: 100-5000 messages
+• Default: 1000 messages
+• Low limit (100-500): Less memory usage, faster scrolling
+  → Use when: You only need recent messages, or have limited memory
+  → Trade-off: Older messages are discarded quickly
+
+• Medium limit (800-1500): Balanced storage
+  → Use when: General purpose use (recommended)
+  → Trade-off: Good balance of history and performance
+
+• High limit (2000-5000): Maximum history retention
+  → Use when: You need to analyze long message sequences
+  → Trade-off: Higher memory usage, may slow down scrolling
+
+Note: When limit is reached, oldest messages are automatically removed.
+
+SHOW RAW ADC DISPLAY
+Controls visibility of the raw ADC value display.
+
+• Enabled: Shows raw ADC value (e.g., ""1850"")
+  → Use when: You need to see raw sensor readings for debugging or analysis
+  → Useful for: Calibration, troubleshooting, understanding ADC behavior
+
+• Disabled: Hides raw ADC display
+  → Use when: You only care about weight values, want cleaner interface
+  → Useful for: Production use, simplified display
+
+SHOW CALIBRATED WEIGHT (BEFORE TARE)
+Controls visibility of calibrated weight before tare is applied.
+
+• Enabled: Shows both calibrated and tared weight
+  → Use when: You need to see weight before and after tare
+  → Useful for: Understanding tare effect, debugging tare issues
+
+• Disabled: Only shows tared weight
+  → Use when: You only care about final weight after tare
+  → Useful for: Normal operation, simplified display
+
+Note: This setting is saved for future UI enhancements.
+
+SHOW STREAMING STATUS INDICATORS
+Controls visibility of streaming status indicators (green/gray dot and ""Left Active"" / ""Right Active"" text).
+
+• Enabled: Shows streaming indicators
+  → Use when: You want visual confirmation of active streams
+  → Useful for: Quick status check, debugging stream issues
+
+• Disabled: Hides streaming indicators
+  → Use when: You want minimal UI, or status isn't needed
+  → Useful for: Clean interface, when you know stream status from other sources
+
+SHOW CALIBRATION STATUS ICONS
+Controls visibility of calibration status icons (✓ for calibrated, ⚠ for uncalibrated).
+
+• Enabled: Shows calibration icons
+  → Use when: You want quick visual confirmation of calibration status
+  → Useful for: Ensuring calibration before use, troubleshooting
+
+• Disabled: Hides calibration icons
+  → Use when: You want minimal UI, or calibration status isn't needed
+  → Useful for: Clean interface, when calibration is always done
+
+CUSTOMIZATION TIPS
+• For production use: Hide raw ADC, hide calibrated weight, show indicators
+• For debugging: Show everything
+• For minimal UI: Hide all optional elements
+• For analysis: Show raw ADC and calibrated weight";
+
+            ShowSettingsInfo("UI Visibility Settings", content);
+        }
+
+        private void AdvancedSettingsInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            string content = @"ADVANCED SETTINGS
+
+These settings control low-level behavior and are typically only adjusted for specific needs or troubleshooting.
+
+TX INDICATOR FLASH DURATION
+Controls how long the TX (transmit) indicator flashes white when sending CAN messages.
+
+• Range: 50-500 milliseconds
+• Default: 200ms
+• Short flash (50-100ms): Brief visual feedback
+  → Use when: You want subtle, quick feedback
+  → Trade-off: May be hard to see
+
+• Medium flash (150-250ms): Balanced visibility
+  → Use when: General purpose use (recommended)
+  → Trade-off: Good balance of visibility and speed
+
+• Long flash (300-500ms): Maximum visibility
+  → Use when: You want clear visual confirmation of transmissions
+  → Trade-off: Longer visual feedback
+
+BATCH PROCESSING SIZE
+Controls how many CAN messages are processed per UI update cycle.
+
+• Range: 10-100 messages
+• Default: 50 messages
+• Small batch (10-30): More frequent processing, smoother UI
+  → Use when: You want responsive UI, or have low message rates
+  → Trade-off: More processing overhead
+
+• Medium batch (40-60): Balanced processing
+  → Use when: General purpose use (recommended)
+  → Trade-off: Good balance of responsiveness and efficiency
+
+• Large batch (70-100): Maximum efficiency, less frequent updates
+  → Use when: You have high message rates (1kHz), or want maximum throughput
+  → Trade-off: Less frequent UI updates, but better performance
+
+Note: This is critical for 1kHz data rates. Too small batches may cause message queue buildup.
+
+CLOCK UPDATE INTERVAL
+Controls how often the clock display (timestamp) is updated.
+
+• Range: 500-5000 milliseconds
+• Default: 1000ms (1 second)
+• Fast update (500-800ms): More frequent clock updates
+  → Use when: You want precise time display
+  → Trade-off: Slightly more CPU usage
+
+• Medium update (1000-2000ms): Standard clock updates
+  → Use when: General purpose use (recommended)
+  → Trade-off: Good balance of accuracy and performance
+
+• Slow update (3000-5000ms): Less frequent updates
+  → Use when: Clock accuracy isn't critical, or you want to save CPU
+  → Trade-off: Clock may appear ""stale""
+
+CALIBRATION CAPTURE DELAY
+Controls how long the system waits before capturing an ADC reading during calibration.
+
+• Range: 100-2000 milliseconds
+• Default: 500ms
+• Short delay (100-300ms): Faster calibration
+  → Use when: ADC readings stabilize quickly, or you're in a hurry
+  → Trade-off: May capture unstable readings
+
+• Medium delay (400-800ms): Balanced capture timing
+  → Use when: General purpose use (recommended)
+  → Trade-off: Good balance of speed and stability
+
+• Long delay (1000-2000ms): Maximum stability
+  → Use when: ADC readings take time to stabilize, or you want maximum accuracy
+  → Trade-off: Slower calibration process
+
+Why delay is needed: After placing a weight, ADC readings need time to stabilize due to:
+• Mechanical settling of load cells
+• Electrical signal conditioning
+• ADC sampling and filtering
+
+LOG FILE FORMAT
+Controls the format of saved log files (currently CSV only, JSON/TXT coming soon).
+
+• CSV (Comma Separated Values): Standard spreadsheet format
+  → Use when: You want to analyze data in Excel, Python, or other tools
+  → Best for: Most applications, data analysis
+  → Format: Columns separated by commas, one row per data point
+
+• JSON (JavaScript Object Notation): Structured data format (coming soon)
+  → Use when: You want structured, parseable data
+  → Best for: Programmatic analysis, web applications
+
+• TXT (Plain Text): Human-readable text format (coming soon)
+  → Use when: You want simple, readable logs
+  → Best for: Quick review, simple analysis
+
+SHOW CALIBRATION QUALITY METRICS
+Controls whether calibration quality metrics (R² coefficient, error percentage) are displayed.
+
+• Enabled: Shows R² and maximum error percentage
+  → Use when: You want to verify calibration quality
+  → Useful for: Ensuring accurate calibration, troubleshooting
+
+• Disabled: Hides quality metrics
+  → Use when: You trust your calibration, or want simpler display
+  → Useful for: Clean interface, when metrics aren't needed
+
+R² (R-squared) indicates how well the calibration fits:
+• R² > 0.99: Excellent fit
+• R² > 0.95: Good fit
+• R² < 0.95: May need more calibration points or check for issues
+
+WHEN TO ADJUST ADVANCED SETTINGS
+• Performance issues: Adjust batch processing size or UI update rate
+• Calibration problems: Adjust calibration capture delay
+• Visual feedback issues: Adjust TX indicator flash duration
+• Clock accuracy needs: Adjust clock update interval
+
+Most users should keep default values unless experiencing specific issues.";
+
+            ShowSettingsInfo("Advanced Settings", content);
+        }
+
+        private void ShowSettingsInfo(string title, string content)
+        {
+            try
+            {
+                var infoDialog = new SettingsInfoDialog(title, content);
+                infoDialog.Owner = this;
+                infoDialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error showing settings info: {ex.Message}", "Settings");
+                MessageBox.Show($"Error displaying settings information: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Individual Setting Info Button Handlers
+        private void FilterEnabledInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Enable Weight Filtering", 
+                "ENABLE WEIGHT FILTERING\n\n" +
+                "Master switch to enable or disable all filtering.\n\n" +
+                "• Enabled: Weight values are filtered to reduce noise and jitter\n" +
+                "• Disabled: Shows raw, unfiltered calibrated values\n\n" +
+                "When to disable:\n" +
+                "• When you need raw data for analysis\n" +
+                "• When debugging ADC behavior\n" +
+                "• When external filtering is used\n\n" +
+                "Default: Enabled (recommended for most cases)");
+        }
+
+        private void FilterTypeInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Filter Type", 
+                "FILTER TYPE SELECTION\n\n" +
+                "Choose the filtering algorithm:\n\n" +
+                "EMA (Exponential Moving Average) - RECOMMENDED\n" +
+                "• Fast response to weight changes\n" +
+                "• Smooth output with minimal delay\n" +
+                "• Adjustable sensitivity via Alpha parameter\n" +
+                "• Best for: Most applications, dynamic loads\n\n" +
+                "SMA (Simple Moving Average)\n" +
+                "• Very smooth output\n" +
+                "• Slower response to changes\n" +
+                "• Adjustable via Window Size\n" +
+                "• Best for: Static loads, when consistency is priority\n\n" +
+                "None (No Filtering)\n" +
+                "• Shows raw calibrated values\n" +
+                "• Maximum responsiveness\n" +
+                "• More noise/jitter visible\n" +
+                "• Best for: Debugging, analysis, when external filtering used");
+        }
+
+        private void EmaAlphaInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("EMA Alpha Parameter", 
+                "EMA ALPHA PARAMETER\n\n" +
+                "Controls how much weight is given to new values vs. previous filtered values.\n\n" +
+                "Range: 0.05 to 0.5\n" +
+                "Default: 0.15\n\n" +
+                "Lower Alpha (0.05-0.10):\n" +
+                "• Smoother output\n" +
+                "• Slower response to changes\n" +
+                "• Less noise visible\n" +
+                "• Best for: Stable loads, when smoothness is priority\n\n" +
+                "Medium Alpha (0.15-0.20):\n" +
+                "• Balanced smoothing and responsiveness\n" +
+                "• Recommended for most cases\n" +
+                "• Good compromise\n\n" +
+                "Higher Alpha (0.25-0.5):\n" +
+                "• Faster response to changes\n" +
+                "• More noise visible\n" +
+                "• Best for: Dynamic loads, when responsiveness is priority\n\n" +
+                "Formula: filtered_value = alpha × new_value + (1-alpha) × previous_filtered_value");
+        }
+
+        private void SmaWindowInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("SMA Window Size", 
+                "SMA WINDOW SIZE\n\n" +
+                "Number of recent samples to average together.\n\n" +
+                "Range: 5 to 50 samples\n" +
+                "Default: 10 samples\n\n" +
+                "Small Window (5-10):\n" +
+                "• Faster response to changes\n" +
+                "• Some noise still visible\n" +
+                "• Best for: Dynamic loads\n\n" +
+                "Medium Window (10-20):\n" +
+                "• Balanced smoothing and responsiveness\n" +
+                "• Recommended for most cases\n\n" +
+                "Large Window (25-50):\n" +
+                "• Very smooth output\n" +
+                "• Slower response to changes\n" +
+                "• Best for: Static loads\n\n" +
+                "Note: More samples = smoother but slower response. " +
+                "At 1kHz data rate, 10 samples = 10ms delay.");
+        }
+
+        private void WeightFormatInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Weight Display Format", 
+                "WEIGHT DISPLAY FORMAT\n\n" +
+                "Controls how many decimal places are shown in weight displays.\n\n" +
+                "Integer (50 kg):\n" +
+                "• Rounds to nearest whole number\n" +
+                "• Simple, easy to read\n" +
+                "• Example: 50.7 kg → \"51 kg\"\n" +
+                "• Best for: General use, when precision beyond 1 kg isn't needed\n\n" +
+                "One Decimal (50.3 kg):\n" +
+                "• Shows one decimal place\n" +
+                "• Good balance of readability and precision\n" +
+                "• Example: 50.67 kg → \"50.7 kg\"\n" +
+                "• Best for: Most applications (recommended)\n\n" +
+                "Two Decimals (50.25 kg):\n" +
+                "• Shows two decimal places\n" +
+                "• High precision display\n" +
+                "• Example: 50.678 kg → \"50.68 kg\"\n" +
+                "• Best for: Calibration, testing, when small differences matter\n\n" +
+                "Note: Actual precision depends on calibration accuracy and filtering settings.");
+        }
+
+        private void UIUpdateRateInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("UI Update Rate", 
+                "UI UPDATE RATE\n\n" +
+                "Controls how often the weight display refreshes on screen.\n\n" +
+                "Range: 10ms (100 Hz) to 200ms (5 Hz)\n" +
+                "Default: 50ms (20 Hz)\n\n" +
+                "Fast Updates (10-30ms):\n" +
+                "• Very responsive, smooth display\n" +
+                "• Higher CPU usage\n" +
+                "• May cause UI lag on slower systems\n" +
+                "• Best for: High-frequency monitoring, real-time feel\n\n" +
+                "Medium Updates (40-80ms):\n" +
+                "• Balanced performance\n" +
+                "• Recommended for most cases\n" +
+                "• Good responsiveness without excessive CPU usage\n\n" +
+                "Slow Updates (100-200ms):\n" +
+                "• Better performance\n" +
+                "• Less frequent updates\n" +
+                "• Best for: When system performance is critical\n\n" +
+                "Note: This only affects UI display rate. Data processing still happens at full speed (1kHz).");
+        }
+
+        private void DataTimeoutInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Data Timeout", 
+                "DATA TIMEOUT\n\n" +
+                "How long to wait before reporting \"No Data\" when CAN messages stop.\n\n" +
+                "Range: 1-30 seconds\n" +
+                "Default: 5 seconds\n\n" +
+                "Short Timeout (1-3 seconds):\n" +
+                "• Quick detection of connection issues\n" +
+                "• May trigger false alarms during brief interruptions\n" +
+                "• Best for: When immediate feedback is needed\n\n" +
+                "Medium Timeout (4-8 seconds):\n" +
+                "• Balanced detection\n" +
+                "• Recommended for most cases\n" +
+                "• Good balance of responsiveness and tolerance\n\n" +
+                "Long Timeout (10-30 seconds):\n" +
+                "• Tolerant of brief interruptions\n" +
+                "• Slower detection of real connection problems\n" +
+                "• Best for: Networks with occasional delays\n\n" +
+                "Note: At 1kHz data rate, even 1 second timeout allows for 1000 missed messages.");
+        }
+
+        private void AutoStartLoggingInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Auto-start Logging", 
+                "AUTO-START LOGGING\n\n" +
+                "Automatically starts data logging when you begin a stream.\n\n" +
+                "Enabled:\n" +
+                "• Logging starts automatically when stream begins (Left or Right)\n" +
+                "• No need to remember to start logging manually\n" +
+                "• Best for: When you always want to log data during testing\n\n" +
+                "Disabled:\n" +
+                "• Manual logging start required\n" +
+                "• More control over when logging occurs\n" +
+                "• Best for: When you only want to log specific tests\n\n" +
+                "Note: Logging still stops manually or when stream stops.");
+        }
+
+        private void StatusBannerDurationInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Status Banner Duration", 
+                "STATUS BANNER DURATION\n\n" +
+                "How long status messages (success/error notifications) are displayed.\n\n" +
+                "Range: 1-10 seconds\n" +
+                "Default: 3 seconds\n\n" +
+                "Short Duration (1-2 seconds):\n" +
+                "• Quick notifications, less screen clutter\n" +
+                "• May miss notifications if not watching\n" +
+                "• Best for: When you want brief, non-intrusive notifications\n\n" +
+                "Medium Duration (3-5 seconds):\n" +
+                "• Balanced visibility\n" +
+                "• Recommended for most cases\n" +
+                "• Good balance of visibility and screen space\n\n" +
+                "Long Duration (6-10 seconds):\n" +
+                "• Maximum visibility\n" +
+                "• Notifications stay longer, may cover content\n" +
+                "• Best for: When you want to ensure you see all notifications");
+        }
+
+        private void MessageHistoryLimitInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Message History Limit", 
+                "MESSAGE HISTORY LIMIT\n\n" +
+                "Maximum number of CAN messages stored in memory for the message history display.\n\n" +
+                "Range: 100-5000 messages\n" +
+                "Default: 1000 messages\n\n" +
+                "Low Limit (100-500):\n" +
+                "• Less memory usage\n" +
+                "• Faster scrolling\n" +
+                "• Older messages discarded quickly\n" +
+                "• Best for: When you only need recent messages\n\n" +
+                "Medium Limit (800-1500):\n" +
+                "• Balanced storage\n" +
+                "• Recommended for most cases\n" +
+                "• Good balance of history and performance\n\n" +
+                "High Limit (2000-5000):\n" +
+                "• Maximum history retention\n" +
+                "• Higher memory usage\n" +
+                "• May slow down scrolling\n" +
+                "• Best for: When you need to analyze long message sequences\n\n" +
+                "Note: When limit is reached, oldest messages are automatically removed.");
+        }
+
+        private void ShowRawADCInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Show Raw ADC Display", 
+                "SHOW RAW ADC DISPLAY\n\n" +
+                "Controls visibility of the raw ADC value display.\n\n" +
+                "Enabled:\n" +
+                "• Shows raw ADC value (e.g., \"1850\")\n" +
+                "• Useful for debugging and analysis\n" +
+                "• Best for: Calibration, troubleshooting, understanding ADC behavior\n\n" +
+                "Disabled:\n" +
+                "• Hides raw ADC display\n" +
+                "• Cleaner interface\n" +
+                "• Best for: Production use, when you only care about weight values\n\n" +
+                "Note: Raw ADC values are the direct readings from the ADC before calibration.");
+        }
+
+        private void ShowCalibratedWeightInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Show Calibrated Weight", 
+                "SHOW CALIBRATED WEIGHT (BEFORE TARE)\n\n" +
+                "Controls visibility of calibrated weight before tare is applied.\n\n" +
+                "Enabled:\n" +
+                "• Shows both calibrated and tared weight\n" +
+                "• Useful for understanding tare effect\n" +
+                "• Best for: Debugging tare issues, understanding calibration\n\n" +
+                "Disabled:\n" +
+                "• Only shows tared weight\n" +
+                "• Simplified display\n" +
+                "• Best for: Normal operation\n\n" +
+                "Note: This setting is saved for future UI enhancements. " +
+                "Calibrated weight = weight after calibration but before tare. " +
+                "Tared weight = calibrated weight minus tare offset.");
+        }
+
+        private void ShowStreamingIndicatorsInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Show Streaming Status Indicators", 
+                "SHOW STREAMING STATUS INDICATORS\n\n" +
+                "Controls visibility of streaming status indicators (green/gray dot and \"Left Active\" / \"Right Active\" text).\n\n" +
+                "Enabled:\n" +
+                "• Shows visual confirmation of active streams\n" +
+                "• Quick status check\n" +
+                "• Best for: When you want visual confirmation, debugging stream issues\n\n" +
+                "Disabled:\n" +
+                "• Hides streaming indicators\n" +
+                "• Minimal UI\n" +
+                "• Best for: Clean interface, when you know stream status from other sources\n\n" +
+                "Indicators show:\n" +
+                "• Green dot + \"Left Active\" when left stream is running\n" +
+                "• Green dot + \"Right Active\" when right stream is running\n" +
+                "• Gray dot + \"Stopped\" when no stream is active");
+        }
+
+        private void ShowCalibrationIconsInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Show Calibration Status Icons", 
+                "SHOW CALIBRATION STATUS ICONS\n\n" +
+                "Controls visibility of calibration status icons.\n\n" +
+                "Enabled:\n" +
+                "• Shows ✓ for calibrated, ⚠ for uncalibrated\n" +
+                "• Quick visual confirmation of calibration status\n" +
+                "• Best for: Ensuring calibration before use, troubleshooting\n\n" +
+                "Disabled:\n" +
+                "• Hides calibration icons\n" +
+                "• Minimal UI\n" +
+                "• Best for: Clean interface, when calibration is always done\n\n" +
+                "Icons indicate:\n" +
+                "• ✓ (Green checkmark): Side is calibrated and ready\n" +
+                "• ⚠ (Yellow warning): Side needs calibration");
+        }
+
+        private void TXIndicatorFlashInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("TX Indicator Flash Duration", 
+                "TX INDICATOR FLASH DURATION\n\n" +
+                "How long the TX (transmit) indicator flashes white when sending CAN messages.\n\n" +
+                "Range: 50-500 milliseconds\n" +
+                "Default: 200ms\n\n" +
+                "Short Flash (50-100ms):\n" +
+                "• Brief visual feedback\n" +
+                "• May be hard to see\n" +
+                "• Best for: When you want subtle, quick feedback\n\n" +
+                "Medium Flash (150-250ms):\n" +
+                "• Balanced visibility\n" +
+                "• Recommended for most cases\n" +
+                "• Good balance of visibility and speed\n\n" +
+                "Long Flash (300-500ms):\n" +
+                "• Maximum visibility\n" +
+                "• Clear visual confirmation\n" +
+                "• Best for: When you want clear visual confirmation of transmissions\n\n" +
+                "Note: The TX indicator flashes white when a CAN message is sent, then returns to red.");
+        }
+
+        private void BatchProcessingSizeInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Batch Processing Size", 
+                "BATCH PROCESSING SIZE\n\n" +
+                "Number of CAN messages processed per UI update cycle.\n\n" +
+                "Range: 10-100 messages\n" +
+                "Default: 50 messages\n\n" +
+                "Small Batch (10-30):\n" +
+                "• More frequent processing\n" +
+                "• Smoother UI\n" +
+                "• More processing overhead\n" +
+                "• Best for: Low message rates, when responsive UI is priority\n\n" +
+                "Medium Batch (40-60):\n" +
+                "• Balanced processing\n" +
+                "• Recommended for most cases\n" +
+                "• Good balance of responsiveness and efficiency\n\n" +
+                "Large Batch (70-100):\n" +
+                "• Maximum efficiency\n" +
+                "• Less frequent UI updates\n" +
+                "• Best for: High message rates (1kHz), maximum throughput\n\n" +
+                "CRITICAL: This is important for 1kHz data rates. " +
+                "Too small batches may cause message queue buildup and data loss.");
+        }
+
+        private void ClockUpdateIntervalInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Clock Update Interval", 
+                "CLOCK UPDATE INTERVAL\n\n" +
+                "How often the clock display (timestamp) is updated.\n\n" +
+                "Range: 500-5000 milliseconds\n" +
+                "Default: 1000ms (1 second)\n\n" +
+                "Fast Update (500-800ms):\n" +
+                "• More frequent clock updates\n" +
+                "• Slightly more CPU usage\n" +
+                "• Best for: When you want precise time display\n\n" +
+                "Medium Update (1000-2000ms):\n" +
+                "• Standard clock updates\n" +
+                "• Recommended for most cases\n" +
+                "• Good balance of accuracy and performance\n\n" +
+                "Slow Update (3000-5000ms):\n" +
+                "• Less frequent updates\n" +
+                "• Lower CPU usage\n" +
+                "• Clock may appear \"stale\"\n" +
+                "• Best for: When clock accuracy isn't critical\n\n" +
+                "Note: This only affects the displayed clock, not data timestamps.");
+        }
+
+        private void CalibrationCaptureDelayInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Calibration Capture Delay", 
+                "CALIBRATION CAPTURE DELAY\n\n" +
+                "How long to wait before capturing an ADC reading during calibration.\n\n" +
+                "Range: 100-2000 milliseconds\n" +
+                "Default: 500ms\n\n" +
+                "Short Delay (100-300ms):\n" +
+                "• Faster calibration\n" +
+                "• May capture unstable readings\n" +
+                "• Best for: When ADC readings stabilize quickly\n\n" +
+                "Medium Delay (400-800ms):\n" +
+                "• Balanced capture timing\n" +
+                "• Recommended for most cases\n" +
+                "• Good balance of speed and stability\n\n" +
+                "Long Delay (1000-2000ms):\n" +
+                "• Maximum stability\n" +
+                "• Slower calibration process\n" +
+                "• Best for: When ADC readings take time to stabilize\n\n" +
+                "Why delay is needed:\n" +
+                "After placing a weight, ADC readings need time to stabilize due to:\n" +
+                "• Mechanical settling of load cells\n" +
+                "• Electrical signal conditioning\n" +
+                "• ADC sampling and filtering\n\n" +
+                "Too short delay may result in inaccurate calibration points.");
+        }
+
+        private void LogFormatInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Log File Format", 
+                "LOG FILE FORMAT\n\n" +
+                "Format of saved log files (currently CSV only, JSON/TXT coming soon).\n\n" +
+                "CSV (Comma Separated Values) - CURRENTLY AVAILABLE\n" +
+                "• Standard spreadsheet format\n" +
+                "• Easy to open in Excel, Python, or other tools\n" +
+                "• Best for: Most applications, data analysis\n" +
+                "• Format: Columns separated by commas, one row per data point\n\n" +
+                "JSON (JavaScript Object Notation) - COMING SOON\n" +
+                "• Structured data format\n" +
+                "• Easy to parse programmatically\n" +
+                "• Best for: Programmatic analysis, web applications\n\n" +
+                "TXT (Plain Text) - COMING SOON\n" +
+                "• Human-readable text format\n" +
+                "• Simple, readable logs\n" +
+                "• Best for: Quick review, simple analysis\n\n" +
+                "Note: Currently only CSV format is available. JSON and TXT formats will be added in future updates.");
+        }
+
+        private void ShowCalibrationQualityMetricsInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsInfo("Show Calibration Quality Metrics", 
+                "SHOW CALIBRATION QUALITY METRICS\n\n" +
+                "Controls whether calibration quality metrics are displayed in calibration dialogs.\n\n" +
+                "Enabled:\n" +
+                "• Shows R² coefficient and maximum error percentage\n" +
+                "• Useful for verifying calibration quality\n" +
+                "• Best for: Ensuring accurate calibration, troubleshooting\n\n" +
+                "Disabled:\n" +
+                "• Hides quality metrics\n" +
+                "• Simpler display\n" +
+                "• Best for: When you trust your calibration\n\n" +
+                "R² (R-squared) Coefficient:\n" +
+                "Indicates how well the calibration fits the data points.\n" +
+                "• R² > 0.99: Excellent fit - calibration is very accurate\n" +
+                "• R² > 0.95: Good fit - calibration is acceptable\n" +
+                "• R² < 0.95: Poor fit - may need more calibration points or check for issues\n\n" +
+                "Maximum Error Percentage:\n" +
+                "Shows the largest deviation between calibration points and the fitted line.\n" +
+                "Lower is better. High error may indicate:\n" +
+                "• Insufficient calibration points\n" +
+                "• Non-linear load cell behavior\n" +
+                "• Measurement errors during calibration");
+        }
+
         private void ApplyDisplaySettings()
         {
             try
@@ -2084,9 +3236,10 @@ namespace SuspensionPCB_CAN_WPF
                     var slideDown = (Storyboard)FindResource("SlideDownAnimation");
                     slideDown.Begin(StatusBanner);
                     
-                    // Auto-dismiss after 3 seconds
+                    // Auto-dismiss after configured duration
                     var timer = new DispatcherTimer();
-                    timer.Interval = TimeSpan.FromSeconds(3);
+                    int durationMs = _settingsManager.Settings.StatusBannerDurationMs;
+                    timer.Interval = TimeSpan.FromMilliseconds(durationMs);
                     timer.Tick += (s, e) =>
                     {
                         timer.Stop();

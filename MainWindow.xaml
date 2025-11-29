@@ -198,7 +198,17 @@
                 <Separator Margin="0,10,0,10"/>
 
                 <!-- Weight Filtering Configuration -->
-                <GroupBox Header="Weight Filtering" Margin="0,0,0,10">
+                <GroupBox Margin="0,0,0,10">
+                    <GroupBox.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Weight Filtering" FontWeight="SemiBold"/>
+                            <Button x:Name="WeightFilteringInfoBtn" Content="ℹ" Width="20" Height="20" 
+                                    Margin="8,0,0,0" Padding="0" FontSize="12" FontWeight="Bold"
+                                    Background="Transparent" BorderThickness="0" Foreground="#FF3498DB"
+                                    Cursor="Hand" Click="WeightFilteringInfoBtn_Click"
+                                    ToolTip="Click for detailed information about weight filtering settings"/>
+                        </StackPanel>
+                    </GroupBox.Header>
                     <StackPanel Margin="10">
                         <!-- Enable/Disable Filtering -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
@@ -206,6 +216,11 @@
                                       IsChecked="True" Checked="FilterEnabledCheckBox_Changed" 
                                       Unchecked="FilterEnabledCheckBox_Changed"
                                       VerticalAlignment="Center" FontWeight="SemiBold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="FilterEnabledInfoBtn_Click"
+                                    ToolTip="Info: Enable/Disable Weight Filtering"/>
                         </StackPanel>
                         
                         <!-- Filter Type Selection -->
@@ -217,6 +232,11 @@
                                 <ComboBoxItem Content="SMA (Simple Moving Average)" Tag="SMA"/>
                                 <ComboBoxItem Content="None (No Filtering)" Tag="None"/>
                             </ComboBox>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="FilterTypeInfoBtn_Click"
+                                    ToolTip="Info: Filter Type Selection"/>
                             <TextBlock Text="EMA: Fast response, smooth. SMA: Very smooth, slower." 
                                        FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
                         </StackPanel>
@@ -229,8 +249,13 @@
                                     ValueChanged="EmaAlphaSlider_ValueChanged" Margin="0,0,10,0"/>
                             <TextBlock x:Name="EmaAlphaValueTxt" Text="0.15" Width="50" 
                                        VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="EmaAlphaInfoBtn_Click"
+                                    ToolTip="Info: EMA Alpha Parameter"/>
                             <TextBlock Text="(Lower = smoother, Higher = more responsive)" 
-                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
                         </StackPanel>
                         
                         <!-- SMA Window Size (only visible when SMA selected) -->
@@ -241,8 +266,13 @@
                                     ValueChanged="SmaWindowSlider_ValueChanged" Margin="0,0,10,0"/>
                             <TextBlock x:Name="SmaWindowValueTxt" Text="10 samples" Width="80" 
                                        VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="SmaWindowInfoBtn_Click"
+                                    ToolTip="Info: SMA Window Size"/>
                             <TextBlock Text="(More samples = smoother, slower response)" 
-                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
                         </StackPanel>
                         
                         <TextBlock Text="Filtering reduces weight display jitter from ADC noise. EMA is recommended for most cases." 
@@ -253,7 +283,17 @@
                 <Separator Margin="0,10,0,10"/>
 
                 <!-- Display Settings -->
-                <GroupBox Header="Display Settings" Margin="0,0,0,10">
+                <GroupBox Margin="0,0,0,10">
+                    <GroupBox.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Display Settings" FontWeight="SemiBold"/>
+                            <Button x:Name="DisplaySettingsInfoBtn" Content="ℹ" Width="20" Height="20" 
+                                    Margin="8,0,0,0" Padding="0" FontSize="12" FontWeight="Bold"
+                                    Background="Transparent" BorderThickness="0" Foreground="#FF3498DB"
+                                    Cursor="Hand" Click="DisplaySettingsInfoBtn_Click"
+                                    ToolTip="Click for detailed information about display settings"/>
+                        </StackPanel>
+                    </GroupBox.Header>
                     <StackPanel Margin="10">
                         <!-- Weight Display Format -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
@@ -264,6 +304,11 @@
                                 <ComboBoxItem Content="One Decimal (50.3 kg)" Tag="1"/>
                                 <ComboBoxItem Content="Two Decimals (50.25 kg)" Tag="2"/>
                             </ComboBox>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="WeightFormatInfoBtn_Click"
+                                    ToolTip="Info: Weight Display Format"/>
                             <TextBlock Text="Choose how many decimal places to show" 
                                        FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
                         </StackPanel>
@@ -276,8 +321,13 @@
                                     ValueChanged="UIUpdateRateSlider_ValueChanged" Margin="0,0,10,0"/>
                             <TextBlock x:Name="UIUpdateRateValueTxt" Text="50 ms (20 Hz)" Width="100" 
                                        VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="UIUpdateRateInfoBtn_Click"
+                                    ToolTip="Info: UI Update Rate"/>
                             <TextBlock Text="(Lower = faster updates, Higher = better performance)" 
-                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
                         </StackPanel>
                         
                         <!-- Data Timeout -->
@@ -288,16 +338,240 @@
                                     ValueChanged="DataTimeoutSlider_ValueChanged" Margin="0,0,10,0"/>
                             <TextBlock x:Name="DataTimeoutValueTxt" Text="5 seconds" Width="80" 
                                        VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="DataTimeoutInfoBtn_Click"
+                                    ToolTip="Info: Data Timeout"/>
                             <TextBlock Text="(How long to wait before reporting timeout)" 
-                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
                         </StackPanel>
                         
                         <!-- Auto-start Logging -->
-                        <CheckBox x:Name="AutoStartLoggingCheckBox" Content="Auto-start logging when stream begins" 
-                                  IsChecked="False" Checked="AutoStartLoggingCheckBox_Changed" 
-                                  Unchecked="AutoStartLoggingCheckBox_Changed"
-                                  FontWeight="SemiBold" Margin="0,5,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <CheckBox x:Name="AutoStartLoggingCheckBox" Content="Auto-start logging when stream begins" 
+                                      IsChecked="False" Checked="AutoStartLoggingCheckBox_Changed" 
+                                      Unchecked="AutoStartLoggingCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="AutoStartLoggingInfoBtn_Click"
+                                    ToolTip="Info: Auto-start Logging"/>
+                        </StackPanel>
                         <TextBlock Text="Automatically start data logging when you start a stream (Left or Right)" 
+                                   FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <!-- UI Visibility Settings -->
+                <GroupBox Margin="0,0,0,10">
+                    <GroupBox.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="UI Visibility Settings" FontWeight="SemiBold"/>
+                            <Button x:Name="UIVisibilityInfoBtn" Content="ℹ" Width="20" Height="20" 
+                                    Margin="8,0,0,0" Padding="0" FontSize="12" FontWeight="Bold"
+                                    Background="Transparent" BorderThickness="0" Foreground="#FF3498DB"
+                                    Cursor="Hand" Click="UIVisibilityInfoBtn_Click"
+                                    ToolTip="Click for detailed information about UI visibility settings"/>
+                        </StackPanel>
+                    </GroupBox.Header>
+                    <StackPanel Margin="10">
+                        <!-- Status Banner Duration -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Status Banner Duration:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="StatusBannerDurationSlider" Width="200" Minimum="1" Maximum="10" 
+                                    Value="3" TickFrequency="1" IsSnapToTickEnabled="True"
+                                    ValueChanged="StatusBannerDurationSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="StatusBannerDurationValueTxt" Text="3 seconds" Width="80" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="StatusBannerDurationInfoBtn_Click"
+                                    ToolTip="Info: Status Banner Duration"/>
+                            <TextBlock Text="(How long status messages display)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Message History Limit -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Message History Limit:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="MessageHistoryLimitSlider" Width="200" Minimum="100" Maximum="5000" 
+                                    Value="1000" TickFrequency="100" IsSnapToTickEnabled="True"
+                                    ValueChanged="MessageHistoryLimitSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="MessageHistoryLimitValueTxt" Text="1000 messages" Width="100" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="MessageHistoryLimitInfoBtn_Click"
+                                    ToolTip="Info: Message History Limit"/>
+                            <TextBlock Text="(Max messages stored in memory)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Show/Hide UI Elements -->
+                        <TextBlock Text="Show/Hide UI Elements:" FontWeight="SemiBold" Margin="0,5,0,5"/>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
+                            <CheckBox x:Name="ShowRawADCCheckBox" Content="Show Raw ADC Display" 
+                                      IsChecked="True" Checked="ShowRawADCCheckBox_Changed" 
+                                      Unchecked="ShowRawADCCheckBox_Changed" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ShowRawADCInfoBtn_Click"
+                                    ToolTip="Info: Show Raw ADC Display"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
+                            <CheckBox x:Name="ShowCalibratedWeightCheckBox" Content="Show Calibrated Weight (before tare)" 
+                                      IsChecked="False" Checked="ShowCalibratedWeightCheckBox_Changed" 
+                                      Unchecked="ShowCalibratedWeightCheckBox_Changed" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ShowCalibratedWeightInfoBtn_Click"
+                                    ToolTip="Info: Show Calibrated Weight"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
+                            <CheckBox x:Name="ShowStreamingIndicatorsCheckBox" Content="Show Streaming Status Indicators" 
+                                      IsChecked="True" Checked="ShowStreamingIndicatorsCheckBox_Changed" 
+                                      Unchecked="ShowStreamingIndicatorsCheckBox_Changed" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ShowStreamingIndicatorsInfoBtn_Click"
+                                    ToolTip="Info: Show Streaming Indicators"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
+                            <CheckBox x:Name="ShowCalibrationIconsCheckBox" Content="Show Calibration Status Icons" 
+                                      IsChecked="True" Checked="ShowCalibrationIconsCheckBox_Changed" 
+                                      Unchecked="ShowCalibrationIconsCheckBox_Changed" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ShowCalibrationIconsInfoBtn_Click"
+                                    ToolTip="Info: Show Calibration Icons"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <!-- Advanced Settings -->
+                <GroupBox Margin="0,0,0,10">
+                    <GroupBox.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Advanced Settings" FontWeight="SemiBold"/>
+                            <Button x:Name="AdvancedSettingsInfoBtn" Content="ℹ" Width="20" Height="20" 
+                                    Margin="8,0,0,0" Padding="0" FontSize="12" FontWeight="Bold"
+                                    Background="Transparent" BorderThickness="0" Foreground="#FF3498DB"
+                                    Cursor="Hand" Click="AdvancedSettingsInfoBtn_Click"
+                                    ToolTip="Click for detailed information about advanced settings"/>
+                        </StackPanel>
+                    </GroupBox.Header>
+                    <StackPanel Margin="10">
+                        <!-- TX Indicator Flash Duration -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="TX Indicator Flash:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="TXIndicatorFlashSlider" Width="200" Minimum="50" Maximum="500" 
+                                    Value="200" TickFrequency="50" IsSnapToTickEnabled="True"
+                                    ValueChanged="TXIndicatorFlashSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="TXIndicatorFlashValueTxt" Text="200 ms" Width="70" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="TXIndicatorFlashInfoBtn_Click"
+                                    ToolTip="Info: TX Indicator Flash Duration"/>
+                            <TextBlock Text="(Flash duration when sending CAN messages)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Batch Processing Size -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Batch Processing Size:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="BatchProcessingSizeSlider" Width="200" Minimum="10" Maximum="100" 
+                                    Value="50" TickFrequency="10" IsSnapToTickEnabled="True"
+                                    ValueChanged="BatchProcessingSizeSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="BatchProcessingSizeValueTxt" Text="50 messages" Width="90" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="BatchProcessingSizeInfoBtn_Click"
+                                    ToolTip="Info: Batch Processing Size"/>
+                            <TextBlock Text="(Messages processed per batch)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Clock Update Interval -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Clock Update Interval:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="ClockUpdateIntervalSlider" Width="200" Minimum="500" Maximum="5000" 
+                                    Value="1000" TickFrequency="500" IsSnapToTickEnabled="True"
+                                    ValueChanged="ClockUpdateIntervalSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="ClockUpdateIntervalValueTxt" Text="1000 ms" Width="70" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ClockUpdateIntervalInfoBtn_Click"
+                                    ToolTip="Info: Clock Update Interval"/>
+                            <TextBlock Text="(Clock refresh rate)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Calibration Capture Delay -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Calibration Capture Delay:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="CalibrationCaptureDelaySlider" Width="200" Minimum="100" Maximum="2000" 
+                                    Value="500" TickFrequency="100" IsSnapToTickEnabled="True"
+                                    ValueChanged="CalibrationCaptureDelaySlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="CalibrationCaptureDelayValueTxt" Text="500 ms" Width="70" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="CalibrationCaptureDelayInfoBtn_Click"
+                                    ToolTip="Info: Calibration Capture Delay"/>
+                            <TextBlock Text="(Delay before capturing calibration point)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Log Format (Future) -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Log File Format:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="LogFormatCombo" Width="180" Margin="0,0,10,0" 
+                                      SelectionChanged="LogFormatCombo_SelectionChanged" IsEnabled="False">
+                                <ComboBoxItem Content="CSV (Comma Separated Values)" Tag="CSV" IsSelected="True"/>
+                                <ComboBoxItem Content="JSON (JavaScript Object Notation)" Tag="JSON"/>
+                                <ComboBoxItem Content="TXT (Plain Text)" Tag="TXT"/>
+                            </ComboBox>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="LogFormatInfoBtn_Click"
+                                    ToolTip="Info: Log File Format"/>
+                            <TextBlock Text="(Currently CSV only - JSON/TXT coming soon)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center" FontStyle="Italic"/>
+                        </StackPanel>
+                        
+                        <!-- Show Calibration Quality Metrics -->
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <CheckBox x:Name="ShowCalibrationQualityMetricsCheckBox" Content="Show Calibration Quality Metrics (R², Error %)" 
+                                      IsChecked="True" Checked="ShowCalibrationQualityMetricsCheckBox_Changed" 
+                                      Unchecked="ShowCalibrationQualityMetricsCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ShowCalibrationQualityMetricsInfoBtn_Click"
+                                    ToolTip="Info: Show Calibration Quality Metrics"/>
+                        </StackPanel>
+                        <TextBlock Text="Display R² coefficient and maximum error percentage in calibration dialogs" 
                                    FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0"/>
                     </StackPanel>
                 </GroupBox>

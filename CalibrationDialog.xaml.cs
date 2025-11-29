@@ -26,6 +26,7 @@ namespace SuspensionPCB_CAN_WPF
         private byte _startingADCMode = 0;
         private CalibrationPointViewModel? _currentCapturingPoint = null;
         private bool _hasStream = false;
+        private int _calibrationDelayMs = 500; // Configurable delay before capturing calibration point
         
         // Properties for data binding
         private string _side = "";
@@ -47,13 +48,14 @@ namespace SuspensionPCB_CAN_WPF
         
         private byte _adcMode = 0;
         
-        public CalibrationDialog(string side, byte adcMode = 0)
+        public CalibrationDialog(string side, byte adcMode = 0, int calibrationDelayMs = 500)
         {
             InitializeComponent();
             DataContext = this;
             Side = side;
             _adcMode = adcMode;
             _startingADCMode = adcMode;
+            _calibrationDelayMs = calibrationDelayMs;
             
             // Get CAN service instance
             _canService = CANService._instance;
@@ -277,7 +279,7 @@ namespace SuspensionPCB_CAN_WPF
             {
                 // Step 1: Capture current mode ADC
                 point.StatusText = $"Capturing {(_adcMode == 0 ? "Internal" : "ADS1115")} ADC...";
-                await System.Threading.Tasks.Task.Delay(500); // Wait for stable reading
+                await System.Threading.Tasks.Task.Delay(_calibrationDelayMs); // Wait for stable reading
                 
                 ushort firstModeADC = (ushort)_currentRawADC;
                 
@@ -325,7 +327,7 @@ namespace SuspensionPCB_CAN_WPF
                 
                 // Step 3: Capture second mode ADC
                 point.StatusText = $"Capturing {(_adcMode == 0 ? "Internal" : "ADS1115")} ADC...";
-                await System.Threading.Tasks.Task.Delay(500); // Wait for stable reading
+                await System.Threading.Tasks.Task.Delay(_calibrationDelayMs); // Wait for stable reading
                 
                 ushort secondModeADC = (ushort)_currentRawADC;
                 

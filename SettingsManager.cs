@@ -32,6 +32,22 @@ namespace SuspensionPCB_CAN_WPF
         public int UIUpdateRateMs { get; set; } = 50; // UI refresh rate in milliseconds
         public int DataTimeoutSeconds { get; set; } = 5; // CAN data timeout in seconds
         public bool AutoStartLogging { get; set; } = false; // Auto-start logging on stream
+        
+        // UI Visibility Settings (Medium Priority)
+        public int StatusBannerDurationMs { get; set; } = 3000; // Status banner display duration
+        public int MessageHistoryLimit { get; set; } = 1000; // Max messages stored in memory
+        public bool ShowRawADC { get; set; } = true; // Show/hide raw ADC display
+        public bool ShowCalibratedWeight { get; set; } = false; // Show calibrated weight (before tare)
+        public bool ShowStreamingIndicators { get; set; } = true; // Show streaming status indicators
+        public bool ShowCalibrationIcons { get; set; } = true; // Show calibration status icons
+        
+        // Advanced Settings (Low Priority)
+        public int TXIndicatorFlashMs { get; set; } = 200; // TX indicator flash duration
+        public string LogFileFormat { get; set; } = "CSV"; // Log format: "CSV", "JSON", "TXT" (future)
+        public int BatchProcessingSize { get; set; } = 50; // Messages processed per batch
+        public int ClockUpdateIntervalMs { get; set; } = 1000; // Clock refresh rate
+        public int CalibrationCaptureDelayMs { get; set; } = 500; // Delay before capturing calibration point
+        public bool ShowCalibrationQualityMetrics { get; set; } = true; // Display R² and error metrics
     }
 
     /// <summary>
@@ -237,6 +253,50 @@ namespace SuspensionPCB_CAN_WPF
             catch (Exception ex)
             {
                 ProductionLogger.Instance.LogError($"Failed to save display settings: {ex.Message}", "Settings");
+            }
+        }
+        
+        /// <summary>
+        /// Set UI visibility settings
+        /// </summary>
+        public void SetUIVisibilitySettings(int statusBannerDuration, int messageHistoryLimit, bool showRawADC, bool showCalibratedWeight, bool showStreamingIndicators, bool showCalibrationIcons)
+        {
+            try
+            {
+                _settings.StatusBannerDurationMs = statusBannerDuration;
+                _settings.MessageHistoryLimit = messageHistoryLimit;
+                _settings.ShowRawADC = showRawADC;
+                _settings.ShowCalibratedWeight = showCalibratedWeight;
+                _settings.ShowStreamingIndicators = showStreamingIndicators;
+                _settings.ShowCalibrationIcons = showCalibrationIcons;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"UI visibility settings saved: StatusBanner={statusBannerDuration}ms, MessageLimit={messageHistoryLimit}, ShowRawADC={showRawADC}, ShowCalibrated={showCalibratedWeight}, ShowIndicators={showStreamingIndicators}, ShowIcons={showCalibrationIcons}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to save UI visibility settings: {ex.Message}", "Settings");
+            }
+        }
+        
+        /// <summary>
+        /// Set advanced settings
+        /// </summary>
+        public void SetAdvancedSettings(int txFlashMs, string logFormat, int batchSize, int clockInterval, int calibrationDelay, bool showQualityMetrics)
+        {
+            try
+            {
+                _settings.TXIndicatorFlashMs = txFlashMs;
+                _settings.LogFileFormat = logFormat;
+                _settings.BatchProcessingSize = batchSize;
+                _settings.ClockUpdateIntervalMs = clockInterval;
+                _settings.CalibrationCaptureDelayMs = calibrationDelay;
+                _settings.ShowCalibrationQualityMetrics = showQualityMetrics;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"Advanced settings saved: TXFlash={txFlashMs}ms, LogFormat={logFormat}, BatchSize={batchSize}, ClockInterval={clockInterval}ms, CalDelay={calibrationDelay}ms, ShowQuality={showQualityMetrics}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to save advanced settings: {ex.Message}", "Settings");
             }
         }
     }
