@@ -113,6 +113,12 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     SettingsPanel.Visibility = Visibility.Visible;
                     SettingsToggleBtn.Content = "⚙ Hide";
+                    
+                    // Update filter settings UI when panel is opened
+                    if (FilterTypeCombo != null && FilterTypeCombo.SelectedItem == null)
+                    {
+                        LoadFilterSettings();
+                    }
                 }
             }
             catch (Exception ex)
@@ -1329,6 +1335,9 @@ namespace SuspensionPCB_CAN_WPF
             // Load adapter configuration
             LoadConfiguration();
             
+            // Load filter settings
+            LoadFilterSettings();
+            
             // Load existing calibrations and tare settings
             LoadCalibrations();
             _tareManager.LoadFromFile();
@@ -1697,6 +1706,151 @@ namespace SuspensionPCB_CAN_WPF
             {
                 _logger.LogError($"Browse folder error: {ex.Message}", "Settings");
                 ShowInlineStatus("✗ Failed to set save folder", true);
+            }
+        }
+
+        private void LoadFilterSettings()
+        {
+            try
+            {
+                var settings = _settingsManager.Settings;
+                
+                if (FilterEnabledCheckBox != null)
+                {
+                    FilterEnabledCheckBox.IsChecked = settings.FilterEnabled;
+                }
+                
+                // Set filter type
+                if (FilterTypeCombo != null)
+                {
+                    foreach (System.Windows.Controls.ComboBoxItem item in FilterTypeCombo.Items)
+                    {
+                        if (item.Tag?.ToString() == settings.FilterType)
+                        {
+                            FilterTypeCombo.SelectedItem = item;
+                            break;
+                        }
+                    }
+                }
+                
+                if (EmaAlphaSlider != null)
+                {
+                    EmaAlphaSlider.Value = settings.FilterAlpha;
+                }
+                
+                if (SmaWindowSlider != null)
+                {
+                    SmaWindowSlider.Value = settings.FilterWindowSize;
+                }
+                
+                // Apply settings to WeightProcessor
+                ApplyFilterSettings();
+                
+                _logger.LogInfo($"Filter settings loaded: Type={settings.FilterType}, Alpha={settings.FilterAlpha}, Window={settings.FilterWindowSize}, Enabled={settings.FilterEnabled}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error loading filter settings: {ex.Message}", "Settings");
+            }
+        }
+
+        private void FilterEnabledCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyFilterSettings();
+        }
+
+        private void FilterTypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                if (FilterTypeCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem item)
+                {
+                    string filterType = item.Tag?.ToString() ?? "EMA";
+                    
+                    // Show/hide appropriate settings panels
+                    if (EmaSettingsPanel != null)
+                    {
+                        EmaSettingsPanel.Visibility = filterType == "EMA" ? Visibility.Visible : Visibility.Collapsed;
+                    }
+                    
+                    if (SmaSettingsPanel != null)
+                    {
+                        SmaSettingsPanel.Visibility = filterType == "SMA" ? Visibility.Visible : Visibility.Collapsed;
+                    }
+                    
+                    ApplyFilterSettings();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Filter type selection error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void EmaAlphaSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (EmaAlphaValueTxt != null)
+                {
+                    EmaAlphaValueTxt.Text = e.NewValue.ToString("F2");
+                }
+                ApplyFilterSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"EMA alpha slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void SmaWindowSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (SmaWindowValueTxt != null)
+                {
+                    SmaWindowValueTxt.Text = $"{(int)e.NewValue} samples";
+                }
+                ApplyFilterSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"SMA window slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void ApplyFilterSettings()
+        {
+            try
+            {
+                bool enabled = FilterEnabledCheckBox?.IsChecked ?? true;
+                string filterType = "EMA";
+                
+                if (FilterTypeCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem item)
+                {
+                    filterType = item.Tag?.ToString() ?? "EMA";
+                }
+                
+                double alpha = EmaAlphaSlider?.Value ?? 0.15;
+                int windowSize = (int)(SmaWindowSlider?.Value ?? 10);
+                
+                FilterType type = filterType switch
+                {
+                    "EMA" => FilterType.EMA,
+                    "SMA" => FilterType.SMA,
+                    _ => FilterType.None
+                };
+                
+                _weightProcessor.ConfigureFilter(type, alpha, windowSize, enabled);
+                
+                // Save to settings
+                _settingsManager.SetFilterSettings(filterType, alpha, windowSize, enabled);
+                
+                _logger.LogInfo($"Filter settings applied: {filterType}, Alpha={alpha}, Window={windowSize}, Enabled={enabled}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error applying filter settings: {ex.Message}", "Settings");
             }
         }
 

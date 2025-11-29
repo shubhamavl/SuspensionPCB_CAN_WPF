@@ -197,6 +197,61 @@
 
                 <Separator Margin="0,10,0,10"/>
 
+                <!-- Weight Filtering Configuration -->
+                <GroupBox Header="Weight Filtering" Margin="0,0,0,10">
+                    <StackPanel Margin="10">
+                        <!-- Enable/Disable Filtering -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <CheckBox x:Name="FilterEnabledCheckBox" Content="Enable Weight Filtering" 
+                                      IsChecked="True" Checked="FilterEnabledCheckBox_Changed" 
+                                      Unchecked="FilterEnabledCheckBox_Changed"
+                                      VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        
+                        <!-- Filter Type Selection -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Filter Type:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="FilterTypeCombo" Width="280" Margin="0,0,10,0" 
+                                      SelectionChanged="FilterTypeCombo_SelectionChanged">
+                                <ComboBoxItem Content="EMA (Exponential Moving Average)" Tag="EMA" IsSelected="True"/>
+                                <ComboBoxItem Content="SMA (Simple Moving Average)" Tag="SMA"/>
+                                <ComboBoxItem Content="None (No Filtering)" Tag="None"/>
+                            </ComboBox>
+                            <TextBlock Text="EMA: Fast response, smooth. SMA: Very smooth, slower." 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- EMA Alpha Setting (only visible when EMA selected) -->
+                        <StackPanel x:Name="EmaSettingsPanel" Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="EMA Alpha:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="EmaAlphaSlider" Width="200" Minimum="0.05" Maximum="0.5" 
+                                    Value="0.15" TickFrequency="0.05" IsSnapToTickEnabled="True"
+                                    ValueChanged="EmaAlphaSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="EmaAlphaValueTxt" Text="0.15" Width="50" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(Lower = smoother, Higher = more responsive)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        
+                        <!-- SMA Window Size (only visible when SMA selected) -->
+                        <StackPanel x:Name="SmaSettingsPanel" Orientation="Horizontal" Margin="0,0,0,10" Visibility="Collapsed">
+                            <TextBlock Text="SMA Window Size:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="SmaWindowSlider" Width="200" Minimum="5" Maximum="50" 
+                                    Value="10" TickFrequency="5" IsSnapToTickEnabled="True"
+                                    ValueChanged="SmaWindowSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="SmaWindowValueTxt" Text="10 samples" Width="80" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(More samples = smoother, slower response)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        
+                        <TextBlock Text="Filtering reduces weight display jitter from ADC noise. EMA is recommended for most cases." 
+                                   FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <Separator Margin="0,10,0,10"/>
+
                 <StackPanel Orientation="Horizontal">
                     <Button x:Name="KeyboardShortcutsBtn" Content="⌨ Keyboard Shortcuts" 
                             Style="{StaticResource ModernButton}" 

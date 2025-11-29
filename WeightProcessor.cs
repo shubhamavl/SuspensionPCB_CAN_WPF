@@ -1,10 +1,22 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace SuspensionPCB_CAN_WPF
 {
+    /// <summary>
+    /// Filter type enumeration
+    /// </summary>
+    public enum FilterType
+    {
+        None,
+        EMA,
+        SMA
+    }
+
     /// <summary>
     /// High-performance weight data processor
     /// Runs on dedicated thread to handle 1kHz data rate
@@ -36,22 +48,28 @@ namespace SuspensionPCB_CAN_WPF
         private long _processedCount = 0;
         private long _droppedCount = 0;
         
-        // ===== WEIGHT FILTERING (EMA) =====
-        // Exponential Moving Average filters for smooth weight display
-        // Alpha controls smoothing: 0.0 = no change, 1.0 = no filtering
-        // Lower alpha = smoother but slower response
-        private const double FILTER_ALPHA_CALIBRATED = 0.15;  // Smooth calibrated weight
-        private const double FILTER_ALPHA_TARED = 0.15;       // Smooth tared weight
+        // ===== WEIGHT FILTERING (Configurable) =====
+        // Filter configuration
+        private FilterType _filterType = FilterType.EMA;
+        private double _filterAlpha = 0.15;  // EMA alpha (0.0-1.0)
+        private int _filterWindowSize = 10;  // SMA window size
+        private bool _filterEnabled = true;  // Enable/disable filtering
         
-        // Filtered weight values (per side)
+        // EMA filtered weight values (per side)
         private double _leftFilteredCalibrated = 0;
         private double _leftFilteredTared = 0;
         private double _rightFilteredCalibrated = 0;
         private double _rightFilteredTared = 0;
         
-        // Track if filters are initialized (first sample)
+        // Track if EMA filters are initialized (first sample)
         private bool _leftFilterInitialized = false;
         private bool _rightFilterInitialized = false;
+        
+        // SMA buffers (per side, per type)
+        private readonly Queue<double> _leftSmaCalibrated = new Queue<double>();
+        private readonly Queue<double> _leftSmaTared = new Queue<double>();
+        private readonly Queue<double> _rightSmaCalibrated = new Queue<double>();
+        private readonly Queue<double> _rightSmaTared = new Queue<double>();
         
         public ProcessedWeightData LatestLeft => _latestLeft;
         public ProcessedWeightData LatestRight => _latestRight;
@@ -119,6 +137,32 @@ namespace SuspensionPCB_CAN_WPF
         }
         
         /// <summary>
+        /// Configure filter settings
+        /// </summary>
+        public void ConfigureFilter(FilterType type, double alpha, int windowSize, bool enabled)
+        {
+            _filterType = type;
+            _filterAlpha = alpha;
+            _filterWindowSize = windowSize;
+            _filterEnabled = enabled;
+            
+            // Clear SMA buffers when settings change
+            _leftSmaCalibrated.Clear();
+            _leftSmaTared.Clear();
+            _rightSmaCalibrated.Clear();
+            _rightSmaTared.Clear();
+            
+            // Reset EMA filters when changing filter type
+            if (type != FilterType.EMA)
+            {
+                _leftFilterInitialized = false;
+                _rightFilterInitialized = false;
+            }
+            
+            ProductionLogger.Instance.LogInfo($"Filter configured: Type={type}, Alpha={alpha}, Window={windowSize}, Enabled={enabled}", "WeightProcessor");
+        }
+        
+        /// <summary>
         /// Enqueue raw data from CAN thread - must be FAST!
         /// </summary>
         public void EnqueueRawData(byte side, ushort rawADC)
@@ -160,7 +204,7 @@ namespace SuspensionPCB_CAN_WPF
         }
         
         /// <summary>
-        /// Core processing - optimized for speed with EMA filtering
+        /// Core processing - optimized for speed with configurable filtering
         /// </summary>
         private void ProcessRawData(RawWeightData raw)
         {
@@ -177,37 +221,28 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     double calibratedWeight = _leftCalibration.RawToKg(raw.RawADC);
                     
-                    // Apply exponential moving average filter to calibrated weight
-                    if (!_leftFilterInitialized)
+                    // Apply filtering if enabled
+                    if (_filterEnabled)
                     {
-                        // Initialize filter with first sample
-                        _leftFilteredCalibrated = calibratedWeight;
-                        _leftFilterInitialized = true;
+                        processed.CalibratedWeight = ApplyFilter(calibratedWeight, true, true);
                     }
                     else
                     {
-                        // EMA: filtered = alpha * new + (1 - alpha) * old
-                        _leftFilteredCalibrated = FILTER_ALPHA_CALIBRATED * calibratedWeight + 
-                                                  (1 - FILTER_ALPHA_CALIBRATED) * _leftFilteredCalibrated;
+                        processed.CalibratedWeight = calibratedWeight;
                     }
-                    
-                    processed.CalibratedWeight = _leftFilteredCalibrated;
                     
                     // Apply tare (mode-specific) - uses _leftADCMode which should match the calibration mode
-                    double taredWeight = _tareManager?.ApplyTare(_leftFilteredCalibrated, true, _leftADCMode) ?? _leftFilteredCalibrated;
+                    double taredWeight = _tareManager?.ApplyTare(processed.CalibratedWeight, true, _leftADCMode) ?? processed.CalibratedWeight;
                     
-                    // Apply exponential moving average filter to tared weight
-                    if (!_leftFilterInitialized)
+                    // Apply filtering to tared weight if enabled
+                    if (_filterEnabled)
                     {
-                        _leftFilteredTared = taredWeight;
+                        processed.TaredWeight = ApplyFilter(taredWeight, true, false);
                     }
                     else
                     {
-                        _leftFilteredTared = FILTER_ALPHA_TARED * taredWeight + 
-                                            (1 - FILTER_ALPHA_TARED) * _leftFilteredTared;
+                        processed.TaredWeight = taredWeight;
                     }
-                    
-                    processed.TaredWeight = _leftFilteredTared;
                 }
                 
                 _latestLeft = processed; // Atomic write
@@ -224,41 +259,130 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     double calibratedWeight = _rightCalibration.RawToKg(raw.RawADC);
                     
-                    // Apply exponential moving average filter to calibrated weight
-                    if (!_rightFilterInitialized)
+                    // Apply filtering if enabled
+                    if (_filterEnabled)
                     {
-                        // Initialize filter with first sample
-                        _rightFilteredCalibrated = calibratedWeight;
-                        _rightFilterInitialized = true;
+                        processed.CalibratedWeight = ApplyFilter(calibratedWeight, false, true);
                     }
                     else
                     {
-                        // EMA: filtered = alpha * new + (1 - alpha) * old
-                        _rightFilteredCalibrated = FILTER_ALPHA_CALIBRATED * calibratedWeight + 
-                                                  (1 - FILTER_ALPHA_CALIBRATED) * _rightFilteredCalibrated;
+                        processed.CalibratedWeight = calibratedWeight;
                     }
-                    
-                    processed.CalibratedWeight = _rightFilteredCalibrated;
                     
                     // Apply tare (mode-specific)
-                    double taredWeight = _tareManager?.ApplyTare(_rightFilteredCalibrated, false, _rightADCMode) ?? _rightFilteredCalibrated;
+                    double taredWeight = _tareManager?.ApplyTare(processed.CalibratedWeight, false, _rightADCMode) ?? processed.CalibratedWeight;
                     
-                    // Apply exponential moving average filter to tared weight
-                    if (!_rightFilterInitialized)
+                    // Apply filtering to tared weight if enabled
+                    if (_filterEnabled)
                     {
-                        _rightFilteredTared = taredWeight;
+                        processed.TaredWeight = ApplyFilter(taredWeight, false, false);
                     }
                     else
                     {
-                        _rightFilteredTared = FILTER_ALPHA_TARED * taredWeight + 
-                                             (1 - FILTER_ALPHA_TARED) * _rightFilteredTared;
+                        processed.TaredWeight = taredWeight;
                     }
-                    
-                    processed.TaredWeight = _rightFilteredTared;
                 }
                 
                 _latestRight = processed;
             }
+        }
+        
+        /// <summary>
+        /// Apply filter based on configured filter type
+        /// </summary>
+        private double ApplyFilter(double value, bool isLeft, bool isCalibrated)
+        {
+            switch (_filterType)
+            {
+                case FilterType.EMA:
+                    return ApplyEMA(value, isLeft, isCalibrated);
+                case FilterType.SMA:
+                    return ApplySMA(value, isLeft, isCalibrated);
+                case FilterType.None:
+                default:
+                    return value;
+            }
+        }
+        
+        /// <summary>
+        /// Apply Exponential Moving Average filter
+        /// </summary>
+        private double ApplyEMA(double value, bool isLeft, bool isCalibrated)
+        {
+            if (isLeft)
+            {
+                if (isCalibrated)
+                {
+                    if (!_leftFilterInitialized)
+                    {
+                        _leftFilteredCalibrated = value;
+                        _leftFilterInitialized = true;
+                        return value;
+                    }
+                    _leftFilteredCalibrated = _filterAlpha * value + (1 - _filterAlpha) * _leftFilteredCalibrated;
+                    return _leftFilteredCalibrated;
+                }
+                else
+                {
+                    if (!_leftFilterInitialized)
+                    {
+                        _leftFilteredTared = value;
+                        return value;
+                    }
+                    _leftFilteredTared = _filterAlpha * value + (1 - _filterAlpha) * _leftFilteredTared;
+                    return _leftFilteredTared;
+                }
+            }
+            else // Right side
+            {
+                if (isCalibrated)
+                {
+                    if (!_rightFilterInitialized)
+                    {
+                        _rightFilteredCalibrated = value;
+                        _rightFilterInitialized = true;
+                        return value;
+                    }
+                    _rightFilteredCalibrated = _filterAlpha * value + (1 - _filterAlpha) * _rightFilteredCalibrated;
+                    return _rightFilteredCalibrated;
+                }
+                else
+                {
+                    if (!_rightFilterInitialized)
+                    {
+                        _rightFilteredTared = value;
+                        return value;
+                    }
+                    _rightFilteredTared = _filterAlpha * value + (1 - _filterAlpha) * _rightFilteredTared;
+                    return _rightFilteredTared;
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Apply Simple Moving Average filter
+        /// </summary>
+        private double ApplySMA(double value, bool isLeft, bool isCalibrated)
+        {
+            Queue<double> buffer;
+            
+            if (isLeft)
+            {
+                buffer = isCalibrated ? _leftSmaCalibrated : _leftSmaTared;
+            }
+            else
+            {
+                buffer = isCalibrated ? _rightSmaCalibrated : _rightSmaTared;
+            }
+            
+            buffer.Enqueue(value);
+            if (buffer.Count > _filterWindowSize)
+            {
+                buffer.Dequeue();
+            }
+            
+            // Return average of buffer
+            return buffer.Count > 0 ? buffer.Average() : value;
         }
         
         /// <summary>
@@ -272,6 +396,12 @@ namespace SuspensionPCB_CAN_WPF
             _leftFilteredTared = 0;
             _rightFilteredCalibrated = 0;
             _rightFilteredTared = 0;
+            
+            // Clear SMA buffers
+            _leftSmaCalibrated.Clear();
+            _leftSmaTared.Clear();
+            _rightSmaCalibrated.Clear();
+            _rightSmaTared.Clear();
             
             ProductionLogger.Instance.LogInfo("Weight filters reset", "WeightProcessor");
         }

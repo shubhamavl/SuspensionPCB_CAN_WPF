@@ -20,6 +20,12 @@ namespace SuspensionPCB_CAN_WPF
         public byte LastKnownSystemStatus { get; set; } = 0; // 0=OK, 1=Warning, 2=Error
         public byte LastKnownErrorFlags { get; set; } = 0;
         public DateTime LastStatusUpdate { get; set; } = DateTime.MinValue;
+        
+        // Weight Filtering Settings
+        public string FilterType { get; set; } = "EMA"; // "EMA", "SMA", "None"
+        public double FilterAlpha { get; set; } = 0.15; // EMA alpha (0.0-1.0)
+        public int FilterWindowSize { get; set; } = 10; // SMA window size
+        public bool FilterEnabled { get; set; } = true; // Enable/disable filtering
     }
 
     /// <summary>
@@ -186,6 +192,26 @@ namespace SuspensionPCB_CAN_WPF
         {
             return (_settings.LastKnownADCMode, _settings.LastKnownSystemStatus, 
                    _settings.LastKnownErrorFlags, _settings.LastStatusUpdate);
+        }
+        
+        /// <summary>
+        /// Set filter settings
+        /// </summary>
+        public void SetFilterSettings(string filterType, double filterAlpha, int filterWindowSize, bool filterEnabled)
+        {
+            try
+            {
+                _settings.FilterType = filterType;
+                _settings.FilterAlpha = filterAlpha;
+                _settings.FilterWindowSize = filterWindowSize;
+                _settings.FilterEnabled = filterEnabled;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"Filter settings saved: {filterType}, Alpha={filterAlpha}, Window={filterWindowSize}, Enabled={filterEnabled}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to save filter settings: {ex.Message}", "Settings");
+            }
         }
     }
 }
