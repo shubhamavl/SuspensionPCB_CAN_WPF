@@ -252,6 +252,58 @@
 
                 <Separator Margin="0,10,0,10"/>
 
+                <!-- Display Settings -->
+                <GroupBox Header="Display Settings" Margin="0,0,0,10">
+                    <StackPanel Margin="10">
+                        <!-- Weight Display Format -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Weight Display:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="WeightFormatCombo" Width="280" Margin="0,0,10,0" 
+                                      SelectionChanged="WeightFormatCombo_SelectionChanged">
+                                <ComboBoxItem Content="Integer (50 kg)" Tag="0" IsSelected="True"/>
+                                <ComboBoxItem Content="One Decimal (50.3 kg)" Tag="1"/>
+                                <ComboBoxItem Content="Two Decimals (50.25 kg)" Tag="2"/>
+                            </ComboBox>
+                            <TextBlock Text="Choose how many decimal places to show" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- UI Update Rate -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="UI Update Rate:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="UIUpdateRateSlider" Width="200" Minimum="10" Maximum="200" 
+                                    Value="50" TickFrequency="10" IsSnapToTickEnabled="True"
+                                    ValueChanged="UIUpdateRateSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="UIUpdateRateValueTxt" Text="50 ms (20 Hz)" Width="100" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(Lower = faster updates, Higher = better performance)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        
+                        <!-- Data Timeout -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Data Timeout:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="DataTimeoutSlider" Width="200" Minimum="1" Maximum="30" 
+                                    Value="5" TickFrequency="1" IsSnapToTickEnabled="True"
+                                    ValueChanged="DataTimeoutSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="DataTimeoutValueTxt" Text="5 seconds" Width="80" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(How long to wait before reporting timeout)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        
+                        <!-- Auto-start Logging -->
+                        <CheckBox x:Name="AutoStartLoggingCheckBox" Content="Auto-start logging when stream begins" 
+                                  IsChecked="False" Checked="AutoStartLoggingCheckBox_Changed" 
+                                  Unchecked="AutoStartLoggingCheckBox_Changed"
+                                  FontWeight="SemiBold" Margin="0,5,0,0"/>
+                        <TextBlock Text="Automatically start data logging when you start a stream (Left or Right)" 
+                                   FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <Separator Margin="0,10,0,10"/>
+
                 <StackPanel Orientation="Horizontal">
                     <Button x:Name="KeyboardShortcutsBtn" Content="⌨ Keyboard Shortcuts" 
                             Style="{StaticResource ModernButton}" 

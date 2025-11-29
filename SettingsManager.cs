@@ -26,6 +26,12 @@ namespace SuspensionPCB_CAN_WPF
         public double FilterAlpha { get; set; } = 0.15; // EMA alpha (0.0-1.0)
         public int FilterWindowSize { get; set; } = 10; // SMA window size
         public bool FilterEnabled { get; set; } = true; // Enable/disable filtering
+        
+        // Display and Performance Settings
+        public int WeightDisplayDecimals { get; set; } = 0; // 0=integer, 1=one decimal, 2=two decimals
+        public int UIUpdateRateMs { get; set; } = 50; // UI refresh rate in milliseconds
+        public int DataTimeoutSeconds { get; set; } = 5; // CAN data timeout in seconds
+        public bool AutoStartLogging { get; set; } = false; // Auto-start logging on stream
     }
 
     /// <summary>
@@ -211,6 +217,26 @@ namespace SuspensionPCB_CAN_WPF
             catch (Exception ex)
             {
                 ProductionLogger.Instance.LogError($"Failed to save filter settings: {ex.Message}", "Settings");
+            }
+        }
+        
+        /// <summary>
+        /// Set display and performance settings
+        /// </summary>
+        public void SetDisplaySettings(int weightDecimals, int uiUpdateRate, int dataTimeout, bool autoStartLogging)
+        {
+            try
+            {
+                _settings.WeightDisplayDecimals = weightDecimals;
+                _settings.UIUpdateRateMs = uiUpdateRate;
+                _settings.DataTimeoutSeconds = dataTimeout;
+                _settings.AutoStartLogging = autoStartLogging;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"Display settings saved: WeightDecimals={weightDecimals}, UIUpdateRate={uiUpdateRate}ms, DataTimeout={dataTimeout}s, AutoStartLogging={autoStartLogging}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to save display settings: {ex.Message}", "Settings");
             }
         }
     }

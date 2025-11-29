@@ -20,7 +20,7 @@ namespace SuspensionPCB_CAN_WPF
         private CancellationTokenSource? _cancellationTokenSource;
         private readonly object _sendLock = new object();
         private DateTime _lastMessageTime = DateTime.MinValue;
-        private readonly TimeSpan _timeout = TimeSpan.FromSeconds(5);
+        private TimeSpan _timeout = TimeSpan.FromSeconds(5); // Configurable timeout
         private bool _timeoutNotified = false;
 
         // v0.7 Ultra-Minimal CAN Protocol - Semantic IDs & Maximum Efficiency
@@ -539,6 +539,22 @@ namespace SuspensionPCB_CAN_WPF
         public SimulatorCanAdapter? GetSimulatorAdapter()
         {
             return _adapter as SimulatorCanAdapter;
+        }
+
+        /// <summary>
+        /// Set data timeout for CAN communication
+        /// </summary>
+        /// <param name="timeout">Timeout duration</param>
+        public void SetTimeout(TimeSpan timeout)
+        {
+            if (timeout.TotalSeconds < 1 || timeout.TotalSeconds > 300)
+            {
+                ProductionLogger.Instance.LogWarning($"Invalid timeout value: {timeout.TotalSeconds}s (must be 1-300 seconds)", "CANService");
+                return;
+            }
+            
+            _timeout = timeout;
+            ProductionLogger.Instance.LogInfo($"CAN data timeout set to {timeout.TotalSeconds} seconds", "CANService");
         }
 
         public void Dispose()

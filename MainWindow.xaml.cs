@@ -906,14 +906,23 @@ namespace SuspensionPCB_CAN_WPF
                 // Check if calibrated
                 bool isCalibrated = currentCalibration != null && currentCalibration.IsValid;
                 
-                // Update weight display (rounded, not truncated)
+                // Update weight display (formatted based on settings)
                 if (WeightDisplayTxt != null)
                 {
                     if (isCalibrated)
                     {
-                        // Round to nearest integer instead of truncating
-                        int roundedWeight = (int)Math.Round(currentData.TaredWeight);
-                        WeightDisplayTxt.Text = $"{roundedWeight} kg";
+                        // Get weight display decimals from settings
+                        int decimals = _settingsManager.Settings.WeightDisplayDecimals;
+                        string format = decimals switch
+                        {
+                            1 => "F1",
+                            2 => "F2",
+                            _ => "F0"
+                        };
+                        
+                        // Round and format based on setting
+                        double roundedWeight = Math.Round(currentData.TaredWeight, decimals);
+                        WeightDisplayTxt.Text = $"{roundedWeight.ToString(format)} kg";
                     }
                     else
                     {
@@ -1245,6 +1254,17 @@ namespace SuspensionPCB_CAN_WPF
                     UpdateWeightProcessorCalibration();
                     _logger.LogInfo($"Started left side streaming at rate {_currentTransmissionRate}", "CAN");
                     ShowInlineStatus($"✓ Left stream started at {GetRateText(_currentTransmissionRate)}");
+                    
+                    // Auto-start logging if enabled
+                    if (_settingsManager.Settings.AutoStartLogging && !_dataLogger.IsLogging)
+                    {
+                        if (_dataLogger.StartLogging())
+                        {
+                            StartLoggingBtn.IsEnabled = false;
+                            StopLoggingBtn.IsEnabled = true;
+                            _logger.LogInfo("Auto-started logging (AutoStartLogging enabled)", "DataLogger");
+                        }
+                    }
                 }
                 else
                 {
@@ -1300,6 +1320,17 @@ namespace SuspensionPCB_CAN_WPF
                     UpdateWeightProcessorCalibration();
                     _logger.LogInfo($"Started right side streaming at rate {_currentTransmissionRate}", "CAN");
                     ShowInlineStatus($"✓ Right stream started at {GetRateText(_currentTransmissionRate)}");
+                    
+                    // Auto-start logging if enabled
+                    if (_settingsManager.Settings.AutoStartLogging && !_dataLogger.IsLogging)
+                    {
+                        if (_dataLogger.StartLogging())
+                        {
+                            StartLoggingBtn.IsEnabled = false;
+                            StopLoggingBtn.IsEnabled = true;
+                            _logger.LogInfo("Auto-started logging (AutoStartLogging enabled)", "DataLogger");
+                        }
+                    }
                 }
                 else
                 {
@@ -1338,6 +1369,9 @@ namespace SuspensionPCB_CAN_WPF
             // Load filter settings
             LoadFilterSettings();
             
+            // Load display settings
+            LoadDisplaySettings();
+            
             // Load existing calibrations and tare settings
             LoadCalibrations();
             _tareManager.LoadFromFile();
@@ -1356,6 +1390,11 @@ namespace SuspensionPCB_CAN_WPF
             try
             {
                 _canService = new CANService();
+                
+                // Apply data timeout from settings
+                int dataTimeoutSeconds = _settingsManager.Settings.DataTimeoutSeconds;
+                _canService.SetTimeout(TimeSpan.FromSeconds(dataTimeoutSeconds));
+                
                 _canService.MessageReceived += OnCANMessageReceived;
                 _canService.RawDataReceived += OnRawDataReceived;
                 _canService.SystemStatusReceived += HandleSystemStatus;
@@ -1370,8 +1409,9 @@ namespace SuspensionPCB_CAN_WPF
                                "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
 
-            // UI update timer at 50ms intervals (20Hz) for better performance
-            _uiUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            // UI update timer - use setting from configuration (default 50ms)
+            int uiUpdateRateMs = _settingsManager.Settings.UIUpdateRateMs;
+            _uiUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(uiUpdateRateMs) };
             _uiUpdateTimer.Tick += (s, e) =>
         {
             try
@@ -1751,6 +1791,163 @@ namespace SuspensionPCB_CAN_WPF
             catch (Exception ex)
             {
                 _logger.LogError($"Error loading filter settings: {ex.Message}", "Settings");
+            }
+        }
+
+        private void LoadDisplaySettings()
+        {
+            try
+            {
+                var settings = _settingsManager.Settings;
+                
+                // Set weight display format
+                if (WeightFormatCombo != null)
+                {
+                    foreach (System.Windows.Controls.ComboBoxItem item in WeightFormatCombo.Items)
+                    {
+                        if (item.Tag?.ToString() == settings.WeightDisplayDecimals.ToString())
+                        {
+                            WeightFormatCombo.SelectedItem = item;
+                            break;
+                        }
+                    }
+                }
+                
+                // Set UI update rate
+                if (UIUpdateRateSlider != null)
+                {
+                    UIUpdateRateSlider.Value = settings.UIUpdateRateMs;
+                    // Update display text
+                    if (UIUpdateRateValueTxt != null)
+                    {
+                        double rateHz = 1000.0 / settings.UIUpdateRateMs;
+                        UIUpdateRateValueTxt.Text = $"{settings.UIUpdateRateMs} ms ({rateHz:F1} Hz)";
+                    }
+                }
+                
+                // Set data timeout
+                if (DataTimeoutSlider != null)
+                {
+                    DataTimeoutSlider.Value = settings.DataTimeoutSeconds;
+                    // Update display text
+                    if (DataTimeoutValueTxt != null)
+                    {
+                        int timeoutSeconds = settings.DataTimeoutSeconds;
+                        DataTimeoutValueTxt.Text = $"{timeoutSeconds} second{(timeoutSeconds == 1 ? "" : "s")}";
+                    }
+                }
+                
+                // Set auto-start logging
+                if (AutoStartLoggingCheckBox != null)
+                {
+                    AutoStartLoggingCheckBox.IsChecked = settings.AutoStartLogging;
+                }
+                
+                // Apply settings to components (but don't save - already loaded from file)
+                // Only apply to runtime components, not save again
+                if (_uiUpdateTimer != null)
+                {
+                    _uiUpdateTimer.Interval = TimeSpan.FromMilliseconds(settings.UIUpdateRateMs);
+                }
+                
+                if (_canService != null)
+                {
+                    _canService.SetTimeout(TimeSpan.FromSeconds(settings.DataTimeoutSeconds));
+                }
+                
+                // Update weight display immediately if active
+                UpdateWeightDisplays();
+                
+                _logger.LogInfo($"Display settings loaded: WeightDecimals={settings.WeightDisplayDecimals}, UIUpdateRate={settings.UIUpdateRateMs}ms, DataTimeout={settings.DataTimeoutSeconds}s, AutoStartLogging={settings.AutoStartLogging}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error loading display settings: {ex.Message}", "Settings");
+            }
+        }
+
+        private void WeightFormatCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            ApplyDisplaySettings();
+        }
+
+        private void UIUpdateRateSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (UIUpdateRateValueTxt != null)
+                {
+                    int rateMs = (int)e.NewValue;
+                    double rateHz = 1000.0 / rateMs;
+                    UIUpdateRateValueTxt.Text = $"{rateMs} ms ({rateHz:F1} Hz)";
+                }
+                ApplyDisplaySettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"UI update rate slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void DataTimeoutSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (DataTimeoutValueTxt != null)
+                {
+                    int timeoutSeconds = (int)e.NewValue;
+                    DataTimeoutValueTxt.Text = $"{timeoutSeconds} second{(timeoutSeconds == 1 ? "" : "s")}";
+                }
+                ApplyDisplaySettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Data timeout slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void AutoStartLoggingCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyDisplaySettings();
+        }
+
+        private void ApplyDisplaySettings()
+        {
+            try
+            {
+                int weightDecimals = 0;
+                if (WeightFormatCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem formatItem)
+                {
+                    weightDecimals = int.Parse(formatItem.Tag?.ToString() ?? "0");
+                }
+                
+                int uiUpdateRate = (int)(UIUpdateRateSlider?.Value ?? 50);
+                int dataTimeout = (int)(DataTimeoutSlider?.Value ?? 5);
+                bool autoStartLogging = AutoStartLoggingCheckBox?.IsChecked ?? false;
+                
+                // Apply UI update rate to timer
+                if (_uiUpdateTimer != null)
+                {
+                    _uiUpdateTimer.Interval = TimeSpan.FromMilliseconds(uiUpdateRate);
+                }
+                
+                // Apply data timeout to CAN service
+                if (_canService != null)
+                {
+                    _canService.SetTimeout(TimeSpan.FromSeconds(dataTimeout));
+                }
+                
+                // Save to settings
+                _settingsManager.SetDisplaySettings(weightDecimals, uiUpdateRate, dataTimeout, autoStartLogging);
+                
+                // Update weight display immediately if active
+                UpdateWeightDisplays();
+                
+                _logger.LogInfo($"Display settings applied: WeightDecimals={weightDecimals}, UIUpdateRate={uiUpdateRate}ms, DataTimeout={dataTimeout}s, AutoStartLogging={autoStartLogging}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error applying display settings: {ex.Message}", "Settings");
             }
         }
 
