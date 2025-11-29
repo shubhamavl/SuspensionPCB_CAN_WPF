@@ -139,7 +139,7 @@ namespace SuspensionPCB_CAN_WPF
             var newPoint = new CalibrationPointViewModel
             {
                 PointNumber = Points.Count + 1,
-                KnownWeight = Points.Count == 0 ? 0 : (Points.Last().KnownWeight + 500) // Suggest next weight
+                KnownWeight = 0 // Start with zero weight, user can enter any weight in any order
             };
             Points.Add(newPoint);
             UpdatePointNumbers();
@@ -223,14 +223,16 @@ namespace SuspensionPCB_CAN_WPF
                         return;
                     }
                     
-                    // Check if weight is increasing (warning only, not error)
-                    var previousPoints = Points.Take(point.PointNumber - 1).Where(p => p.BothModesCaptured).ToList();
-                    if (previousPoints.Any() && point.KnownWeight <= previousPoints.Max(p => p.KnownWeight))
+                    // Check for duplicate weights (warning only, not error)
+                    var duplicatePoints = Points.Where(p => p.BothModesCaptured && 
+                                                           Math.Abs(p.KnownWeight - point.KnownWeight) < 0.01 && 
+                                                           p != point).ToList();
+                    if (duplicatePoints.Any())
                     {
                         var result = MessageBox.Show(
-                            $"Point {point.PointNumber} weight ({point.KnownWeight:F0} kg) is not greater than previous points.\n\n" +
-                            "For best accuracy, weights should increase. Continue anyway?",
-                            "Weight Order Warning",
+                            $"Point {point.PointNumber} weight ({point.KnownWeight:F0} kg) matches existing point(s).\n\n" +
+                            "Duplicate weights may reduce calibration accuracy. Continue anyway?",
+                            "Duplicate Weight Warning",
                             MessageBoxButton.YesNo,
                             MessageBoxImage.Warning);
                         if (result == MessageBoxResult.No)
@@ -412,12 +414,29 @@ namespace SuspensionPCB_CAN_WPF
                     return;
                 }
                 
+                // Automatically detect zero point (weight = 0)
+                var zeroPoints = capturedPoints.Where(p => Math.Abs(p.KnownWeight) < 0.01).ToList();
+                string zeroInfo = "";
+                if (zeroPoints.Any())
+                {
+                    var zeroPoint = zeroPoints.First();
+                    zeroInfo = $"\nZero point detected: Weight=0 kg, Internal ADC={zeroPoint.InternalADC}, ADS1115 ADC={zeroPoint.ADS1115ADC}";
+                    _logger.LogInfo($"Zero point detected: Internal ADC={zeroPoint.InternalADC}, ADS1115 ADC={zeroPoint.ADS1115ADC}", "CalibrationDialog");
+                }
+                else
+                {
+                    zeroInfo = "\nNo zero point (weight=0) found - calibration will use all points as-is";
+                    _logger.LogWarning("No zero point detected in calibration points", "CalibrationDialog");
+                }
+                
                 // Calculate Internal calibration using Internal ADC values
+                // Zero point is automatically included in the calculation
                 var internalPoints = capturedPoints.Select(p => p.ToCalibrationPointInternal()).ToList();
                 _internalCalibration = LinearCalibration.FitMultiplePoints(internalPoints);
                 _internalCalibration.ADCMode = 0;
                 
                 // Calculate ADS1115 calibration using ADS1115 ADC values
+                // Zero point is automatically included in the calculation
                 var ads1115Points = capturedPoints.Select(p => p.ToCalibrationPointADS1115()).ToList();
                 _ads1115Calibration = LinearCalibration.FitMultiplePoints(ads1115Points);
                 _ads1115Calibration.ADCMode = 1;
@@ -435,7 +454,7 @@ namespace SuspensionPCB_CAN_WPF
                 // Display quality metrics for both
                 string qualityText = $"Internal: R²={_internalCalibration.R2:F4}, Max Error={_internalCalibration.MaxErrorPercent:F2}%\n" +
                                    $"ADS1115: R²={_ads1115Calibration.R2:F4}, Max Error={_ads1115Calibration.MaxErrorPercent:F2}%\n" +
-                                   $"Points Used: {capturedPoints.Count}";
+                                   $"Points Used: {capturedPoints.Count}{zeroInfo}";
                 
                 // Color based on worst R²
                 double worstR2 = Math.Min(_internalCalibration.R2, _ads1115Calibration.R2);

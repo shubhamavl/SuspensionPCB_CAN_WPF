@@ -54,7 +54,12 @@ namespace SuspensionPCB_CAN_WPF
         public double KnownWeight
         {
             get => _knownWeight;
-            set { _knownWeight = value; OnPropertyChanged(nameof(KnownWeight)); }
+            set 
+            { 
+                _knownWeight = value; 
+                OnPropertyChanged(nameof(KnownWeight));
+                UpdateStatusText(); // Update status to show zero indicator if weight is 0
+            }
         }
         
         public bool IsCaptured
@@ -89,7 +94,8 @@ namespace SuspensionPCB_CAN_WPF
         {
             if (_bothModesCaptured && _isCaptured)
             {
-                StatusText = $"✓ Captured: {KnownWeight:F0} kg @ Internal:{InternalADC} ADS1115:{ADS1115ADC}";
+                string zeroIndicator = Math.Abs(KnownWeight) < 0.01 ? " [ZERO POINT]" : "";
+                StatusText = $"✓ Captured: {KnownWeight:F0} kg @ Internal:{InternalADC} ADS1115:{ADS1115ADC}{zeroIndicator}";
             }
             else if (_isCaptured)
             {
