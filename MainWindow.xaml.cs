@@ -900,12 +900,14 @@ namespace SuspensionPCB_CAN_WPF
                 // Check if calibrated
                 bool isCalibrated = currentCalibration != null && currentCalibration.IsValid;
                 
-                // Update weight display
+                // Update weight display (rounded, not truncated)
                 if (WeightDisplayTxt != null)
                 {
                     if (isCalibrated)
                     {
-                        WeightDisplayTxt.Text = $"{(int)currentData.TaredWeight} kg";
+                        // Round to nearest integer instead of truncating
+                        int roundedWeight = (int)Math.Round(currentData.TaredWeight);
+                        WeightDisplayTxt.Text = $"{roundedWeight} kg";
                     }
                     else
                     {
@@ -1030,6 +1032,9 @@ namespace SuspensionPCB_CAN_WPF
             LinearCalibration? rightCal = adcModeToUse == 0 ? _rightCalibrationInternal : _rightCalibrationADS1115;
             _weightProcessor.SetCalibration(leftCal, rightCal);
             
+            // Reset filters when calibration changes
+            _weightProcessor.ResetFilters();
+            
             // Only update ADC mode for the active side to ensure correct tare baseline is used
             // This prevents applying tare from wrong ADC mode when switching modes
             if (_activeSide == "Left")
@@ -1069,9 +1074,13 @@ namespace SuspensionPCB_CAN_WPF
                 
                 _tareManager.SaveToFile();
                 
+                // Reset filters when tare changes
+                _weightProcessor.ResetFilters();
+                
                 UpdateWeightDisplays();
                 string modeText = _activeADCMode == 0 ? "Internal" : "ADS1115";
-                MessageBox.Show($"{_activeSide} side ({modeText}) tared successfully.\nBaseline: {(int)currentCalibratedKg} kg", 
+                int roundedBaseline = (int)Math.Round(currentCalibratedKg);
+                MessageBox.Show($"{_activeSide} side ({modeText}) tared successfully.\nBaseline: {roundedBaseline} kg", 
                               "Tare Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -1094,6 +1103,9 @@ namespace SuspensionPCB_CAN_WPF
                 
                 // Use mode-specific reset (active ADC mode)
                 _tareManager.Reset(_activeSide, _activeADCMode);
+                
+                // Reset filters when tare is reset
+                _weightProcessor.ResetFilters();
                 
                 _tareManager.SaveToFile();
                 UpdateWeightDisplays();

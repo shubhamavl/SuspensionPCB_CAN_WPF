@@ -36,6 +36,23 @@ namespace SuspensionPCB_CAN_WPF
         private long _processedCount = 0;
         private long _droppedCount = 0;
         
+        // ===== WEIGHT FILTERING (EMA) =====
+        // Exponential Moving Average filters for smooth weight display
+        // Alpha controls smoothing: 0.0 = no change, 1.0 = no filtering
+        // Lower alpha = smoother but slower response
+        private const double FILTER_ALPHA_CALIBRATED = 0.15;  // Smooth calibrated weight
+        private const double FILTER_ALPHA_TARED = 0.15;       // Smooth tared weight
+        
+        // Filtered weight values (per side)
+        private double _leftFilteredCalibrated = 0;
+        private double _leftFilteredTared = 0;
+        private double _rightFilteredCalibrated = 0;
+        private double _rightFilteredTared = 0;
+        
+        // Track if filters are initialized (first sample)
+        private bool _leftFilterInitialized = false;
+        private bool _rightFilterInitialized = false;
+        
         public ProcessedWeightData LatestLeft => _latestLeft;
         public ProcessedWeightData LatestRight => _latestRight;
         public long ProcessedCount => _processedCount;
@@ -143,7 +160,7 @@ namespace SuspensionPCB_CAN_WPF
         }
         
         /// <summary>
-        /// Core processing - optimized for speed
+        /// Core processing - optimized for speed with EMA filtering
         /// </summary>
         private void ProcessRawData(RawWeightData raw)
         {
@@ -158,11 +175,39 @@ namespace SuspensionPCB_CAN_WPF
                 // Apply calibration (fast floating-point math)
                 if (_leftCalibration?.IsValid == true)
                 {
-                    processed.CalibratedWeight = _leftCalibration.RawToKg(raw.RawADC);
+                    double calibratedWeight = _leftCalibration.RawToKg(raw.RawADC);
+                    
+                    // Apply exponential moving average filter to calibrated weight
+                    if (!_leftFilterInitialized)
+                    {
+                        // Initialize filter with first sample
+                        _leftFilteredCalibrated = calibratedWeight;
+                        _leftFilterInitialized = true;
+                    }
+                    else
+                    {
+                        // EMA: filtered = alpha * new + (1 - alpha) * old
+                        _leftFilteredCalibrated = FILTER_ALPHA_CALIBRATED * calibratedWeight + 
+                                                  (1 - FILTER_ALPHA_CALIBRATED) * _leftFilteredCalibrated;
+                    }
+                    
+                    processed.CalibratedWeight = _leftFilteredCalibrated;
                     
                     // Apply tare (mode-specific) - uses _leftADCMode which should match the calibration mode
-                    // _leftADCMode is set via SetADCMode() when stream starts or ADC mode changes
-                    processed.TaredWeight = _tareManager?.ApplyTare(processed.CalibratedWeight, true, _leftADCMode) ?? processed.CalibratedWeight;
+                    double taredWeight = _tareManager?.ApplyTare(_leftFilteredCalibrated, true, _leftADCMode) ?? _leftFilteredCalibrated;
+                    
+                    // Apply exponential moving average filter to tared weight
+                    if (!_leftFilterInitialized)
+                    {
+                        _leftFilteredTared = taredWeight;
+                    }
+                    else
+                    {
+                        _leftFilteredTared = FILTER_ALPHA_TARED * taredWeight + 
+                                            (1 - FILTER_ALPHA_TARED) * _leftFilteredTared;
+                    }
+                    
+                    processed.TaredWeight = _leftFilteredTared;
                 }
                 
                 _latestLeft = processed; // Atomic write
@@ -177,15 +222,58 @@ namespace SuspensionPCB_CAN_WPF
                 
                 if (_rightCalibration?.IsValid == true)
                 {
-                    processed.CalibratedWeight = _rightCalibration.RawToKg(raw.RawADC);
+                    double calibratedWeight = _rightCalibration.RawToKg(raw.RawADC);
                     
-                    // Apply tare (mode-specific) - uses _rightADCMode which should match the calibration mode
-                    // _rightADCMode is set via SetADCMode() when stream starts or ADC mode changes
-                    processed.TaredWeight = _tareManager?.ApplyTare(processed.CalibratedWeight, false, _rightADCMode) ?? processed.CalibratedWeight;
+                    // Apply exponential moving average filter to calibrated weight
+                    if (!_rightFilterInitialized)
+                    {
+                        // Initialize filter with first sample
+                        _rightFilteredCalibrated = calibratedWeight;
+                        _rightFilterInitialized = true;
+                    }
+                    else
+                    {
+                        // EMA: filtered = alpha * new + (1 - alpha) * old
+                        _rightFilteredCalibrated = FILTER_ALPHA_CALIBRATED * calibratedWeight + 
+                                                  (1 - FILTER_ALPHA_CALIBRATED) * _rightFilteredCalibrated;
+                    }
+                    
+                    processed.CalibratedWeight = _rightFilteredCalibrated;
+                    
+                    // Apply tare (mode-specific)
+                    double taredWeight = _tareManager?.ApplyTare(_rightFilteredCalibrated, false, _rightADCMode) ?? _rightFilteredCalibrated;
+                    
+                    // Apply exponential moving average filter to tared weight
+                    if (!_rightFilterInitialized)
+                    {
+                        _rightFilteredTared = taredWeight;
+                    }
+                    else
+                    {
+                        _rightFilteredTared = FILTER_ALPHA_TARED * taredWeight + 
+                                             (1 - FILTER_ALPHA_TARED) * _rightFilteredTared;
+                    }
+                    
+                    processed.TaredWeight = _rightFilteredTared;
                 }
                 
                 _latestRight = processed;
             }
+        }
+        
+        /// <summary>
+        /// Reset filters (call when tare changes or calibration changes)
+        /// </summary>
+        public void ResetFilters()
+        {
+            _leftFilterInitialized = false;
+            _rightFilterInitialized = false;
+            _leftFilteredCalibrated = 0;
+            _leftFilteredTared = 0;
+            _rightFilteredCalibrated = 0;
+            _rightFilteredTared = 0;
+            
+            ProductionLogger.Instance.LogInfo("Weight filters reset", "WeightProcessor");
         }
         
         public void Dispose()
