@@ -323,20 +323,30 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             
-                                            <!-- Live ADC -->
-                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                                <TextBlock Text="Live ADC:" FontSize="10" Foreground="#FF6C757D" Margin="0,0,0,3"/>
-                                                <TextBox Text="{Binding RawADC, Mode=OneWay}" IsReadOnly="True" 
-                                                         Background="#FFF0F8FF" BorderBrush="#FF17A2B8" 
+                                            <!-- Internal ADC -->
+                                            <StackPanel Grid.Column="0" Margin="0,0,5,0">
+                                                <TextBlock Text="Internal ADC:" FontSize="10" Foreground="#FF6C757D" Margin="0,0,0,3"/>
+                                                <TextBox Text="{Binding InternalADC, Mode=OneWay}" IsReadOnly="True" 
+                                                         Background="#FFF0F8FF" BorderBrush="#FF2196F3" 
                                                          BorderThickness="1" Padding="4" TextAlignment="Center" 
-                                                         FontSize="12" FontWeight="Bold" Foreground="#FF17A2B8"/>
+                                                         FontSize="11" FontWeight="Bold" Foreground="#FF2196F3"/>
+                                            </StackPanel>
+                                            
+                                            <!-- ADS1115 ADC -->
+                                            <StackPanel Grid.Column="1" Margin="0,0,5,0">
+                                                <TextBlock Text="ADS1115 ADC:" FontSize="10" Foreground="#FF6C757D" Margin="0,0,0,3"/>
+                                                <TextBox Text="{Binding ADS1115ADC, Mode=OneWay}" IsReadOnly="True" 
+                                                         Background="#FFF0F8FF" BorderBrush="#FF4CAF50" 
+                                                         BorderThickness="1" Padding="4" TextAlignment="Center" 
+                                                         FontSize="11" FontWeight="Bold" Foreground="#FF4CAF50"/>
                                             </StackPanel>
                                             
                                             <!-- Weight Input -->
-                                            <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                                            <StackPanel Grid.Column="2" Margin="0,0,10,0">
                                                 <TextBlock Text="Weight (kg):" FontSize="10" Foreground="#FF6C757D" Margin="0,0,0,3"/>
                                                 <TextBox Text="{Binding KnownWeight, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" 
                                                          Background="White" BorderBrush="#FF1B5E96" 
@@ -345,7 +355,7 @@
                                             </StackPanel>
                                             
                                             <!-- Capture Button -->
-                                            <Button Grid.Column="2" Content="📸 Capture" 
+                                            <Button Grid.Column="3" Content="📸 Capture" 
                                                     Background="#FF28A745" Foreground="White" 
                                                     BorderThickness="0" Padding="10,6" FontSize="10" FontWeight="SemiBold"
                                                     Click="CapturePoint_Click" DataContext="{Binding}"
@@ -354,7 +364,7 @@
                                                     <Style TargetType="Button">
                                                         <Setter Property="IsEnabled" Value="True"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsCaptured}" Value="True">
+                                                            <DataTrigger Binding="{Binding BothModesCaptured}" Value="True">
                                                                 <Setter Property="IsEnabled" Value="False"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>

@@ -12,12 +12,20 @@ namespace SuspensionPCB_CAN_WPF
     public partial class CalibrationDialog : Window, INotifyPropertyChanged
     {
         private LinearCalibration? _calibration;
+        private LinearCalibration? _internalCalibration;
+        private LinearCalibration? _ads1115Calibration;
         private DispatcherTimer? _refreshTimer;
         private int _currentRawADC = 0;
         private CANService? _canService;
         private ProductionLogger _logger = ProductionLogger.Instance;
         private DateTime _lastRawLogTime = DateTime.MinValue;
         private int _rawSamplesSinceLog = 0;
+        
+        // Dual-mode tracking
+        private bool _isCapturingDualMode = false;
+        private byte _startingADCMode = 0;
+        private CalibrationPointViewModel? _currentCapturingPoint = null;
+        private bool _hasStream = false;
         
         // Properties for data binding
         private string _side = "";
@@ -45,23 +53,29 @@ namespace SuspensionPCB_CAN_WPF
             DataContext = this;
             Side = side;
             _adcMode = adcMode;
+            _startingADCMode = adcMode;
             
             // Get CAN service instance
             _canService = CANService._instance;
-            if (_canService != null)
+            if (_canService != null && _canService.IsConnected)
             {
                 _canService.RawDataReceived += OnRawDataReceived;
-                _logger.LogInfo($"Calibration dialog opened for {side} side (ADC mode: {adcMode})", "CalibrationDialog");
+                _hasStream = true;
+                _logger.LogInfo($"Calibration dialog opened for {side} side (ADC mode: {adcMode}) - Stream available", "CalibrationDialog");
             }
             else
             {
-                _logger.LogWarning("CAN service not available for calibration", "CalibrationDialog");
+                _hasStream = false;
+                _logger.LogInfo($"Calibration dialog opened for {side} side (ADC mode: {adcMode}) - Manual entry mode (no stream)", "CalibrationDialog");
             }
             
-            // Start refresh timer to update current raw ADC
-            _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-            _refreshTimer.Tick += RefreshTimer_Tick;
-            _refreshTimer.Start();
+            // Start refresh timer to update current raw ADC (only if stream available)
+            if (_hasStream)
+            {
+                _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+                _refreshTimer.Tick += RefreshTimer_Tick;
+                _refreshTimer.Start();
+            }
             
             // Add first point by default
             AddNewPoint();
@@ -86,16 +100,26 @@ namespace SuspensionPCB_CAN_WPF
                     _currentRawADC = e.RawADCSum;
                     _rawSamplesSinceLog++;
 
-                    // Update live ADC for all non-captured points
-                    foreach (var point in Points.Where(p => !p.IsCaptured))
+                    // Update live ADC for all non-captured points based on current ADC mode
+                    foreach (var point in Points.Where(p => !p.BothModesCaptured))
                     {
-                        point.RawADC = _currentRawADC;
+                        point.RawADC = _currentRawADC; // For backward compatibility
+                        
+                        // Update the appropriate ADC value based on current mode
+                        if (_adcMode == 0)
+                        {
+                            point.InternalADC = (ushort)_currentRawADC;
+                        }
+                        else
+                        {
+                            point.ADS1115ADC = (ushort)_currentRawADC;
+                        }
                     }
 
                     var now = DateTime.Now;
                     if (_lastRawLogTime == DateTime.MinValue || (now - _lastRawLogTime).TotalSeconds >= 1)
                     {
-                        _logger.LogInfo($"Raw ADC update ({Side}): {_currentRawADC} (samples since last log: {_rawSamplesSinceLog})", "CalibrationDialog");
+                        _logger.LogInfo($"Raw ADC update ({Side}, mode={_adcMode}): {_currentRawADC} (samples since last log: {_rawSamplesSinceLog})", "CalibrationDialog");
                         _rawSamplesSinceLog = 0;
                         _lastRawLogTime = now;
                     }
@@ -168,14 +192,22 @@ namespace SuspensionPCB_CAN_WPF
         }
         
         /// <summary>
-        /// Generic capture handler for any point
+        /// Generic capture handler for any point - automatically captures both ADC modes
         /// </summary>
-        private void CapturePoint_Click(object sender, RoutedEventArgs e)
+        private async void CapturePoint_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 if (sender is Button button && button.DataContext is CalibrationPointViewModel point)
                 {
+                    // Prevent multiple simultaneous captures
+                    if (_isCapturingDualMode)
+                    {
+                        MessageBox.Show("Please wait for the current capture to complete.", "Capture In Progress", 
+                                      MessageBoxButton.OK, MessageBoxImage.Information);
+                        return;
+                    }
+                    
                     // Validate weight input
                     if (point.KnownWeight < 0)
                     {
@@ -192,7 +224,7 @@ namespace SuspensionPCB_CAN_WPF
                     }
                     
                     // Check if weight is increasing (warning only, not error)
-                    var previousPoints = Points.Take(point.PointNumber - 1).Where(p => p.IsCaptured).ToList();
+                    var previousPoints = Points.Take(point.PointNumber - 1).Where(p => p.BothModesCaptured).ToList();
                     if (previousPoints.Any() && point.KnownWeight <= previousPoints.Max(p => p.KnownWeight))
                     {
                         var result = MessageBox.Show(
@@ -205,81 +237,219 @@ namespace SuspensionPCB_CAN_WPF
                             return;
                     }
                     
-                    // Capture the point
-                    point.RawADC = _currentRawADC;
-                    point.IsCaptured = true;
+                    _isCapturingDualMode = true;
+                    _currentCapturingPoint = point;
+                    button.IsEnabled = false;
                     
-                    UpdateCapturedCount();
-                    
-                    // Update the point's RawADC display (it's now captured, so freeze the value)
-                    point.RawADC = _currentRawADC; // Keep the captured value
-                    
-                    // Auto-add next point if this is the last one
-                    if (point == Points.Last())
+                    if (_hasStream && _canService != null && _canService.IsConnected)
                     {
-                        AddNewPoint();
+                        // Automatic dual-mode capture with stream
+                        await CaptureDualModeWithStream(point);
+                    }
+                    else
+                    {
+                        // Manual entry mode - user enters ADC values manually
+                        CaptureDualModeManual(point);
                     }
                     
-                    _logger.LogInfo($"Captured Point {point.PointNumber}: {point.KnownWeight:F0} kg @ ADC {point.RawADC}", "CalibrationDialog");
+                    button.IsEnabled = true;
+                    _isCapturingDualMode = false;
+                    _currentCapturingPoint = null;
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error capturing point: {ex.Message}", "Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
+                _isCapturingDualMode = false;
+                _currentCapturingPoint = null;
             }
+        }
+        
+        /// <summary>
+        /// Capture both ADC modes automatically when stream is available
+        /// </summary>
+        private async System.Threading.Tasks.Task CaptureDualModeWithStream(CalibrationPointViewModel point)
+        {
+            try
+            {
+                // Step 1: Capture current mode ADC
+                point.StatusText = $"Capturing {(_adcMode == 0 ? "Internal" : "ADS1115")} ADC...";
+                await System.Threading.Tasks.Task.Delay(500); // Wait for stable reading
+                
+                ushort firstModeADC = (ushort)_currentRawADC;
+                
+                if (_adcMode == 0)
+                {
+                    point.InternalADC = firstModeADC;
+                }
+                else
+                {
+                    point.ADS1115ADC = firstModeADC;
+                }
+                
+                // Step 2: Switch to other ADC mode
+                point.StatusText = $"Switching to {(_adcMode == 0 ? "ADS1115" : "Internal")} mode...";
+                bool switchSuccess = false;
+                
+                if (_adcMode == 0)
+                {
+                    // Currently Internal, switch to ADS1115
+                    switchSuccess = _canService?.SwitchToADS1115() ?? false;
+                    if (switchSuccess)
+                    {
+                        _adcMode = 1;
+                        await WaitForModeSwitch();
+                    }
+                }
+                else
+                {
+                    // Currently ADS1115, switch to Internal
+                    switchSuccess = _canService?.SwitchToInternalADC() ?? false;
+                    if (switchSuccess)
+                    {
+                        _adcMode = 0;
+                        await WaitForModeSwitch();
+                    }
+                }
+                
+                if (!switchSuccess)
+                {
+                    MessageBox.Show("Failed to switch ADC mode. Please switch manually and try again.", "Mode Switch Error", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    point.StatusText = "Mode switch failed";
+                    return;
+                }
+                
+                // Step 3: Capture second mode ADC
+                point.StatusText = $"Capturing {(_adcMode == 0 ? "Internal" : "ADS1115")} ADC...";
+                await System.Threading.Tasks.Task.Delay(500); // Wait for stable reading
+                
+                ushort secondModeADC = (ushort)_currentRawADC;
+                
+                if (_adcMode == 0)
+                {
+                    point.InternalADC = secondModeADC;
+                }
+                else
+                {
+                    point.ADS1115ADC = secondModeADC;
+                }
+                
+                // Step 4: Mark as captured
+                point.RawADC = _adcMode == 0 ? point.InternalADC : point.ADS1115ADC; // For backward compatibility
+                point.BothModesCaptured = true;
+                point.IsCaptured = true;
+                
+                UpdateCapturedCount();
+                
+                // Auto-add next point if this is the last one
+                if (point == Points.Last())
+                {
+                    AddNewPoint();
+                }
+                
+                _logger.LogInfo($"Captured Point {point.PointNumber}: {point.KnownWeight:F0} kg @ Internal:{point.InternalADC} ADS1115:{point.ADS1115ADC}", "CalibrationDialog");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error in dual-mode capture: {ex.Message}", "CalibrationDialog");
+                throw;
+            }
+        }
+        
+        /// <summary>
+        /// Manual entry mode - user enters ADC values for both modes
+        /// </summary>
+        private void CaptureDualModeManual(CalibrationPointViewModel point)
+        {
+            // Show dialog for manual ADC entry
+            var manualDialog = new ManualADCEntryDialog(point.KnownWeight);
+            if (manualDialog.ShowDialog() == true)
+            {
+                point.InternalADC = manualDialog.InternalADC;
+                point.ADS1115ADC = manualDialog.ADS1115ADC;
+                point.RawADC = point.InternalADC; // For backward compatibility
+                point.BothModesCaptured = true;
+                point.IsCaptured = true;
+                
+                UpdateCapturedCount();
+                
+                // Auto-add next point if this is the last one
+                if (point == Points.Last())
+                {
+                    AddNewPoint();
+                }
+                
+                _logger.LogInfo($"Manual entry Point {point.PointNumber}: {point.KnownWeight:F0} kg @ Internal:{point.InternalADC} ADS1115:{point.ADS1115ADC}", "CalibrationDialog");
+            }
+        }
+        
+        /// <summary>
+        /// Wait for ADC mode switch to complete
+        /// </summary>
+        private async System.Threading.Tasks.Task WaitForModeSwitch()
+        {
+            // Wait for mode switch to stabilize
+            await System.Threading.Tasks.Task.Delay(300);
+            
+            // Request system status to confirm mode switch
+            _canService?.RequestSystemStatus();
+            await System.Threading.Tasks.Task.Delay(200);
         }
         
         private void CalculateCalibration_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // Collect all captured points
-                var capturedPoints = Points.Where(p => p.IsCaptured).ToList();
+                // Collect all captured points (must have both modes captured)
+                var capturedPoints = Points.Where(p => p.BothModesCaptured).ToList();
                 
                 if (capturedPoints.Count == 0)
                 {
-                    MessageBox.Show("Please capture at least one calibration point first.", "Incomplete Data", 
+                    MessageBox.Show("Please capture at least one calibration point with both ADC modes first.", "Incomplete Data", 
                                   MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
                 
-                // Convert to CalibrationPoint list
-                var calibrationPoints = capturedPoints.Select(p => p.ToCalibrationPoint()).ToList();
+                // Calculate Internal calibration using Internal ADC values
+                var internalPoints = capturedPoints.Select(p => p.ToCalibrationPointInternal()).ToList();
+                _internalCalibration = LinearCalibration.FitMultiplePoints(internalPoints);
+                _internalCalibration.ADCMode = 0;
                 
-                // Calculate linear calibration using least-squares regression
-                _calibration = LinearCalibration.FitMultiplePoints(calibrationPoints);
+                // Calculate ADS1115 calibration using ADS1115 ADC values
+                var ads1115Points = capturedPoints.Select(p => p.ToCalibrationPointADS1115()).ToList();
+                _ads1115Calibration = LinearCalibration.FitMultiplePoints(ads1115Points);
+                _ads1115Calibration.ADCMode = 1;
                 
-                // Set ADC mode from current settings
-                byte currentADCMode = _adcMode;
-                if (currentADCMode == 0 && SettingsManager.Instance != null)
-                {
-                    currentADCMode = SettingsManager.Instance.GetLastKnownADCMode();
-                }
-                _calibration.ADCMode = currentADCMode;
+                // Set legacy _calibration for backward compatibility (use Internal)
+                _calibration = _internalCalibration;
                 
-                // Display results
-                PopupEquationTxt.Text = _calibration.GetEquationString();
+                // Display results for both calibrations
+                string internalEq = _internalCalibration.GetEquationString();
+                string ads1115Eq = _ads1115Calibration.GetEquationString();
+                
+                PopupEquationTxt.Text = $"Internal ADC (12-bit):\n{internalEq}\n\nADS1115 (16-bit):\n{ads1115Eq}";
                 PopupEquationTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF495057"));
                 
-                // Display quality metrics
-                string qualityText = $"Quality: {_calibration.GetQualityAssessment()}\n" +
-                                   $"R² = {_calibration.R2:F4}\n" +
-                                   $"Max Error: {_calibration.MaxErrorPercent:F2}%\n" +
+                // Display quality metrics for both
+                string qualityText = $"Internal: R²={_internalCalibration.R2:F4}, Max Error={_internalCalibration.MaxErrorPercent:F2}%\n" +
+                                   $"ADS1115: R²={_ads1115Calibration.R2:F4}, Max Error={_ads1115Calibration.MaxErrorPercent:F2}%\n" +
                                    $"Points Used: {capturedPoints.Count}";
                 
-                // Color based on R²
-                if (_calibration.R2 >= 0.999)
+                // Color based on worst R²
+                double worstR2 = Math.Min(_internalCalibration.R2, _ads1115Calibration.R2);
+                if (worstR2 >= 0.999)
                 {
                     PopupErrorTxt.Text = $"✓ {qualityText}";
                     PopupErrorTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF28A745"));
                 }
-                else if (_calibration.R2 >= 0.99)
+                else if (worstR2 >= 0.99)
                 {
                     PopupErrorTxt.Text = $"✓ {qualityText}";
                     PopupErrorTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF28A745"));
                 }
-                else if (_calibration.R2 >= 0.95)
+                else if (worstR2 >= 0.95)
                 {
                     PopupErrorTxt.Text = $"⚠ {qualityText}";
                     PopupErrorTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFFC107"));
@@ -317,24 +487,23 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                if (_calibration == null)
+                if (_internalCalibration == null || _ads1115Calibration == null)
                 {
                     MessageBox.Show("No calibration to save. Please calculate calibration first.", "No Data", 
                                   MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
                 
-                // Use ADC mode passed to constructor (or fallback to settings)
-                byte currentADCMode = _adcMode;
-                if (currentADCMode == 0 && SettingsManager.Instance != null)
-                {
-                    currentADCMode = SettingsManager.Instance.GetLastKnownADCMode();
-                }
-                _calibration.SaveToFile(Side, currentADCMode);
+                // Save both calibrations
+                _internalCalibration.SaveToFile(Side, 0);  // Internal mode
+                _ads1115Calibration.SaveToFile(Side, 1);   // ADS1115 mode
                 
-                string modeText = currentADCMode == 0 ? "Internal ADC" : "ADS1115";
-                MessageBox.Show($"Calibration saved successfully for {Side} side ({modeText}).\n\n" +
-                              $"Equation: {_calibration.GetEquationString()}\n\n" +
+                string internalEq = _internalCalibration.GetEquationString();
+                string ads1115Eq = _ads1115Calibration.GetEquationString();
+                
+                MessageBox.Show($"Calibration saved successfully for {Side} side (both modes).\n\n" +
+                              $"Internal ADC: {internalEq}\n" +
+                              $"ADS1115: {ads1115Eq}\n\n" +
                               "You can now use the 'Tare' button on the main window to zero-out platform weight.",
                               "Calibration Saved", MessageBoxButton.OK, MessageBoxImage.Information);
                 
@@ -407,6 +576,27 @@ namespace SuspensionPCB_CAN_WPF
             if (_canService != null)
             {
                 _canService.RawDataReceived -= OnRawDataReceived;
+                
+                // Restore original ADC mode if we switched it
+                if (_hasStream && _canService.IsConnected && _adcMode != _startingADCMode)
+                {
+                    try
+                    {
+                        if (_startingADCMode == 0)
+                        {
+                            _canService.SwitchToInternalADC();
+                        }
+                        else
+                        {
+                            _canService.SwitchToADS1115();
+                        }
+                        _logger.LogInfo($"Restored ADC mode to {(_startingADCMode == 0 ? "Internal" : "ADS1115")}", "CalibrationDialog");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError($"Error restoring ADC mode: {ex.Message}", "CalibrationDialog");
+                    }
+                }
             }
             
             base.OnClosed(e);

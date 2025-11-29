@@ -1112,59 +1112,64 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                if (string.IsNullOrEmpty(_activeSide))
-                {
-                    MessageBox.Show("Please start a stream (Left or Right) before calibrating.", "No Active Stream", 
-                                  MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
+                // Determine which side to calibrate
+                string sideToCalibrate = _activeSide;
                 
-                // Check if stream for active side is already running
-                bool streamRunning = _activeSide == "Left" ? _leftStreamRunning : _rightStreamRunning;
-                
-                if (!streamRunning)
+                // If no active side, ask user to select
+                if (string.IsNullOrEmpty(sideToCalibrate))
                 {
-                    if (_canService?.IsConnected == true)
+                    var sideDialog = new SideSelectionDialog();
+                    if (sideDialog.ShowDialog() == true)
                     {
-                        // Auto-start stream for calibration
-                        bool success = false;
-                        if (_activeSide == "Left")
-                        {
-                            success = _canService.StartLeftStream(_currentTransmissionRate);
-                            if (success) _leftStreamRunning = true;
-                        }
-                        else
-                        {
-                            success = _canService.StartRightStream(_currentTransmissionRate);
-                            if (success) _rightStreamRunning = true;
-                        }
-                        
-                        if (success)
-                        {
-                            _logger.LogInfo($"Auto-started {_activeSide} stream for calibration at rate {_currentTransmissionRate}", "CAN");
-                            UpdateStreamingIndicators();
-                            
-                            // Wait briefly for first data packet
-                            System.Threading.Thread.Sleep(200);
-                        }
-                        else
-                        {
-                            _logger.LogError($"Failed to auto-start {_activeSide} stream for calibration", "CAN");
-                            MessageBox.Show($"Failed to start {_activeSide} stream for calibration.", "Stream Error", 
-                                          MessageBoxButton.OK, MessageBoxImage.Error);
-                            return;
-                        }
+                        sideToCalibrate = sideDialog.SelectedSide;
                     }
                     else
                     {
-                        MessageBox.Show("Please connect to CAN device first.", "Connection Required", 
-                                      MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
+                        return; // User cancelled
                     }
                 }
                 
-                // Open calibration dialog with active side and current ADC mode
-                var calibrationDialog = new CalibrationDialog(_activeSide, _activeADCMode);
+                // Check if stream for selected side is already running
+                bool streamRunning = sideToCalibrate == "Left" ? _leftStreamRunning : _rightStreamRunning;
+                
+                // Try to auto-start stream if not running and CAN is connected
+                if (!streamRunning && _canService?.IsConnected == true)
+                {
+                    bool success = false;
+                    if (sideToCalibrate == "Left")
+                    {
+                        success = _canService.StartLeftStream(_currentTransmissionRate);
+                        if (success) _leftStreamRunning = true;
+                    }
+                    else
+                    {
+                        success = _canService.StartRightStream(_currentTransmissionRate);
+                        if (success) _rightStreamRunning = true;
+                    }
+                    
+                    if (success)
+                    {
+                        _logger.LogInfo($"Auto-started {sideToCalibrate} stream for calibration at rate {_currentTransmissionRate}", "CAN");
+                        UpdateStreamingIndicators();
+                        
+                        // Wait briefly for first data packet
+                        System.Threading.Thread.Sleep(200);
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Could not auto-start {sideToCalibrate} stream - calibration will use manual entry mode", "CAN");
+                    }
+                }
+                
+                // Get current ADC mode (or default to Internal)
+                byte currentADCMode = !string.IsNullOrEmpty(_activeSide) ? _activeADCMode : _currentADCMode;
+                if (currentADCMode == 0 && SettingsManager.Instance != null)
+                {
+                    currentADCMode = SettingsManager.Instance.GetLastKnownADCMode();
+                }
+                
+                // Open calibration dialog (works with or without stream)
+                var calibrationDialog = new CalibrationDialog(sideToCalibrate, currentADCMode);
                 calibrationDialog.Owner = this;
                 if (calibrationDialog.ShowDialog() == true)
                 {
