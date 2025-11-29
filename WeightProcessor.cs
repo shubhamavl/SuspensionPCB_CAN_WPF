@@ -23,6 +23,10 @@ namespace SuspensionPCB_CAN_WPF
         private LinearCalibration? _rightCalibration;
         private TareManager? _tareManager;
         
+        // ADC mode tracking (0=Internal, 1=ADS1115)
+        private byte _leftADCMode = 0;
+        private byte _rightADCMode = 0;
+        
         // Thread control
         private Task? _processingTask;
         private CancellationTokenSource? _cancellationSource;
@@ -75,6 +79,17 @@ namespace SuspensionPCB_CAN_WPF
             _rightCalibration = right;
             
             ProductionLogger.Instance.LogInfo($"Calibration set - Left: {left?.IsValid}, Right: {right?.IsValid}", "WeightProcessor");
+        }
+        
+        /// <summary>
+        /// Set ADC mode for a side (0=Internal, 1=ADS1115)
+        /// </summary>
+        public void SetADCMode(bool isLeft, byte adcMode)
+        {
+            if (isLeft)
+                _leftADCMode = adcMode;
+            else
+                _rightADCMode = adcMode;
         }
         
         /// <summary>
@@ -145,15 +160,9 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     processed.CalibratedWeight = _leftCalibration.RawToKg(raw.RawADC);
                     
-                    // Apply tare (simple subtraction)
-                    if (_tareManager?.LeftIsTared == true)
-                    {
-                        processed.TaredWeight = _tareManager.ApplyTare(processed.CalibratedWeight, true);
-                    }
-                    else
-                    {
-                        processed.TaredWeight = processed.CalibratedWeight;
-                    }
+                    // Apply tare (mode-specific) - uses _leftADCMode which should match the calibration mode
+                    // _leftADCMode is set via SetADCMode() when stream starts or ADC mode changes
+                    processed.TaredWeight = _tareManager?.ApplyTare(processed.CalibratedWeight, true, _leftADCMode) ?? processed.CalibratedWeight;
                 }
                 
                 _latestLeft = processed; // Atomic write
@@ -170,14 +179,9 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     processed.CalibratedWeight = _rightCalibration.RawToKg(raw.RawADC);
                     
-                    if (_tareManager?.RightIsTared == true)
-                    {
-                        processed.TaredWeight = _tareManager.ApplyTare(processed.CalibratedWeight, false);
-                    }
-                    else
-                    {
-                        processed.TaredWeight = processed.CalibratedWeight;
-                    }
+                    // Apply tare (mode-specific) - uses _rightADCMode which should match the calibration mode
+                    // _rightADCMode is set via SetADCMode() when stream starts or ADC mode changes
+                    processed.TaredWeight = _tareManager?.ApplyTare(processed.CalibratedWeight, false, _rightADCMode) ?? processed.CalibratedWeight;
                 }
                 
                 _latestRight = processed;

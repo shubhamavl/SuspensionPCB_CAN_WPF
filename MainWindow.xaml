@@ -161,6 +161,7 @@
                             <ComboBox x:Name="AdapterTypeCombo" Width="180" Margin="0,0,10,0" SelectionChanged="AdapterTypeCombo_SelectionChanged">
                                 <ComboBoxItem Content="USB-CAN-A Serial" Tag="USB"/>
                                 <ComboBoxItem Content="PCAN" Tag="PCAN"/>
+                                <ComboBoxItem Content="Simulator" Tag="SIM"/>
                             </ComboBox>
                             <ComboBox x:Name="PcanChannelCombo" Width="100" Margin="0,0,10,0" Visibility="Collapsed">
                                 <ComboBoxItem Content="USB1" Tag="0x51"/>
@@ -213,6 +214,17 @@
                     <TextBlock Text="View calibration, tare, and settings files" FontSize="10" 
                                Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
                 </StackPanel>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="OpenSimulatorControlBtn" Content="🎮 Open Simulator Control" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF17A2B8" Click="OpenSimulatorControl_Click" Width="180"
+                            Visibility="Collapsed"/>
+                    <TextBlock Text="Adjust simulator parameters in real-time" FontSize="10" 
+                               Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
             </StackPanel>
         </Border>
 
@@ -221,96 +233,59 @@
                       Margin="20" Padding="10">
             <Grid MinWidth="1000">
                 <StackPanel>
-                <!-- Weight Data Display -->
-                <GroupBox Header="Live Weight Data" Style="{StaticResource ResponsiveGroupBox}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <!-- Left Side -->
-                        <Border Grid.Column="0" Style="{StaticResource DataCard}" 
-                                BorderBrush="#FF2C3E50" BorderThickness="2">
-                            <StackPanel>
-                                <!-- HERO: Display Weight (48pt, Bold, Centered) -->
-                                <Border Background="#FFF9F9F9" BorderBrush="#FF27AE60" 
-                                        BorderThickness="3" CornerRadius="8" 
-                                        Padding="40,30" Margin="15,15,15,10">
-                                    <TextBlock x:Name="LeftDisplayTxt" Text="0.0 kg" 
-                                               FontSize="48" FontWeight="Bold"
-                                               HorizontalAlignment="Center"
-                                               Foreground="#FF27AE60"/>
-                                </Border>
-                                
-                                <!-- Compact Info Line (Single row with icons) -->
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" 
-                                            Margin="0,5,0,10">
-                                    <Ellipse x:Name="LeftStreamIndicator" Width="10" Height="10" 
-                                             Fill="#FFE74C3C" Margin="0,0,5,0"/>
-                                    <TextBlock x:Name="LeftStreamStatusTxt" Text="Stopped" 
-                                               FontSize="11" Margin="0,0,10,0"/>
-                                    <TextBlock Text="✓" x:Name="LeftCalStatusIcon" 
-                                               FontSize="11" Foreground="#FF27AE60" Margin="0,0,3,0"/>
-                                    <TextBlock Text="Calibrated" FontSize="11" Margin="0,0,10,0"/>
-                                    <TextBlock Text="Raw:" FontSize="11" Margin="0,0,3,0"/>
-                                    <TextBlock x:Name="LeftRawTxt" Text="0" FontSize="11" Margin="0,0,10,0"/>
-                                    <TextBlock x:Name="LeftTareStatusTxt" Text="Tare:✓" FontSize="11"/>
-                                </StackPanel>
-                                
-                                <!-- Compact Buttons -->
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,10">
-                                    <Button Content="Tare" Style="{StaticResource ModernButton}" 
-                                            Background="#FF3498DB" Click="TareLeft_Click" 
-                                            Width="80" Height="32" Margin="5,0"/>
-                                    <Button Content="Calibrate" Style="{StaticResource ModernButton}" 
-                                            Background="#FF27AE60" Click="CalibrateLeft_Click" 
-                                            Width="80" Height="32" Margin="5,0"/>
-                                </StackPanel>
+                <!-- Weight Data Display - Single Dynamic Dashboard -->
+                <GroupBox x:Name="LiveWeightDataGroupBox" Header="Live Weight Data" Style="{StaticResource ResponsiveGroupBox}">
+                    <Border Style="{StaticResource DataCard}" 
+                            BorderBrush="#FF27AE60" BorderThickness="2" 
+                            HorizontalAlignment="Center" MaxWidth="900">
+                        <StackPanel>
+                            <!-- Mode Indicator Header -->
+                            <TextBlock x:Name="DashboardModeHeader" Text="No Active Stream" 
+                                       FontSize="16" FontWeight="Bold" 
+                                       Foreground="{StaticResource PrimaryBlue}" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                            
+                            <!-- HERO: Display Weight (48pt, Bold, Centered) -->
+                            <Border Background="#FFF9F9F9" BorderBrush="#FF27AE60" 
+                                    BorderThickness="3" CornerRadius="8" 
+                                    Padding="40,30" Margin="15,15,15,10">
+                                <TextBlock x:Name="WeightDisplayTxt" Text="0.0 kg" 
+                                           FontSize="48" FontWeight="Bold"
+                                           HorizontalAlignment="Center"
+                                           Foreground="#FF27AE60"/>
+                            </Border>
+                            
+                            <!-- Compact Info Line (Single row with icons) -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" 
+                                        Margin="0,5,0,10">
+                                <Ellipse x:Name="StreamIndicator" Width="10" Height="10" 
+                                         Fill="#FFE74C3C" Margin="0,0,5,0"/>
+                                <TextBlock x:Name="StreamStatusTxt" Text="Stopped" 
+                                           FontSize="11" Margin="0,0,10,0"/>
+                                <TextBlock Text="✓" x:Name="CalStatusIcon" 
+                                           FontSize="11" Foreground="#FF27AE60" Margin="0,0,3,0"/>
+                                <TextBlock x:Name="CalStatusText" Text="Calibrated" FontSize="11" Margin="0,0,10,0"/>
+                                <TextBlock Text="Raw:" FontSize="11" Margin="0,0,3,0"/>
+                                <TextBlock x:Name="RawTxt" Text="0" FontSize="11" Margin="0,0,10,0"/>
+                                <TextBlock x:Name="TareStatusTxt" Text="Tare:✓" FontSize="11"/>
                             </StackPanel>
-                        </Border>
-
-                        <!-- Right Side -->
-                        <Border Grid.Column="1" Style="{StaticResource DataCard}" 
-                                BorderBrush="#FF27AE60" BorderThickness="2">
-                            <StackPanel>
-                                <!-- HERO: Display Weight (48pt, Bold, Centered) -->
-                                <Border Background="#FFF9F9F9" BorderBrush="#FF27AE60" 
-                                        BorderThickness="3" CornerRadius="8" 
-                                        Padding="40,30" Margin="15,15,15,10">
-                                    <TextBlock x:Name="RightDisplayTxt" Text="0.0 kg" 
-                                               FontSize="48" FontWeight="Bold"
-                                               HorizontalAlignment="Center"
-                                               Foreground="#FF27AE60"/>
-                                </Border>
-                                
-                                <!-- Compact Info Line (Single row with icons) -->
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" 
-                                            Margin="0,5,0,10">
-                                    <Ellipse x:Name="RightStreamIndicator" Width="10" Height="10" 
-                                             Fill="#FFE74C3C" Margin="0,0,5,0"/>
-                                    <TextBlock x:Name="RightStreamStatusTxt" Text="Stopped" 
-                                               FontSize="11" Margin="0,0,10,0"/>
-                                    <TextBlock Text="✓" x:Name="RightCalStatusIcon" 
-                                               FontSize="11" Foreground="#FF27AE60" Margin="0,0,3,0"/>
-                                    <TextBlock Text="Calibrated" FontSize="11" Margin="0,0,10,0"/>
-                                    <TextBlock Text="Raw:" FontSize="11" Margin="0,0,3,0"/>
-                                    <TextBlock x:Name="RightRawTxt" Text="0" FontSize="11" Margin="0,0,10,0"/>
-                                    <TextBlock x:Name="RightTareStatusTxt" Text="Tare:✓" FontSize="11"/>
-                                </StackPanel>
-                                
-                                <!-- Compact Buttons -->
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,10">
-                                    <Button Content="Tare" Style="{StaticResource ModernButton}" 
-                                            Background="#FF3498DB" Click="TareRight_Click" 
-                                            Width="80" Height="32" Margin="5,0"/>
-                                    <Button Content="Calibrate" Style="{StaticResource ModernButton}" 
-                                            Background="#FF27AE60" Click="CalibrateRight_Click" 
-                                            Width="80" Height="32" Margin="5,0"/>
-                                </StackPanel>
+                            
+                            <!-- Compact Buttons -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,10">
+                                <Button Content="Tare" Style="{StaticResource ModernButton}" 
+                                        Background="#FF3498DB" Click="Tare_Click" 
+                                        Width="70" Height="32" Margin="3,0"/>
+                                <Button Content="Calibrate" Style="{StaticResource ModernButton}" 
+                                        Background="#FF27AE60" Click="Calibrate_Click" 
+                                        Width="70" Height="32" Margin="3,0"/>
+                                <Button Content="Reset Calibration" Style="{StaticResource ModernButton}" 
+                                        Background="#FFE74C3C" Click="ResetCalibration_Click" 
+                                        Width="150" Height="32" Margin="3,0"/>
+                                <Button Content="Reset Tare" Style="{StaticResource DangerButton}" 
+                                        Click="ResetTare_Click" Height="32" Width="90" Margin="3,0"/>
                             </StackPanel>
-                        </Border>
-                    </Grid>
+                        </StackPanel>
+                    </Border>
                 </GroupBox>
 
                 <!-- Three-Column Control Panel -->
@@ -346,8 +321,6 @@
                                     Style="{StaticResource ModernButton}" 
                                     Background="#FF2196F3" Click="SwitchModeBtn_Click" 
                                     Height="32" Margin="0,5,0,5"/>
-                            <Button Content="Reset All Tares" Style="{StaticResource DangerButton}" 
-                                    Click="ResetTares_Click" Height="32"/>
                         </StackPanel>
                     </Border>
 

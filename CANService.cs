@@ -103,6 +103,10 @@ namespace SuspensionPCB_CAN_WPF
             {
                 adapter = new PcanCanAdapter();
             }
+            else if (config is SimulatorCanAdapterConfig)
+            {
+                adapter = new SimulatorCanAdapter();
+            }
             else
             {
                 errorMessage = "Unknown adapter configuration type";
@@ -528,6 +532,14 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
         #endregion
+
+        /// <summary>
+        /// Get the current adapter as SimulatorCanAdapter if it is one
+        /// </summary>
+        public SimulatorCanAdapter? GetSimulatorAdapter()
+        {
+            return _adapter as SimulatorCanAdapter;
+        }
 
         public void Dispose()
         {

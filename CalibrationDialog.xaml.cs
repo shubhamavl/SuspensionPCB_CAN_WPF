@@ -37,18 +37,21 @@ namespace SuspensionPCB_CAN_WPF
             set { _capturedPointCount = value; OnPropertyChanged(nameof(CapturedPointCount)); }
         }
         
-        public CalibrationDialog(string side)
+        private byte _adcMode = 0;
+        
+        public CalibrationDialog(string side, byte adcMode = 0)
         {
             InitializeComponent();
             DataContext = this;
             Side = side;
+            _adcMode = adcMode;
             
             // Get CAN service instance
             _canService = CANService._instance;
             if (_canService != null)
             {
                 _canService.RawDataReceived += OnRawDataReceived;
-                _logger.LogInfo($"Calibration dialog opened for {side} side", "CalibrationDialog");
+                _logger.LogInfo($"Calibration dialog opened for {side} side (ADC mode: {adcMode})", "CalibrationDialog");
             }
             else
             {
@@ -247,6 +250,14 @@ namespace SuspensionPCB_CAN_WPF
                 // Calculate linear calibration using least-squares regression
                 _calibration = LinearCalibration.FitMultiplePoints(calibrationPoints);
                 
+                // Set ADC mode from current settings
+                byte currentADCMode = _adcMode;
+                if (currentADCMode == 0 && SettingsManager.Instance != null)
+                {
+                    currentADCMode = SettingsManager.Instance.GetLastKnownADCMode();
+                }
+                _calibration.ADCMode = currentADCMode;
+                
                 // Display results
                 PopupEquationTxt.Text = _calibration.GetEquationString();
                 PopupEquationTxt.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF495057"));
@@ -313,9 +324,16 @@ namespace SuspensionPCB_CAN_WPF
                     return;
                 }
                 
-                _calibration.SaveToFile(Side);
+                // Use ADC mode passed to constructor (or fallback to settings)
+                byte currentADCMode = _adcMode;
+                if (currentADCMode == 0 && SettingsManager.Instance != null)
+                {
+                    currentADCMode = SettingsManager.Instance.GetLastKnownADCMode();
+                }
+                _calibration.SaveToFile(Side, currentADCMode);
                 
-                MessageBox.Show($"Calibration saved successfully for {Side} side.\n\n" +
+                string modeText = currentADCMode == 0 ? "Internal ADC" : "ADS1115";
+                MessageBox.Show($"Calibration saved successfully for {Side} side ({modeText}).\n\n" +
                               $"Equation: {_calibration.GetEquationString()}\n\n" +
                               "You can now use the 'Tare' button on the main window to zero-out platform weight.",
                               "Calibration Saved", MessageBoxButton.OK, MessageBoxImage.Information);

@@ -33,16 +33,24 @@ namespace SuspensionPCB_CAN_WPF
         private bool _firmwareUpdateInProgress;
         private readonly object _statisticsLock = new object();
 
-        // v0.7 Calibration and Tare functionality
-        private LinearCalibration? _leftCalibration;
-        private LinearCalibration? _rightCalibration;
+        // v0.7 Calibration and Tare functionality - Mode-specific calibrations
+        private LinearCalibration? _leftCalibrationInternal;
+        private LinearCalibration? _leftCalibrationADS1115;
+        private LinearCalibration? _rightCalibrationInternal;
+        private LinearCalibration? _rightCalibrationADS1115;
         private TareManager _tareManager = new TareManager();
+        private byte _currentADCMode = 0; // Track current ADC mode (0=Internal, 1=ADS1115)
+        
+        // Active mode tracking for single dashboard
+        private string _activeSide = ""; // "Left" or "Right" or ""
+        private byte _activeADCMode = 0; // 0=Internal, 1=ADS1115
         private DataLogger _dataLogger = new DataLogger();
         private StatusHistoryManager _statusHistoryManager = new StatusHistoryManager(100);
         
         // Current raw ADC data (from STM32)
         private int _leftRawADC = 0;
         private int _rightRawADC = 0;
+        private int _currentRawADC = 0; // Current active stream raw ADC
         
         // Stream state tracking
         private bool _leftStreamRunning = false;
@@ -132,7 +140,7 @@ namespace SuspensionPCB_CAN_WPF
                 }
                 else if (e.Key == Key.T && Keyboard.Modifiers == ModifierKeys.Control)
                 {
-                    ResetTares_Click(sender, new RoutedEventArgs());
+                    ResetTare_Click(sender, new RoutedEventArgs());
                 }
                 else if (e.Key == Key.I && Keyboard.Modifiers == ModifierKeys.Control)
                 {
@@ -172,7 +180,9 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     _leftStreamRunning = false;
                     _rightStreamRunning = false;
+                    _activeSide = ""; // Clear active side when streams stop
                     UpdateStreamingIndicators();
+                    UpdateDashboardMode();
                     _logger.LogInfo("Stopped all streams", "CAN");
                     ShowInlineStatus("✓ Stop all streams command sent");
                 }
@@ -193,37 +203,33 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                // Update left side indicator
-                if (LeftStreamIndicator != null)
+                // Update single dashboard indicator based on active stream
+                bool isStreamActive = _leftStreamRunning || _rightStreamRunning;
+                string activeSideName = _leftStreamRunning ? "Left" : (_rightStreamRunning ? "Right" : "");
+                
+                if (StreamIndicator != null)
                 {
-                    LeftStreamIndicator.Fill = _leftStreamRunning ? 
+                    StreamIndicator.Fill = isStreamActive ? 
                         new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green) : 
                         new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Gray);
                 }
                 
-                if (LeftStreamStatusTxt != null)
+                if (StreamStatusTxt != null)
                 {
-                    LeftStreamStatusTxt.Text = _leftStreamRunning ? "Active" : "Inactive";
-                    LeftStreamStatusTxt.Foreground = _leftStreamRunning ? 
-                        System.Windows.Media.Brushes.Green : 
-                        System.Windows.Media.Brushes.Gray;
+                    if (isStreamActive)
+                    {
+                        StreamStatusTxt.Text = $"{activeSideName} Active";
+                        StreamStatusTxt.Foreground = System.Windows.Media.Brushes.Green;
+                    }
+                    else
+                    {
+                        StreamStatusTxt.Text = "Stopped";
+                        StreamStatusTxt.Foreground = System.Windows.Media.Brushes.Gray;
+                    }
                 }
                 
-                // Update right side indicator
-                if (RightStreamIndicator != null)
-                {
-                    RightStreamIndicator.Fill = _rightStreamRunning ? 
-                        new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green) : 
-                        new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Gray);
-                }
-                
-                if (RightStreamStatusTxt != null)
-                {
-                    RightStreamStatusTxt.Text = _rightStreamRunning ? "Active" : "Inactive";
-                    RightStreamStatusTxt.Foreground = _rightStreamRunning ? 
-                        System.Windows.Media.Brushes.Green : 
-                        System.Windows.Media.Brushes.Gray;
-                }
+                // Update dashboard mode when stream status changes
+                UpdateDashboardMode();
                 
                 // Update status bar
                 UpdateStatusBar();
@@ -417,6 +423,25 @@ namespace SuspensionPCB_CAN_WPF
                             CheckPcanAvailability();
                         }
                     }
+                    else if (adapterType == "SIM")
+                    {
+                        if (PcanChannelCombo != null)
+                        {
+                            PcanChannelCombo.Visibility = Visibility.Collapsed;
+                        }
+                        if (AdapterHintTxt != null)
+                        {
+                            AdapterHintTxt.Text = "Simulator mode enabled. No hardware required - automatic weight data generation.";
+                        }
+                        if (PcanStatusTxt != null)
+                        {
+                            PcanStatusTxt.Visibility = Visibility.Collapsed;
+                        }
+                        if (OpenSimulatorControlBtn != null)
+                        {
+                            OpenSimulatorControlBtn.Visibility = Visibility.Visible;
+                        }
+                    }
                     else
                     {
                         if (PcanChannelCombo != null)
@@ -430,6 +455,10 @@ namespace SuspensionPCB_CAN_WPF
                         if (PcanStatusTxt != null)
                         {
                             PcanStatusTxt.Visibility = Visibility.Collapsed;
+                        }
+                        if (OpenSimulatorControlBtn != null)
+                        {
+                            OpenSimulatorControlBtn.Visibility = Visibility.Collapsed;
                         }
                     }
                     SaveConfiguration();
@@ -476,6 +505,13 @@ namespace SuspensionPCB_CAN_WPF
                         {
                             Channel = channel,
                             PcanBitrate = bitrate,
+                            BitrateKbps = GetBaudRateValue()
+                        };
+                    }
+                    else if (adapterType == "SIM")
+                    {
+                        return new SimulatorCanAdapterConfig
+                        {
                             BitrateKbps = GetBaudRateValue()
                         };
                     }
@@ -714,14 +750,25 @@ namespace SuspensionPCB_CAN_WPF
                     if (message.Data?.Length >= 2)
                     {
                         _leftRawADC = (ushort)(message.Data[0] | (message.Data[1] << 8));
-                        // REMOVED: Verbose logging for 1kHz performance
-                        // _logger.LogInfo($"Left side raw ADC: {_leftRawADC}", "CAN");
+                        _currentRawADC = _leftRawADC;
+                        
+                        // Set active side to Left
+                        if (_activeSide != "Left")
+                        {
+                            _activeSide = "Left";
+                            _activeADCMode = _currentADCMode; // Use current system ADC mode
+                            UpdateDashboardMode();
+                            UpdateWeightProcessorCalibration(); // This already sets ADC mode for active side
+                            _logger.LogInfo($"Active side set to Left (ADC mode: {_activeADCMode})", "CAN");
+                        }
                         
                         // Confirm left stream is active
                         if (!_leftStreamRunning)
                         {
                             _leftStreamRunning = true;
+                            _rightStreamRunning = false; // Ensure right is stopped (only one can run)
                             UpdateStreamingIndicators();
+                            UpdateDashboardMode();
                             _logger.LogInfo("Left stream confirmed active via 0x200", "CAN");
                         }
                         
@@ -734,14 +781,25 @@ namespace SuspensionPCB_CAN_WPF
                     if (message.Data?.Length >= 2)
                     {
                         _rightRawADC = (ushort)(message.Data[0] | (message.Data[1] << 8));
-                        // REMOVED: Verbose logging for 1kHz performance
-                        // _logger.LogInfo($"Right side raw ADC: {_rightRawADC}", "CAN");
+                        _currentRawADC = _rightRawADC;
+                        
+                        // Set active side to Right
+                        if (_activeSide != "Right")
+                        {
+                            _activeSide = "Right";
+                            _activeADCMode = _currentADCMode; // Use current system ADC mode
+                            UpdateDashboardMode();
+                            UpdateWeightProcessorCalibration(); // This already sets ADC mode for active side
+                            _logger.LogInfo($"Active side set to Right (ADC mode: {_activeADCMode})", "CAN");
+                        }
                         
                         // Confirm right stream is active
                         if (!_rightStreamRunning)
                         {
                             _rightStreamRunning = true;
+                            _leftStreamRunning = false; // Ensure left is stopped (only one can run)
                             UpdateStreamingIndicators();
+                            UpdateDashboardMode();
                             _logger.LogInfo("Right stream confirmed active via 0x201", "CAN");
                         }
                         
@@ -814,49 +872,81 @@ namespace SuspensionPCB_CAN_WPF
                 var leftData = _weightProcessor.LatestLeft;
                 var rightData = _weightProcessor.LatestRight;
                 
-                // Update Left Side Display
-                if (LeftRawTxt != null) LeftRawTxt.Text = leftData.RawADC.ToString();
+                // Get current calibration based on active side and ADC mode
+                var currentCalibration = GetCurrentCalibration();
                 
-                bool leftCalibrated = _leftCalibration != null && _leftCalibration.IsValid;
+                // Determine which data to display based on active side
+                ProcessedWeightData currentData;
+                bool isLeft = _activeSide == "Left";
                 
-                if (leftCalibrated)
+                if (string.IsNullOrEmpty(_activeSide))
                 {
-                    if (LeftDisplayTxt != null) LeftDisplayTxt.Text = $"{(int)leftData.TaredWeight} kg";
-                }
-                else
-                {
-                    if (LeftDisplayTxt != null) LeftDisplayTxt.Text = "Calibration Required";
-                }
-                
-                if (LeftTareStatusTxt != null) LeftTareStatusTxt.Text = _tareManager.GetTareStatusText(true);
-                
-                // Update Right Side Display
-                if (RightRawTxt != null) RightRawTxt.Text = rightData.RawADC.ToString();
-                
-                bool rightCalibrated = _rightCalibration != null && _rightCalibration.IsValid;
-                
-                if (rightCalibrated)
-                {
-                    if (RightDisplayTxt != null) RightDisplayTxt.Text = $"{(int)rightData.TaredWeight} kg";
-                }
-                else
-                {
-                    if (RightDisplayTxt != null) RightDisplayTxt.Text = "Calibration Required";
+                    // No active stream - show placeholder
+                    if (WeightDisplayTxt != null) WeightDisplayTxt.Text = "No Active Stream";
+                    if (RawTxt != null) RawTxt.Text = "0";
+                    if (StreamStatusTxt != null) StreamStatusTxt.Text = "Stopped";
+                    if (CalStatusText != null) CalStatusText.Text = "N/A";
+                    if (TareStatusTxt != null) TareStatusTxt.Text = "N/A";
+                    return;
                 }
                 
-                if (RightTareStatusTxt != null) RightTareStatusTxt.Text = _tareManager.GetTareStatusText(false);
+                // Get data for active side
+                currentData = isLeft ? leftData : rightData;
+                _currentRawADC = isLeft ? _leftRawADC : _rightRawADC;
                 
-                // Log data if logging is active
-                if (_dataLogger.IsLogging)
+                // Update Raw ADC display
+                if (RawTxt != null) RawTxt.Text = _currentRawADC.ToString();
+                
+                // Check if calibrated
+                bool isCalibrated = currentCalibration != null && currentCalibration.IsValid;
+                
+                // Update weight display
+                if (WeightDisplayTxt != null)
                 {
-                    double leftTareBaseline = _tareManager.LeftIsTared ? _tareManager.LeftBaselineKg : 0.0;
-                    double rightTareBaseline = _tareManager.RightIsTared ? _tareManager.RightBaselineKg : 0.0;
+                    if (isCalibrated)
+                    {
+                        WeightDisplayTxt.Text = $"{(int)currentData.TaredWeight} kg";
+                    }
+                    else
+                    {
+                        WeightDisplayTxt.Text = "Calibration Required";
+                    }
+                }
+                
+                // Update tare status (mode-specific)
+                if (TareStatusTxt != null)
+                {
+                    bool isTared = _tareManager.IsTared(_activeSide, _activeADCMode);
+                    TareStatusTxt.Text = isTared ? "Tare:✓" : "Tare:✗";
+                }
+                
+                // Update calibration status
+                if (CalStatusIcon != null && CalStatusText != null)
+                {
+                    if (isCalibrated)
+                    {
+                        CalStatusIcon.Text = "✓";
+                        CalStatusIcon.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 174, 96)); // Green
+                        CalStatusText.Text = "Calibrated";
+                    }
+                    else
+                    {
+                        CalStatusIcon.Text = "⚠";
+                        CalStatusIcon.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 193, 7)); // Yellow
+                        CalStatusText.Text = "Not Calibrated";
+                    }
+                }
+                
+                // Log data if logging is active (only log active stream)
+                if (_dataLogger.IsLogging && !string.IsNullOrEmpty(_activeSide))
+                {
+                    var dataToLog = isLeft ? leftData : rightData;
+                    double tareBaseline = _tareManager.IsTared(_activeSide, _activeADCMode) 
+                        ? _tareManager.GetBaselineKg(_activeSide, _activeADCMode) 
+                        : 0.0;
                     
-                    _dataLogger.LogDataPoint("Left", leftData.RawADC, leftData.CalibratedWeight, leftData.TaredWeight, 
-                                           leftTareBaseline, _leftCalibration?.Slope ?? 0, _leftCalibration?.Intercept ?? 0, 0);
-                    
-                    _dataLogger.LogDataPoint("Right", rightData.RawADC, rightData.CalibratedWeight, rightData.TaredWeight, 
-                                           rightTareBaseline, _rightCalibration?.Slope ?? 0, _rightCalibration?.Intercept ?? 0, 0);
+                    _dataLogger.LogDataPoint(_activeSide, dataToLog.RawADC, dataToLog.CalibratedWeight, dataToLog.TaredWeight, 
+                                           tareBaseline, currentCalibration?.Slope ?? 0, currentCalibration?.Intercept ?? 0, _activeADCMode);
                 }
                 
                 // Update calibration status icons
@@ -891,110 +981,176 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
+        /// <summary>
+        /// Get current calibration based on active side and ADC mode
+        /// </summary>
+        private LinearCalibration? GetCurrentCalibration()
+        {
+            if (string.IsNullOrEmpty(_activeSide))
+                return null;
+            
+            if (_activeSide == "Left")
+            {
+                return _activeADCMode == 0 ? _leftCalibrationInternal : _leftCalibrationADS1115;
+            }
+            else if (_activeSide == "Right")
+            {
+                return _activeADCMode == 0 ? _rightCalibrationInternal : _rightCalibrationADS1115;
+            }
+            
+            return null;
+        }
+
         private void LoadCalibrations()
         {
-            _leftCalibration = LinearCalibration.LoadFromFile("Left");
-            _rightCalibration = LinearCalibration.LoadFromFile("Right");
+            // Load all 4 calibrations (Left/Right × Internal/ADS1115)
+            _leftCalibrationInternal = LinearCalibration.LoadFromFile("Left", 0);
+            _leftCalibrationADS1115 = LinearCalibration.LoadFromFile("Left", 1);
+            _rightCalibrationInternal = LinearCalibration.LoadFromFile("Right", 0);
+            _rightCalibrationADS1115 = LinearCalibration.LoadFromFile("Right", 1);
             
-            // Update WeightProcessor with new calibrations
-            _weightProcessor.SetCalibration(_leftCalibration, _rightCalibration);
+            // Update WeightProcessor with calibrations for current active mode
+            UpdateWeightProcessorCalibration();
             
             // Update UI calibration status icons
             UpdateCalibrationStatusIcons();
         }
+
+        /// <summary>
+        /// Update WeightProcessor with calibrations for current ADC mode
+        /// Uses active ADC mode if side is active, otherwise uses current system ADC mode
+        /// Only updates ADC mode for the active side to prevent incorrect tare application
+        /// </summary>
+        private void UpdateWeightProcessorCalibration()
+        {
+            // Use active ADC mode if side is active, otherwise use current system ADC mode
+            byte adcModeToUse = !string.IsNullOrEmpty(_activeSide) ? _activeADCMode : _currentADCMode;
+            
+            LinearCalibration? leftCal = adcModeToUse == 0 ? _leftCalibrationInternal : _leftCalibrationADS1115;
+            LinearCalibration? rightCal = adcModeToUse == 0 ? _rightCalibrationInternal : _rightCalibrationADS1115;
+            _weightProcessor.SetCalibration(leftCal, rightCal);
+            
+            // Only update ADC mode for the active side to ensure correct tare baseline is used
+            // This prevents applying tare from wrong ADC mode when switching modes
+            if (_activeSide == "Left")
+            {
+                _weightProcessor.SetADCMode(true, _activeADCMode);
+            }
+            else if (_activeSide == "Right")
+            {
+                _weightProcessor.SetADCMode(false, _activeADCMode);
+            }
+            // If no active side, don't update ADC mode (keep previous values)
+        }
         
-        private void TareLeft_Click(object sender, RoutedEventArgs e)
+        private void Tare_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                if (_leftCalibration == null || !_leftCalibration.IsValid)
+                if (string.IsNullOrEmpty(_activeSide))
                 {
-                    MessageBox.Show("Please calibrate the Left side first before taring.", "Calibration Required", 
+                    MessageBox.Show("Please start a stream (Left or Right) before taring.", "No Active Stream", 
                                   MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
                 
-                double currentCalibratedKg = _leftCalibration.RawToKg(_leftRawADC);
-                _tareManager.TareLeft(currentCalibratedKg);
-                _tareManager.SaveToFile();
-                
-                UpdateWeightDisplays();
-                MessageBox.Show($"Left side tared successfully.\nBaseline: {(int)currentCalibratedKg} kg", 
-                              "Tare Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error taring Left side: {ex.Message}", "Tare Error", 
-                              MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-        
-        private void TareRight_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (_rightCalibration == null || !_rightCalibration.IsValid)
+                var currentCalibration = GetCurrentCalibration();
+                if (currentCalibration == null || !currentCalibration.IsValid)
                 {
-                    MessageBox.Show("Please calibrate the Right side first before taring.", "Calibration Required", 
+                    MessageBox.Show($"Please calibrate the {_activeSide} side first before taring.", "Calibration Required", 
                                   MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
                 
-                double currentCalibratedKg = _rightCalibration.RawToKg(_rightRawADC);
-                _tareManager.TareRight(currentCalibratedKg);
+                double currentCalibratedKg = currentCalibration.RawToKg(_currentRawADC);
+                
+                // Use mode-specific tare (active ADC mode)
+                _tareManager.Tare(_activeSide, currentCalibratedKg, _activeADCMode);
+                
                 _tareManager.SaveToFile();
                 
                 UpdateWeightDisplays();
-                MessageBox.Show($"Right side tared successfully.\nBaseline: {(int)currentCalibratedKg} kg", 
+                string modeText = _activeADCMode == 0 ? "Internal" : "ADS1115";
+                MessageBox.Show($"{_activeSide} side ({modeText}) tared successfully.\nBaseline: {(int)currentCalibratedKg} kg", 
                               "Tare Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error taring Right side: {ex.Message}", "Tare Error", 
+                MessageBox.Show($"Error taring {_activeSide} side: {ex.Message}", "Tare Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         
-        private void ResetTares_Click(object sender, RoutedEventArgs e)
+        private void ResetTare_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                _tareManager.ResetBoth();
+                if (string.IsNullOrEmpty(_activeSide))
+                {
+                    MessageBox.Show("Please start a stream (Left or Right) before resetting tare.", "No Active Stream", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                
+                // Use mode-specific reset (active ADC mode)
+                _tareManager.Reset(_activeSide, _activeADCMode);
+                
                 _tareManager.SaveToFile();
                 UpdateWeightDisplays();
-                MessageBox.Show("All tares reset successfully.", "Reset Complete", 
+                string modeText = _activeADCMode == 0 ? "Internal" : "ADS1115";
+                MessageBox.Show($"{_activeSide} side ({modeText}) tare reset successfully.", "Reset Complete", 
                               MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error resetting tares: {ex.Message}", "Reset Error", 
+                MessageBox.Show($"Error resetting tare: {ex.Message}", "Reset Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         
-        private void CalibrateLeft_Click(object sender, RoutedEventArgs e)
+        private void Calibrate_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // Check if left stream is already running
-                if (!_leftStreamRunning)
+                if (string.IsNullOrEmpty(_activeSide))
+                {
+                    MessageBox.Show("Please start a stream (Left or Right) before calibrating.", "No Active Stream", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                
+                // Check if stream for active side is already running
+                bool streamRunning = _activeSide == "Left" ? _leftStreamRunning : _rightStreamRunning;
+                
+                if (!streamRunning)
                 {
                     if (_canService?.IsConnected == true)
                     {
-                        // Auto-start left stream for calibration
-                        bool success = _canService.StartLeftStream(_currentTransmissionRate);
+                        // Auto-start stream for calibration
+                        bool success = false;
+                        if (_activeSide == "Left")
+                        {
+                            success = _canService.StartLeftStream(_currentTransmissionRate);
+                            if (success) _leftStreamRunning = true;
+                        }
+                        else
+                        {
+                            success = _canService.StartRightStream(_currentTransmissionRate);
+                            if (success) _rightStreamRunning = true;
+                        }
+                        
                         if (success)
                         {
-                            _leftStreamRunning = true;
-                            _logger.LogInfo($"Auto-started left stream for calibration at rate {_currentTransmissionRate}", "CAN");
+                            _logger.LogInfo($"Auto-started {_activeSide} stream for calibration at rate {_currentTransmissionRate}", "CAN");
+                            UpdateStreamingIndicators();
                             
                             // Wait briefly for first data packet
                             System.Threading.Thread.Sleep(200);
                         }
                         else
                         {
-                            _logger.LogError("Failed to auto-start left stream for calibration", "CAN");
-                            MessageBox.Show("Failed to start left stream for calibration.", "Stream Error", 
+                            _logger.LogError($"Failed to auto-start {_activeSide} stream for calibration", "CAN");
+                            MessageBox.Show($"Failed to start {_activeSide} stream for calibration.", "Stream Error", 
                                           MessageBoxButton.OK, MessageBoxImage.Error);
                             return;
                         }
@@ -1007,67 +1163,15 @@ namespace SuspensionPCB_CAN_WPF
                     }
                 }
                 
-                // Open calibration dialog
-                var calibrationDialog = new CalibrationDialog("Left");
+                // Open calibration dialog with active side and current ADC mode
+                var calibrationDialog = new CalibrationDialog(_activeSide, _activeADCMode);
                 calibrationDialog.Owner = this;
                 if (calibrationDialog.ShowDialog() == true)
                 {
                     // Reload calibrations after successful calibration
                     LoadCalibrations();
                     UpdateWeightDisplays();
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Calibration error: {ex.Message}", "UI");
-                MessageBox.Show($"Calibration error: {ex.Message}", "Error", 
-                              MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-        
-        private void CalibrateRight_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // Check if right stream is already running
-                if (!_rightStreamRunning)
-                {
-                    if (_canService?.IsConnected == true)
-                    {
-                        // Auto-start right stream for calibration
-                        bool success = _canService.StartRightStream(_currentTransmissionRate);
-                        if (success)
-                        {
-                            _rightStreamRunning = true;
-                            _logger.LogInfo($"Auto-started right stream for calibration at rate {_currentTransmissionRate}", "CAN");
-                            
-                            // Wait briefly for first data packet
-                            System.Threading.Thread.Sleep(200);
-                        }
-                        else
-                        {
-                            _logger.LogError("Failed to auto-start right stream for calibration", "CAN");
-                            MessageBox.Show("Failed to start right stream for calibration.", "Stream Error", 
-                                          MessageBoxButton.OK, MessageBoxImage.Error);
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        MessageBox.Show("Please connect to CAN device first.", "Connection Required", 
-                                      MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
-                    }
-                }
-                
-                // Open calibration dialog
-                var calibrationDialog = new CalibrationDialog("Right");
-                calibrationDialog.Owner = this;
-                if (calibrationDialog.ShowDialog() == true)
-                {
-                    // Reload calibrations after successful calibration
-                    LoadCalibrations();
-                    UpdateWeightDisplays();
+                    UpdateCalibrationStatusIcons();
                 }
             }
             catch (Exception ex)
@@ -1110,7 +1214,12 @@ namespace SuspensionPCB_CAN_WPF
                 if (success)
                 {
                     _leftStreamRunning = true;
+                    _rightStreamRunning = false; // Ensure right is stopped
+                    _activeSide = "Left";
+                    _activeADCMode = _currentADCMode;
                     UpdateStreamingIndicators();
+                    UpdateDashboardMode();
+                    UpdateWeightProcessorCalibration();
                     _logger.LogInfo($"Started left side streaming at rate {_currentTransmissionRate}", "CAN");
                     ShowInlineStatus($"✓ Left stream started at {GetRateText(_currentTransmissionRate)}");
                 }
@@ -1160,7 +1269,12 @@ namespace SuspensionPCB_CAN_WPF
                 if (success)
                 {
                     _rightStreamRunning = true;
+                    _leftStreamRunning = false; // Ensure left is stopped
+                    _activeSide = "Right";
+                    _activeADCMode = _currentADCMode;
                     UpdateStreamingIndicators();
+                    UpdateDashboardMode();
+                    UpdateWeightProcessorCalibration();
                     _logger.LogInfo($"Started right side streaming at rate {_currentTransmissionRate}", "CAN");
                     ShowInlineStatus($"✓ Right stream started at {GetRateText(_currentTransmissionRate)}");
                 }
@@ -1202,13 +1316,16 @@ namespace SuspensionPCB_CAN_WPF
             LoadCalibrations();
             _tareManager.LoadFromFile();
 
-            // Initialize WeightProcessor
-            _weightProcessor.SetCalibration(_leftCalibration, _rightCalibration);
+            // Initialize WeightProcessor with calibrations for current ADC mode
+            UpdateWeightProcessorCalibration();
             _weightProcessor.SetTareManager(_tareManager);
             _weightProcessor.Start();
 
             // Initialize ADC mode from settings
             InitializeADCModeFromSettings();
+            
+            // Initialize dashboard mode display
+            UpdateDashboardMode();
 
             try
             {
@@ -1631,6 +1748,13 @@ namespace SuspensionPCB_CAN_WPF
                     ConnectionToggle.Content = connected ? "🔌 Disconnect" : "🔌 Connect";
                 }
                 
+                // Enable/disable simulator control button based on connection and adapter type
+                if (OpenSimulatorControlBtn != null)
+                {
+                    bool isSimulator = GetSelectedAdapterType() == "Simulator";
+                    OpenSimulatorControlBtn.IsEnabled = connected && isSimulator;
+                }
+                
                 if (RequestLeftBtn != null)
                 {
                     RequestLeftBtn.IsEnabled = connected;
@@ -1759,7 +1883,9 @@ namespace SuspensionPCB_CAN_WPF
                 UpdateConnectionStatus(false);
                 _leftStreamRunning = false;
                 _rightStreamRunning = false;
+                _activeSide = ""; // Clear active side on disconnect
                 UpdateStreamingIndicators();
+                UpdateDashboardMode();
                 ShowStatusBanner("✓ Disconnected Successfully", true);
                 _logger.LogInfo("Disconnected from CAN device", "CAN");
             }
@@ -1957,6 +2083,45 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
+        private void OpenSimulatorControl_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_canService == null)
+                {
+                    MessageBox.Show("CAN Service not initialized.", "Error", 
+                                  MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                if (!_canService.IsConnected)
+                {
+                    MessageBox.Show("Please connect to simulator first.", "Connection Required", 
+                                  MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var simulatorAdapter = _canService.GetSimulatorAdapter();
+                if (simulatorAdapter == null)
+                {
+                    MessageBox.Show("Simulator adapter not available. Please select Simulator adapter and connect.", 
+                                  "Simulator Required", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var simulatorWindow = new SimulatorControlWindow();
+                simulatorWindow.Owner = this;
+                simulatorWindow.Initialize(simulatorAdapter);
+                simulatorWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error opening simulator control window: {ex.Message}", "UI");
+                MessageBox.Show($"Error opening simulator control window: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void OpenLogsWindow_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -1987,7 +2152,11 @@ namespace SuspensionPCB_CAN_WPF
                 
                 if (success)
                 {
+                    _currentADCMode = 0;
+                    _activeADCMode = 0; // Update active mode
                     UpdateAdcModeIndicators("Internal", "#FF2196F3");
+                    UpdateWeightProcessorCalibration();
+                    UpdateDashboardMode();
                     _logger.LogInfo("Switched to Internal ADC mode (12-bit)", "Mode");
                     ShowInlineStatus("✓ Switched to Internal ADC mode");
                 }
@@ -2018,7 +2187,11 @@ namespace SuspensionPCB_CAN_WPF
                 
                 if (success)
                 {
+                    _currentADCMode = 1;
+                    _activeADCMode = 1; // Update active mode
                     UpdateAdcModeIndicators("ADS1115", "#FF4CAF50");
+                    UpdateWeightProcessorCalibration();
+                    UpdateDashboardMode();
                     _logger.LogInfo("Switched to ADS1115 mode (16-bit)", "Mode");
                     ShowInlineStatus("✓ Switched to ADS1115 mode (16-bit precision)");
                 }
@@ -2063,6 +2236,17 @@ namespace SuspensionPCB_CAN_WPF
                 string color = e.ADCMode == 0 ? "#FF2196F3" : "#FF4CAF50";
                 UpdateAdcModeIndicators(mode, color);
                 
+                // Check if ADC mode changed - reload calibrations if it did
+                if (_currentADCMode != e.ADCMode)
+                {
+                    _currentADCMode = e.ADCMode;
+                    _activeADCMode = e.ADCMode; // Update active mode
+                    _logger.LogInfo($"ADC mode changed to {mode}, reloading calibrations", "MainWindow");
+                    LoadCalibrations();
+                    UpdateWeightProcessorCalibration();
+                    UpdateDashboardMode();
+                }
+                
                 // Update data logger with system status
                 _dataLogger?.UpdateSystemStatus(e.SystemStatus, e.ErrorFlags);
                 
@@ -2083,6 +2267,10 @@ namespace SuspensionPCB_CAN_WPF
             try
             {
                 var (adcMode, systemStatus, errorFlags, lastUpdate) = SettingsManager.Instance.GetLastKnownSystemStatus();
+                
+                // Set current ADC mode for calibration loading
+                _currentADCMode = adcMode;
+                _activeADCMode = adcMode; // Initialize active mode
                 
                 if (lastUpdate != DateTime.MinValue)
                 {
@@ -2428,39 +2616,83 @@ namespace SuspensionPCB_CAN_WPF
         #region UI Helper Methods
 
         /// <summary>
-        /// Updates calibration status icons for both sides
+        /// Updates calibration status icon for current active mode
         /// </summary>
         private void UpdateCalibrationStatusIcons()
         {
             try
             {
-                // Left side
-                if (_leftCalibration != null && _leftCalibration.IsValid)
-                {
-                    LeftCalStatusIcon.Text = "✓";
-                    LeftCalStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(39, 174, 96)); // Green
-                }
-                else
-                {
-                    LeftCalStatusIcon.Text = "⚠";
-                    LeftCalStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(231, 76, 60)); // Red
-                }
+                if (CalStatusIcon == null || CalStatusText == null) return;
                 
-                // Right side
-                if (_rightCalibration != null && _rightCalibration.IsValid)
+                var currentCalibration = GetCurrentCalibration();
+                
+                if (currentCalibration != null && currentCalibration.IsValid)
                 {
-                    RightCalStatusIcon.Text = "✓";
-                    RightCalStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(39, 174, 96));
+                    CalStatusIcon.Text = "✓";
+                    CalStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(39, 174, 96)); // Green
+                    CalStatusText.Text = "Calibrated";
                 }
                 else
                 {
-                    RightCalStatusIcon.Text = "⚠";
-                    RightCalStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(231, 76, 60));
+                    CalStatusIcon.Text = "⚠";
+                    CalStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(255, 193, 7)); // Yellow/Warning
+                    CalStatusText.Text = "Not Calibrated";
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error updating calibration status icons: {ex.Message}", "UI");
+            }
+        }
+        
+        private void ResetCalibration_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_activeSide))
+            {
+                MessageBox.Show("Please start a stream (Left or Right) before resetting calibration.", "No Active Stream", 
+                              MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            
+            ResetCalibration(_activeSide, _activeADCMode);
+        }
+        
+        private void ResetCalibration(string side, byte adcMode)
+        {
+            try
+            {
+                string modeName = adcMode == 0 ? "Internal ADC" : "ADS1115";
+                var result = MessageBox.Show(
+                    $"Are you sure you want to delete the {side} side calibration for {modeName}?\n\n" +
+                    "This will allow you to recalibrate this side for this ADC mode.",
+                    "Confirm Reset Calibration",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+                
+                if (result == MessageBoxResult.Yes)
+                {
+                    LinearCalibration.DeleteCalibration(side, adcMode);
+                    
+                    // Reload calibrations
+                    LoadCalibrations();
+                    
+                    // Update UI
+                    UpdateWeightDisplays();
+                    UpdateCalibrationStatusIcons();
+                    
+                    MessageBox.Show(
+                        $"{side} side calibration for {modeName} has been deleted.\n\n" +
+                        "You can now calibrate this side again.",
+                        "Calibration Reset",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error resetting calibration: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+                _logger.LogError($"Reset calibration error: {ex.Message}", "MainWindow");
             }
         }
 
@@ -2491,6 +2723,31 @@ namespace SuspensionPCB_CAN_WPF
         }
 
         /// <summary>
+        /// Update dashboard mode header to show current active side and ADC mode
+        /// </summary>
+        private void UpdateDashboardMode()
+        {
+            try
+            {
+                if (DashboardModeHeader == null) return;
+                
+                if (string.IsNullOrEmpty(_activeSide))
+                {
+                    DashboardModeHeader.Text = "No Active Stream";
+                }
+                else
+                {
+                    string adcModeText = _activeADCMode == 0 ? "Internal ADC (12-bit)" : "ADS1115 (16-bit)";
+                    DashboardModeHeader.Text = $"{_activeSide} - {adcModeText}";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error updating dashboard mode: {ex.Message}", "UI");
+            }
+        }
+
+        /// <summary>
         /// Unified mode switch handler for the Switch Mode button
         /// </summary>
         private void SwitchModeBtn_Click(object sender, RoutedEventArgs e)
@@ -2504,17 +2761,25 @@ namespace SuspensionPCB_CAN_WPF
                     if (_canService != null)
                     {
                         _canService.SwitchToADS1115();
+                        _currentADCMode = 1;
+                        _activeADCMode = 1;
                         UpdateAdcModeIndicators("ADS1115");
+                        UpdateWeightProcessorCalibration();
+                        UpdateDashboardMode();
                         _logger.LogInfo("Switched to ADS1115 mode", "ADC");
                     }
-                        }
-                        else
-                        {
+                }
+                else
+                {
                     // Switch to Internal ADC
                     if (_canService != null)
                     {
                         _canService.SwitchToInternalADC();
+                        _currentADCMode = 0;
+                        _activeADCMode = 0;
                         UpdateAdcModeIndicators("Internal");
+                        UpdateWeightProcessorCalibration();
+                        UpdateDashboardMode();
                         _logger.LogInfo("Switched to Internal ADC mode", "ADC");
                     }
                 }

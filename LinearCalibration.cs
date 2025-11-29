@@ -17,6 +17,7 @@ namespace SuspensionPCB_CAN_WPF
         public DateTime CalibrationDate { get; set; }
         public bool IsValid { get; set; }
         public string Side { get; set; } = "";     // "Left" or "Right"
+        public byte ADCMode { get; set; } = 0;    // 0=Internal, 1=ADS1115
         
         // All calibration points used for fitting
         public List<CalibrationPoint> Points { get; set; } = new List<CalibrationPoint>();
@@ -63,7 +64,8 @@ namespace SuspensionPCB_CAN_WPF
                     CalibrationDate = DateTime.Now,
                     Points = new List<CalibrationPoint>(points),
                     R2 = 1.0, // Perfect fit for single point
-                    MaxErrorPercent = 0.0
+                    MaxErrorPercent = 0.0,
+                    ADCMode = 0 // Default to Internal, should be set by caller
                 };
             }
             
@@ -134,7 +136,8 @@ namespace SuspensionPCB_CAN_WPF
                 CalibrationDate = DateTime.Now,
                 Points = new List<CalibrationPoint>(points),
                 R2 = r2,
-                MaxErrorPercent = maxErrorPercent
+                MaxErrorPercent = maxErrorPercent,
+                ADCMode = 0 // Default to Internal, should be set by caller
             };
         }
         
@@ -203,10 +206,15 @@ namespace SuspensionPCB_CAN_WPF
         /// Save calibration to JSON file
         /// </summary>
         /// <param name="side">"Left" or "Right"</param>
-        public void SaveToFile(string side)
+        /// <param name="adcMode">ADC mode (0=Internal, 1=ADS1115). If not provided, uses current ADCMode property.</param>
+        public void SaveToFile(string side, byte? adcMode = null)
         {
             Side = side;
-            string filename = PathHelper.GetCalibrationPath(side); // Portable: in Data directory
+            if (adcMode.HasValue)
+            {
+                ADCMode = adcMode.Value;
+            }
+            string filename = PathHelper.GetCalibrationPath(side, ADCMode); // Portable: in Data directory
             string jsonString = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(filename, jsonString);
         }
@@ -215,10 +223,11 @@ namespace SuspensionPCB_CAN_WPF
         /// Load calibration from JSON file
         /// </summary>
         /// <param name="side">"Left" or "Right"</param>
+        /// <param name="adcMode">ADC mode (0=Internal, 1=ADS1115)</param>
         /// <returns>Loaded calibration or null if file doesn't exist</returns>
-        public static LinearCalibration? LoadFromFile(string side)
+        public static LinearCalibration? LoadFromFile(string side, byte adcMode)
         {
-            string filename = PathHelper.GetCalibrationPath(side); // Portable: in Data directory
+            string filename = PathHelper.GetCalibrationPath(side, adcMode); // Portable: in Data directory
             if (!File.Exists(filename))
                 return null;
                 
@@ -236,23 +245,25 @@ namespace SuspensionPCB_CAN_WPF
         }
         
         /// <summary>
-        /// Check if calibration file exists for a side
+        /// Check if calibration file exists for a side and ADC mode
         /// </summary>
         /// <param name="side">"Left" or "Right"</param>
+        /// <param name="adcMode">ADC mode (0=Internal, 1=ADS1115)</param>
         /// <returns>True if calibration file exists</returns>
-        public static bool CalibrationExists(string side)
+        public static bool CalibrationExists(string side, byte adcMode)
         {
-            string filename = PathHelper.GetCalibrationPath(side); // Portable: in Data directory
+            string filename = PathHelper.GetCalibrationPath(side, adcMode); // Portable: in Data directory
             return File.Exists(filename);
         }
         
         /// <summary>
-        /// Delete calibration file for a side
+        /// Delete calibration file for a side and ADC mode
         /// </summary>
         /// <param name="side">"Left" or "Right"</param>
-        public static void DeleteCalibration(string side)
+        /// <param name="adcMode">ADC mode (0=Internal, 1=ADS1115)</param>
+        public static void DeleteCalibration(string side, byte adcMode)
         {
-            string filename = PathHelper.GetCalibrationPath(side); // Portable: in Data directory
+            string filename = PathHelper.GetCalibrationPath(side, adcMode); // Portable: in Data directory
             if (File.Exists(filename))
             {
                 try

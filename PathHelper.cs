@@ -127,9 +127,12 @@ namespace SuspensionPCB_CAN_WPF
         /// <summary>
         /// Gets the path to a calibration file (portable, in Data directory)
         /// </summary>
-        public static string GetCalibrationPath(string side)
+        /// <param name="side">"Left" or "Right"</param>
+        /// <param name="adcMode">ADC mode (0=Internal, 1=ADS1115)</param>
+        public static string GetCalibrationPath(string side, byte adcMode)
         {
-            return Path.Combine(GetDataDirectory(), $"calibration_{side.ToLower()}.json");
+            string modeSuffix = adcMode == 0 ? "internal" : "ads1115";
+            return Path.Combine(GetDataDirectory(), $"calibration_{side.ToLower()}_{modeSuffix}.json");
         }
         
         /// <summary>
