@@ -1,0 +1,30 @@
+<Window x:Class="SuspensionPCB_CAN_WPF.Views.SideSelectionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Select Side for Calibration" Height="150" Width="300"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <TextBlock Grid.Row="0" Text="Select which side to calibrate:" 
+                   FontSize="14" Margin="0,0,0,15"/>
+        
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,15">
+            <Button Content="Left" x:Name="LeftBtn" Click="LeftBtn_Click" 
+                    Width="100" Height="35" Margin="0,0,10,0"
+                    Background="#FF1B5E96" Foreground="White" BorderThickness="0"/>
+            <Button Content="Right" x:Name="RightBtn" Click="RightBtn_Click" 
+                    Width="100" Height="35"
+                    Background="#FF1B5E96" Foreground="White" BorderThickness="0"/>
+        </StackPanel>
+        
+        <Button Grid.Row="2" Content="Cancel" Click="Cancel_Click" 
+                Width="80" Height="30" HorizontalAlignment="Right"
+                Background="#FFDC3545" Foreground="White" BorderThickness="0"/>
+    </Grid>
+</Window>
+
