@@ -151,8 +151,9 @@
         <!-- Settings Panel (initially collapsed) -->
         <Border x:Name="SettingsPanel" Grid.Row="2" Visibility="Collapsed" 
                 Background="#FFF0F0F0" BorderBrush="#FFCCCCCC" BorderThickness="1" 
-                Padding="15" Margin="15,0">
-            <StackPanel>
+                Padding="15" Margin="15,0" MaxHeight="600">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
                 <!-- CAN Adapter Selection -->
                 <GroupBox Header="CAN Adapter Configuration" Margin="0,0,0,10">
                     <StackPanel Margin="10">
@@ -606,7 +607,8 @@
                     <TextBlock Text="Adjust simulator parameters in real-time" FontSize="10" 
                                Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
                 </StackPanel>
-            </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
         </Border>
 
         <!-- Main Content -->
