@@ -119,34 +119,45 @@
 
 ## Calibration Features
 
-### Two-Point Linear Calibration
-- ✅ **Point 1 Capture** - Zero point (empty platform) calibration
-- ✅ **Point 2 Capture** - Known weight calibration
-- ✅ **Live ADC Display** - Real-time ADC value during calibration
-- ✅ **Weight Input Validation** - Integer-only, positive values, max 10,000 kg
-- ✅ **Auto-Stream Start** - Automatically starts stream if not running
-- ✅ **Calibration Calculation** - Linear equation: `kg = slope × raw + intercept`
-- ✅ **Accuracy Verification** - Error percentage calculation for both points
+### Multi-Point Calibration System
+- ✅ **Unlimited Calibration Points** - Add as many points as needed (minimum 1 point)
+- ✅ **Least-Squares Linear Regression** - Optimal calibration fit using all points
+- ✅ **Automatic Zero Point Detection** - Detects weight=0 points automatically
+- ✅ **Dual ADC Mode Capture** - Captures both Internal and ADS1115 simultaneously
+- ✅ **R² Quality Metric** - Coefficient of determination for calibration quality
+- ✅ **Maximum Error Calculation** - Largest deviation from fitted line
 - ✅ **Calibration Quality Assessment** - Excellent/Good/Acceptable/Poor ratings
+- ✅ **Dynamic Point Management** - Add/remove calibration points on the fly
+- ✅ **Configurable Capture Delay** - Delay before recording calibration point
+- ✅ **Duplicate Weight Detection** - Warns user about duplicate weight values
+- ✅ **Manual ADC Entry** - Enter ADC values manually when stream unavailable
 
 ### Calibration Dialog
 - ✅ **Step-by-Step Wizard** - Visual stepper interface
 - ✅ **Step Visual Indicators** - Color-coded progress (blue=active, green=completed)
 - ✅ **Point Status Messages** - Real-time status for each calibration point
-- ✅ **Results Popup** - Shows equation and accuracy metrics
-- ✅ **Instructions Popup** - Help text for calibration process
+- ✅ **Results Popup** - Shows equation, R², max error, and quality metrics
+- ✅ **Instructions Popup** - Help text for multi-point calibration process
 - ✅ **Side-Specific Calibration** - Separate calibration for Left and Right sides
+- ✅ **Point List Management** - Visual list of all calibration points
+- ✅ **Point Numbering** - Automatic point numbering and renumbering
 
 ### Calibration Persistence
-- ✅ **JSON File Storage** - `calibration_left.json` and `calibration_right.json`
-- ✅ **Auto-Load on Startup** - Calibrations loaded automatically
+- ✅ **Mode-Specific JSON Storage** - Separate files for Internal and ADS1115 modes
+  - `calibration_left_internal.json` - Left side Internal ADC (12-bit)
+  - `calibration_left_ads1115.json` - Left side ADS1115 (16-bit)
+  - `calibration_right_internal.json` - Right side Internal ADC
+  - `calibration_right_ads1115.json` - Right side ADS1115
+- ✅ **Auto-Load on Startup** - Calibrations loaded automatically based on ADC mode
 - ✅ **Calibration Date Tracking** - Timestamp of when calibration was performed
-- ✅ **Calibration Point Storage** - Saves both calibration points for verification
+- ✅ **Calibration Point Storage** - Saves all calibration points for verification
+- ✅ **Calibration Mode Tracking** - Tracks which ADC mode each calibration is for
 
 ### Calibration Validation
-- ✅ **Slope Calculation** - Accurate linear slope from two points
-- ✅ **Intercept Calculation** - Y-intercept for linear equation
-- ✅ **Point Verification** - Verifies calibration accuracy at both points
+- ✅ **Least-Squares Regression** - Optimal slope and intercept from multiple points
+- ✅ **R² Calculation** - Measures how well calibration fits the data (0.0-1.0)
+- ✅ **Maximum Error** - Largest deviation between points and fitted line
+- ✅ **Point Verification** - Verifies calibration accuracy at all points
 - ✅ **Error Percentage** - Calculates error percentage for quality assessment
 
 ---
@@ -212,8 +223,16 @@
 - ✅ **Log Export** - Export logs to text file
 
 ### Log File Management
+- ✅ **Log Files Manager Window** - Dedicated window for log file management
+- ✅ **View All Log Files** - Data logs, production logs, CAN monitor exports
+- ✅ **Filter by Type** - Filter by CSV, TXT, CAN exports
+- ✅ **File Details** - Name, type, size, creation date, path
+- ✅ **Delete Files** - Delete selected files or clear all (with confirmation)
+- ✅ **Open Folder** - Quick access to log directory in Explorer
+- ✅ **File Statistics** - Count and total size of log files
 - ✅ **Automatic Directory Creation** - Creates logs directory if needed
 - ✅ **Portable Log Storage** - Logs stored next to executable
+- ✅ **Timestamped Files** - All log files created with date/time stamps
 - ✅ **Log File Size Tracking** - Tracks log file size
 - ✅ **Log Line Count** - Counts lines in log file
 
@@ -242,10 +261,13 @@
 - ✅ **Configuration Statistics** - Shows file sizes, counts, etc.
 
 ### Adapter Configuration
-- ✅ **Adapter Type Selection** - USB-CAN-A Serial or PCAN
+- ✅ **Adapter Type Selection** - USB-CAN-A Serial, PCAN, or Simulator
 - ✅ **PCAN Channel Selection** - USB1-USB8 channel selection
 - ✅ **Bitrate Selection** - 125/250/500/1000 kbps
 - ✅ **Configuration Persistence** - Adapter settings saved to `Suspension_Config.json`
+- ✅ **Simulator Adapter** - Software-based CAN adapter for testing
+- ✅ **Simulator Control Window** - Real-time parameter adjustment for simulator
+- ✅ **Simulated Weight Generation** - Configurable left/right weight simulation
 
 ---
 
@@ -254,9 +276,12 @@
 ### System Status
 - ✅ **Status Request** - On-demand system status request (0x032)
 - ✅ **Status Response Handling** - Processes 0x300 status messages
-- ✅ **Status Display** - Shows system status (OK/Warning/Error)
+- ✅ **Status Display** - Shows system status (OK/Warning/Error/Critical)
 - ✅ **Error Flags Display** - Shows error flags in hex format
 - ✅ **ADC Mode Display** - Shows current ADC mode (Internal/ADS1115)
+- ✅ **Real-Time Data Rate** - Calculates and displays data rate
+- ✅ **Rate Timeout** - Resets to "--" after 5 seconds of no updates
+- ✅ **Dynamic UI Updates** - Status UI updates in real-time
 
 ### Status History
 - ✅ **Status History Manager** - Tracks last 100 status entries
@@ -274,6 +299,8 @@
 - ✅ **Message Count** - Real-time message counter
 - ✅ **Auto-Scroll** - Automatically scrolls to latest messages
 - ✅ **Message Limit** - Keeps last 1000 messages in memory
+- ✅ **Export Feature** - Export captured messages to CSV or text file
+- ✅ **Live CAN Service Connection** - Connected to real-time CAN service
 
 ### ADC Mode Control
 - ✅ **Internal ADC Mode** - Switch to 12-bit internal ADC (0x030)
@@ -305,6 +332,16 @@
 - ✅ **Processed Data Snapshots** - Lock-free access to latest processed data
 - ✅ **Drop Counter** - Tracks dropped messages when queue is full
 - ✅ **Processed Counter** - Tracks successfully processed messages
+
+### Weight Filtering System
+- ✅ **EMA Filter** - Exponential Moving Average with configurable alpha (0.0-1.0)
+- ✅ **SMA Filter** - Simple Moving Average with configurable window size
+- ✅ **Filter Enable/Disable** - Master switch for all filtering
+- ✅ **Separate Filters** - Independent filtering for calibrated and tared weights
+- ✅ **Per-Side Filters** - Independent filters for left and right sides
+- ✅ **Real-Time Configuration** - Filter settings apply immediately
+- ✅ **Filter Persistence** - Filter settings saved across sessions
+- ✅ **Filter Reset** - Automatic reset on calibration/tare changes
 
 ### Error Handling
 - ✅ **Comprehensive Try-Catch** - Error handling throughout application
@@ -404,25 +441,73 @@
 
 ---
 
+## Update & Version Management Features
+
+### Version History & Rollback
+- ✅ **View All Releases** - Browse all GitHub releases with dates and notes
+- ✅ **Version Selection Dialog** - Select any previous version to install
+- ✅ **Downgrade Warning** - Warns user before installing older version
+- ✅ **Release Notes Display** - Shows release notes for each version
+- ✅ **Version Comparison** - Compares current vs selected version
+
+### Auto-Update System
+- ✅ **GitHub Releases Integration** - Checks for updates from GitHub
+- ✅ **Automatic Update Check** - Checks on application startup
+- ✅ **Manual Update Check** - "Check for Updates" button
+- ✅ **Secure Download** - SHA-256 hash verification
+- ✅ **Update Installation** - Seamless update via external updater
+
+## Firmware Update Features
+
+### Bootloader Support
+- ✅ **Bootloader Protocol** - Complete implementation (0x510, 0x511, 0x512, 0x513)
+- ✅ **Firmware Update Service** - Handles BIN file upload to STM32
+- ✅ **Progress Tracking** - Progress bar and status updates
+- ✅ **CRC-32 Verification** - Firmware integrity verification
+- ✅ **Bootloader Entry/Exit** - Commands to enter/exit bootloader
+- ✅ **Boot Info Query** - Query bootloader information
+- ✅ **Feature Control** - Enable/disable bootloader features via settings
+
+## Data Timeout & Connection Management
+
+### Data Timeout Detection
+- ✅ **Configurable Timeout** - 1-30 seconds (default 5 seconds)
+- ✅ **Automatic Stream Stopping** - Stops streams when timeout detected
+- ✅ **Visual Notification** - Status banner when data timeout occurs
+- ✅ **Connection Status Tracking** - Monitors connection health
+
+## UI & Usability Features
+
+### Tools Menu
+- ✅ **Consolidated Menu** - Single "Tools" dropdown in header
+- ✅ **Quick Access** - Monitor, Logs, Log Files Manager
+- ✅ **Cleaner Header** - Reduced button clutter
+
+### Settings Panel
+- ✅ **Scrollable Panel** - Scrollable settings with max height
+- ✅ **Settings Info Dialogs** - Contextual help for settings
+- ✅ **Info Buttons** - Help buttons throughout settings panel
+
 ## Summary Statistics
 
-- **Total Features**: 200+
-- **CAN Protocol Messages**: 9 message types
+- **Total Features**: 250+
+- **CAN Protocol Messages**: 13 message types (including bootloader)
 - **Transmission Rates**: 4 rates (1Hz, 100Hz, 500Hz, 1kHz)
-- **Adapter Types**: 2 (USB-CAN-A Serial, PCAN)
-- **Windows**: 4 (Main, Monitor, Logs, Configuration Viewer)
-- **Dialogs**: 2 (Calibration, Keyboard Shortcuts)
+- **Adapter Types**: 3 (USB-CAN-A Serial, PCAN, Simulator)
+- **Windows**: 5 (Main, Monitor, Logs, Configuration Viewer, Log Files Manager)
+- **Dialogs**: 5 (Calibration, Keyboard Shortcuts, Version Selection, Manual ADC Entry, Side Selection)
 - **Keyboard Shortcuts**: 12 shortcuts
-- **Configuration Files**: 5 file types
-- **Log File Types**: 2 (CSV data logs, Production text logs)
+- **Configuration Files**: 8+ file types (mode-specific calibrations)
+- **Log File Types**: 3 (CSV data logs, Production text logs, CAN monitor exports)
 - **Threads**: 4 dedicated threads
 - **UI Update Rate**: 20Hz (50ms intervals)
 - **Max Data Rate Supported**: 1kHz (1000 messages/second)
+- **Filter Types**: 2 (EMA, SMA)
 
 ---
 
-**Last Updated**: January 2025  
-**Version**: 1.0.0  
+**Last Updated**: November 2025  
+**Version**: 2.0.0  
 **Protocol Compatibility**: CAN v0.7  
 **Framework**: .NET 8.0 WPF
 

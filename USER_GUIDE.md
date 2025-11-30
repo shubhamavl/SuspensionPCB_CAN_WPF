@@ -50,7 +50,13 @@ SuspensionPCB_CAN_WPF/
 
 ### Why Calibrate?
 
-Calibration tells the system how to convert raw sensor readings into actual weight measurements. You need to calibrate each side (Left and Right) separately.
+Calibration tells the system how to convert raw sensor readings into actual weight measurements. You need to calibrate each side (Left and Right) separately, and for each ADC mode (Internal and ADS1115).
+
+### Multi-Point Calibration
+
+The application supports **multi-point calibration** using least-squares linear regression. This provides better accuracy than two-point calibration, especially over a wide weight range.
+
+**Recommended**: Use 3-5 calibration points for best accuracy.
 
 ### Calibration Steps
 
@@ -59,24 +65,43 @@ Calibration tells the system how to convert raw sensor readings into actual weig
    - Click "Request Left Stream" for left side
    - Click "Request Right Stream" for right side
 3. **Click "Calibrate Left"** or "Calibrate Right" button
-4. **Step 1 - Zero Point**:
-   - Remove all weight from the side
-   - Wait for stable readings
-   - Click "Record Zero Point"
-5. **Step 2 - Known Weight**:
-   - Place a known weight on the side (e.g., 10 kg)
-   - Wait for stable readings
-   - Enter the weight value
-   - Click "Record Known Weight"
-6. **Click "Save Calibration"**
+4. **Add Calibration Points**:
+   - Click "Add Point" to create a new calibration point
+   - Enter the known weight (can be in any order - zero point, then weights, or vice versa)
+   - Click "Capture" - system automatically captures both Internal and ADS1115 ADC values
+   - Repeat for additional points (minimum 1 point, 3-5 recommended)
+5. **Calculate Calibration**:
+   - Click "Calculate" to perform least-squares regression
+   - Review R² value (should be >0.95 for good quality)
+   - Review maximum error and quality assessment
+6. **Save Calibration**:
+   - Click "Save Calibration"
+   - Calibration is saved for both ADC modes automatically
 
-The calibration is now saved and will be remembered for future use.
+### Calibration Quality Metrics
+
+- **R² (Coefficient of Determination)**: Measures fit quality
+  - 1.0 = Perfect fit
+  - >0.95 = Excellent
+  - 0.90-0.95 = Good
+  - <0.90 = May need more points or check for issues
+- **Maximum Error**: Largest deviation from fitted line
+- **Quality Assessment**: Excellent/Good/Acceptable/Poor
+
+### ADC Mode-Specific Calibration
+
+The system stores separate calibrations for:
+- **Internal ADC (12-bit)**: Faster, standard precision
+- **ADS1115 (16-bit)**: Higher precision, 6.4x better resolution
+
+Both modes are calibrated simultaneously when you capture points. The system automatically uses the correct calibration based on the current ADC mode.
 
 ### When to Recalibrate
 
 - After hardware changes
 - If measurements seem inaccurate
 - Periodically for best accuracy (monthly recommended)
+- When switching between ADC modes (calibrations are independent)
 
 ---
 
@@ -84,7 +109,7 @@ The calibration is now saved and will be remembered for future use.
 
 ### What is Tare?
 
-Tare sets the current weight as the zero point. This is useful when you want to measure additional weight on top of an existing load.
+Tare sets the current weight as the zero point. This is useful when you want to measure additional weight on top of an existing load. Tare values are stored separately for each ADC mode (Internal and ADS1115).
 
 ### How to Tare
 
@@ -92,12 +117,20 @@ Tare sets the current weight as the zero point. This is useful when you want to 
 2. **Wait** for stable readings
 3. **Click "Tare Left"** or "Tare Right" button
 4. The display will now show 0.0 kg (or close to it)
+5. Tare is automatically saved and remembered for the current ADC mode
+
+### ADC Mode-Specific Tare
+
+- Tare values are stored separately for Internal and ADS1115 modes
+- When you switch ADC modes, the system uses the appropriate tare value
+- Each side and mode combination has its own tare baseline
 
 ### When to Use Tare
 
 - Daily zero-out before measurements
 - When you want to measure weight changes
 - After calibration to set a baseline
+- When switching ADC modes (re-tare if needed)
 
 ---
 
@@ -105,9 +138,10 @@ Tare sets the current weight as the zero point. This is useful when you want to 
 
 ### Start Logging
 
-1. Click **"Start Logging"** button
+1. Click **"Start Logging"** button (manual control only - no auto-start)
 2. Data will be saved to CSV files in the `Data/` folder
-3. Files are named: `suspension_log_YYYYMMDD_HHMMSS.csv`
+3. Files are named: `suspension_log_YYYYMMDD_HHMMSS.csv` (timestamped)
+4. A new file is created each time you start logging
 
 ### Stop Logging
 
@@ -116,9 +150,27 @@ Tare sets the current weight as the zero point. This is useful when you want to 
 
 ### View Log Files
 
-- Log files are in the `Data/` folder
-- Open with Excel, Notepad, or any text editor
-- Contains: Timestamp, Side, Raw ADC, Calibrated Weight, Tared Weight, etc.
+- Use the **Log Files Manager** (Tools → Log Files Manager)
+- Filter by file type (Data Logs, Production Logs, CAN Monitor exports)
+- View file details: name, type, size, creation date
+- Delete selected files or clear all (with confirmation)
+- Open log directory in Explorer
+
+### Log File Contents
+
+CSV files contain:
+- Timestamp
+- Side (Left/Right)
+- RawADC
+- CalibratedKg
+- TaredKg
+- TareBaseline
+- CalSlope
+- CalIntercept
+- ADCMode (0=Internal, 1=ADS1115)
+- SystemStatus
+- ErrorFlags
+- StatusTimestamp
 
 ---
 
@@ -253,6 +305,6 @@ Your calibration and settings will be preserved!
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: January 2025
+**Version**: 2.0.0  
+**Last Updated**: November 2025
 
