@@ -155,7 +155,7 @@ namespace SuspensionPCB_CAN_WPF
                     }
 
                     // Fire TX message event
-                    var txMessage = new CANMessage(id, data ?? new byte[0], DateTime.Now);
+                    var txMessage = new CANMessage(id, data ?? new byte[0], DateTime.Now, "TX");
                     MessageReceived?.Invoke(txMessage);
                 }
 

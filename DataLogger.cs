@@ -19,23 +19,25 @@ namespace SuspensionPCB_CAN_WPF
         private byte _lastErrorFlags = 0;
         private DateTime _lastStatusTimestamp = DateTime.MinValue;
         
-        public bool IsLogging => _isLogging;
+        public bool IsLogging 
+        { 
+            get 
+            { 
+                lock (_logLock) 
+                { 
+                    return _isLogging; 
+                } 
+            } 
+        }
         
         public DataLogger()
         {
-            // Create timestamped log file
-            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string baseDir = SettingsManager.Instance.Settings.SaveDirectory;
-            try
-            {
-                if (!Directory.Exists(baseDir)) Directory.CreateDirectory(baseDir);
-            }
-            catch { }
-            _logFilePath = Path.Combine(baseDir, $"suspension_log_{timestamp}.csv");
+            // File path will be created when logging starts
+            _logFilePath = "";
         }
         
         /// <summary>
-        /// Start logging to CSV file
+        /// Start logging to CSV file (creates new timestamped file each time)
         /// </summary>
         public bool StartLogging()
         {
@@ -45,6 +47,16 @@ namespace SuspensionPCB_CAN_WPF
                 {
                     if (_isLogging)
                         return true; // Already logging
+                    
+                    // Create new timestamped log file each time logging starts
+                    string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    string baseDir = SettingsManager.Instance.Settings.SaveDirectory;
+                    try
+                    {
+                        if (!Directory.Exists(baseDir)) Directory.CreateDirectory(baseDir);
+                    }
+                    catch { }
+                    _logFilePath = Path.Combine(baseDir, $"suspension_log_{timestamp}.csv");
                     
                     // Create CSV header with system status fields
                     string header = "Timestamp,Side,RawADC,CalibratedKg,TaredKg,TareBaseline,CalSlope,CalIntercept,ADCMode,SystemStatus,ErrorFlags,StatusTimestamp";
@@ -69,8 +81,14 @@ namespace SuspensionPCB_CAN_WPF
         {
             lock (_logLock)
             {
+                if (!_isLogging)
+                {
+                    System.Diagnostics.Debug.WriteLine("Data logging already stopped");
+                    return; // Already stopped
+                }
+                
                 _isLogging = false;
-                System.Diagnostics.Debug.WriteLine("Data logging stopped");
+                System.Diagnostics.Debug.WriteLine($"Data logging stopped. File: {_logFilePath}");
             }
         }
         
@@ -103,6 +121,7 @@ namespace SuspensionPCB_CAN_WPF
         public void LogDataPoint(string side, int rawADC, double calibratedKg, double taredKg, 
                                double tareBaseline, double calSlope, double calIntercept, byte adcMode)
         {
+            // Early exit check (outside lock for performance)
             if (!_isLogging)
                 return;
                 
@@ -110,6 +129,10 @@ namespace SuspensionPCB_CAN_WPF
             {
                 lock (_logLock)
                 {
+                    // Double-check inside lock to prevent race condition
+                    if (!_isLogging)
+                        return;
+                    
                     string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
                     string statusTimestamp = _lastStatusTimestamp != DateTime.MinValue 
                         ? _lastStatusTimestamp.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)

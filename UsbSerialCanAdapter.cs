@@ -122,7 +122,7 @@ namespace SuspensionPCB_CAN_WPF
                 }
 
                 // Fire event for TX messages
-                var txMessage = new CANMessage(id, data ?? new byte[0], DateTime.Now);
+                var txMessage = new CANMessage(id, data ?? new byte[0], DateTime.Now, "TX");
                 MessageReceived?.Invoke(txMessage);
 
                 System.Diagnostics.Debug.WriteLine($"USB-CAN-A: Sent CAN frame ID=0x{id:X3}, Data={BitConverter.ToString(data ?? new byte[0])}");

@@ -27,6 +27,8 @@ namespace SuspensionPCB_CAN_WPF
 
         private volatile int _totalMessages, _txMessages, _rxMessages;
         private readonly object _dataLock = new object();
+        private DateTime _lastStatusUpdateTime = DateTime.MinValue;
+        private double _statusUpdateRate = 0.0;
         private CANService? _canService;  // Changed from USBCANManager to CANService
         private FirmwareUpdateService? _firmwareUpdateService;
         private CancellationTokenSource? _firmwareUpdateCts;
@@ -257,35 +259,39 @@ namespace SuspensionPCB_CAN_WPF
         {
             try
             {
-                if (StreamStatusBar != null)
+                // Use Dispatcher to ensure UI thread access
+                Dispatcher.Invoke(() =>
                 {
-                    if (_leftStreamRunning && _rightStreamRunning)
+                    if (StreamStatusBar != null)
                     {
-                        StreamStatusBar.Text = "Both Active";
+                        if (_leftStreamRunning && _rightStreamRunning)
+                        {
+                            StreamStatusBar.Text = "Both Active";
+                        }
+                        else if (_leftStreamRunning)
+                        {
+                            StreamStatusBar.Text = "Left Active";
+                        }
+                        else if (_rightStreamRunning)
+                        {
+                            StreamStatusBar.Text = "Right Active";
+                        }
+                        else
+                        {
+                            StreamStatusBar.Text = "Idle";
+                        }
                     }
-                    else if (_leftStreamRunning)
+                    
+                    if (MessageCountBar != null)
                     {
-                        StreamStatusBar.Text = "Left Active";
+                        MessageCountBar.Text = $"RX: {_rxMessages}";
                     }
-                    else if (_rightStreamRunning)
+                    
+                    if (TxCountBar != null)
                     {
-                        StreamStatusBar.Text = "Right Active";
+                        TxCountBar.Text = _txMessages.ToString();
                     }
-                    else
-                    {
-                        StreamStatusBar.Text = "Idle";
-                    }
-                }
-                
-                if (MessageCountBar != null)
-                {
-                    MessageCountBar.Text = $"RX: {_rxMessages}";
-                }
-                
-                if (TxCountBar != null)
-                {
-                    TxCountBar.Text = _txMessages.ToString();
-                }
+                });
             }
             catch (Exception ex)
             {
@@ -678,7 +684,12 @@ namespace SuspensionPCB_CAN_WPF
                     ShowInlineStatus($"{adapterName} Connected Successfully. Protocol: CAN v0.7", false);
                     if (ConnectionToggle != null) ConnectionToggle.IsChecked = true;
                     SaveConfiguration(); // Save adapter settings
-                    _canService.RequestBootloaderInfo();
+                    
+                    // Only query bootloader info if bootloader features are enabled
+                    if (_settingsManager.Settings.EnableBootloaderFeatures)
+                    {
+                        _canService.RequestBootloaderInfo();
+                    }
                 }
                 else
                 {
@@ -829,6 +840,16 @@ namespace SuspensionPCB_CAN_WPF
                         byte errorFlags = message.Data[1];
                         byte adcMode = message.Data[2];
                         _logger.LogInfo($"System Status: {systemStatus}, Errors: 0x{errorFlags:X2}, ADC Mode: {adcMode}", "CAN");
+                        
+                        // Ensure status is processed even if event doesn't fire
+                        var statusArgs = new SystemStatusEventArgs
+                        {
+                            SystemStatus = systemStatus,
+                            ErrorFlags = errorFlags,
+                            ADCMode = adcMode,
+                            Timestamp = DateTime.Now
+                        };
+                        HandleSystemStatus(_canService, statusArgs);
                     }
                     break;
             }
@@ -1264,17 +1285,6 @@ namespace SuspensionPCB_CAN_WPF
                     UpdateWeightProcessorCalibration();
                     _logger.LogInfo($"Started left side streaming at rate {_currentTransmissionRate}", "CAN");
                     ShowInlineStatus($"✓ Left stream started at {GetRateText(_currentTransmissionRate)}");
-                    
-                    // Auto-start logging if enabled
-                    if (_settingsManager.Settings.AutoStartLogging && !_dataLogger.IsLogging)
-                    {
-                        if (_dataLogger.StartLogging())
-                        {
-                            StartLoggingBtn.IsEnabled = false;
-                            StopLoggingBtn.IsEnabled = true;
-                            _logger.LogInfo("Auto-started logging (AutoStartLogging enabled)", "DataLogger");
-                        }
-                    }
                 }
                 else
                 {
@@ -1330,17 +1340,6 @@ namespace SuspensionPCB_CAN_WPF
                     UpdateWeightProcessorCalibration();
                     _logger.LogInfo($"Started right side streaming at rate {_currentTransmissionRate}", "CAN");
                     ShowInlineStatus($"✓ Right stream started at {GetRateText(_currentTransmissionRate)}");
-                    
-                    // Auto-start logging if enabled
-                    if (_settingsManager.Settings.AutoStartLogging && !_dataLogger.IsLogging)
-                    {
-                        if (_dataLogger.StartLogging())
-                        {
-                            StartLoggingBtn.IsEnabled = false;
-                            StopLoggingBtn.IsEnabled = true;
-                            _logger.LogInfo("Auto-started logging (AutoStartLogging enabled)", "DataLogger");
-                        }
-                    }
                 }
                 else
                 {
@@ -1402,6 +1401,9 @@ namespace SuspensionPCB_CAN_WPF
             
             // Initialize dashboard mode display
             UpdateDashboardMode();
+            
+            // Update bootloader UI visibility based on settings
+            UpdateBootloaderUIVisibility();
 
             try
             {
@@ -1414,8 +1416,14 @@ namespace SuspensionPCB_CAN_WPF
                 _canService.MessageReceived += OnCANMessageReceived;
                 _canService.RawDataReceived += OnRawDataReceived;
                 _canService.SystemStatusReceived += HandleSystemStatus;
-                _canService.BootStatusReceived += OnBootStatusReceived;
-                _firmwareUpdateService = new FirmwareUpdateService(_canService);
+                _canService.DataTimeout += OnDataTimeout;
+                
+                // Only subscribe to bootloader events and initialize firmware service if enabled
+                if (_settingsManager.Settings.EnableBootloaderFeatures)
+                {
+                    _canService.BootStatusReceived += OnBootStatusReceived;
+                    _firmwareUpdateService = new FirmwareUpdateService(_canService);
+                }
                 _logger.LogInfo("CAN Service initialized successfully", "CANService");
             }
             catch (Exception ex)
@@ -1434,6 +1442,20 @@ namespace SuspensionPCB_CAN_WPF
             {
                     UpdateUI();
                     ProcessPendingMessages();
+                    
+                    // Check if status rate should be reset (no updates for 5 seconds)
+                    if (_lastStatusUpdateTime != DateTime.MinValue && DataRateTxt != null)
+                    {
+                        TimeSpan timeSinceLastUpdate = DateTime.Now - _lastStatusUpdateTime;
+                        if (timeSinceLastUpdate.TotalSeconds > 5.0)
+                        {
+                            Dispatcher.Invoke(() =>
+                            {
+                                DataRateTxt.Text = "Rate: --";
+                                _statusUpdateRate = 0.0;
+                            });
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1467,6 +1489,9 @@ namespace SuspensionPCB_CAN_WPF
 
             // Initialize streaming indicators
             UpdateStreamingIndicators();
+            
+            // Initialize logging UI state
+            InitializeLoggingUI();
 
             // Background check for updates (non-blocking, best-effort)
             _ = CheckForUpdatesInBackground();
@@ -2026,12 +2051,6 @@ namespace SuspensionPCB_CAN_WPF
                     }
                 }
                 
-                // Set auto-start logging
-                if (AutoStartLoggingCheckBox != null)
-                {
-                    AutoStartLoggingCheckBox.IsChecked = settings.AutoStartLogging;
-                }
-                
                 // Apply settings to components (but don't save - already loaded from file)
                 // Only apply to runtime components, not save again
                 if (_uiUpdateTimer != null)
@@ -2047,7 +2066,7 @@ namespace SuspensionPCB_CAN_WPF
                 // Update weight display immediately if active
                 UpdateWeightDisplays();
                 
-                _logger.LogInfo($"Display settings loaded: WeightDecimals={settings.WeightDisplayDecimals}, UIUpdateRate={settings.UIUpdateRateMs}ms, DataTimeout={settings.DataTimeoutSeconds}s, AutoStartLogging={settings.AutoStartLogging}", "Settings");
+                _logger.LogInfo($"Display settings loaded: WeightDecimals={settings.WeightDisplayDecimals}, UIUpdateRate={settings.UIUpdateRateMs}ms, DataTimeout={settings.DataTimeoutSeconds}s", "Settings");
             }
             catch (Exception ex)
             {
@@ -2095,10 +2114,6 @@ namespace SuspensionPCB_CAN_WPF
             }
         }
 
-        private void AutoStartLoggingCheckBox_Changed(object sender, RoutedEventArgs e)
-        {
-            ApplyDisplaySettings();
-        }
 
         // UI Visibility Settings Methods
         private void LoadUIVisibilitySettings()
@@ -2318,8 +2333,15 @@ namespace SuspensionPCB_CAN_WPF
                 if (ShowCalibrationQualityMetricsCheckBox != null)
                     ShowCalibrationQualityMetricsCheckBox.IsChecked = settings.ShowCalibrationQualityMetrics;
                 
+                // Set enable bootloader features
+                if (EnableBootloaderFeaturesCheckBox != null)
+                    EnableBootloaderFeaturesCheckBox.IsChecked = settings.EnableBootloaderFeatures;
+                
                 // Apply advanced settings immediately
                 ApplyAdvancedSettings();
+                
+                // Update bootloader UI visibility
+                UpdateBootloaderUIVisibility();
             }
             catch (Exception ex)
             {
@@ -2344,6 +2366,13 @@ namespace SuspensionPCB_CAN_WPF
                 
                 // Save settings
                 _settingsManager.SetAdvancedSettings(txFlashMs, logFormat, batchSize, clockInterval, calibrationDelay, showQualityMetrics);
+                
+                // Save bootloader setting
+                bool enableBootloader = EnableBootloaderFeaturesCheckBox?.IsChecked ?? true;
+                _settingsManager.SetBootloaderFeaturesEnabled(enableBootloader);
+                
+                // Update bootloader UI visibility
+                UpdateBootloaderUIVisibility();
                 
                 // Apply clock update interval to timer
                 if (_clockTimer != null)
@@ -2433,6 +2462,51 @@ namespace SuspensionPCB_CAN_WPF
         private void ShowCalibrationQualityMetricsCheckBox_Changed(object sender, RoutedEventArgs e)
         {
             ApplyAdvancedSettings();
+        }
+
+        private void EnableBootloaderFeaturesCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyAdvancedSettings();
+        }
+
+        private void EnableBootloaderFeaturesInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show(
+                "Bootloader Features:\n\n" +
+                "When enabled:\n" +
+                "• Firmware Update section is visible\n" +
+                "• Bootloader info is queried automatically on connection\n" +
+                "• Bootloader status events are processed\n" +
+                "• Firmware update service is initialized\n\n" +
+                "When disabled:\n" +
+                "• All bootloader UI is hidden\n" +
+                "• No automatic bootloader queries\n" +
+                "• Bootloader events are ignored\n" +
+                "• Firmware update service is not initialized\n\n" +
+                "Note: Restart the application or reconnect after changing this setting for full effect.",
+                "Bootloader Features Info",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private void UpdateBootloaderUIVisibility()
+        {
+            try
+            {
+                bool enabled = _settingsManager.Settings.EnableBootloaderFeatures;
+                
+                Dispatcher.Invoke(() =>
+                {
+                    if (FirmwareUpdateGroupBox != null)
+                    {
+                        FirmwareUpdateGroupBox.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Failed to update bootloader UI visibility: {ex.Message}", "UI");
+            }
         }
 
         // Info Button Event Handlers
@@ -2556,20 +2630,7 @@ Controls how long the system waits before reporting ""No Data"" when CAN message
 
 • Long timeout (10-30 seconds): Tolerant of brief interruptions
   → Use when: Network may have occasional delays, or you want fewer alerts
-  → Trade-off: Slower detection of real connection problems
-
-AUTO-START LOGGING
-When enabled, automatically starts data logging when you begin a stream (Left or Right).
-
-• Enabled: Logging starts automatically when stream begins
-  → Use when: You always want to log data during testing
-  → Benefit: No need to remember to start logging manually
-
-• Disabled: Manual logging start required
-  → Use when: You only want to log specific tests
-  → Benefit: More control over when logging occurs
-
-Note: Logging still stops manually or when stream stops.";
+  → Trade-off: Slower detection of real connection problems";
 
             ShowSettingsInfo("Display Settings", content);
         }
@@ -2961,21 +3022,6 @@ Most users should keep default values unless experiencing specific issues.";
                 "Note: At 1kHz data rate, even 1 second timeout allows for 1000 missed messages.");
         }
 
-        private void AutoStartLoggingInfoBtn_Click(object sender, RoutedEventArgs e)
-        {
-            ShowSettingsInfo("Auto-start Logging", 
-                "AUTO-START LOGGING\n\n" +
-                "Automatically starts data logging when you begin a stream.\n\n" +
-                "Enabled:\n" +
-                "• Logging starts automatically when stream begins (Left or Right)\n" +
-                "• No need to remember to start logging manually\n" +
-                "• Best for: When you always want to log data during testing\n\n" +
-                "Disabled:\n" +
-                "• Manual logging start required\n" +
-                "• More control over when logging occurs\n" +
-                "• Best for: When you only want to log specific tests\n\n" +
-                "Note: Logging still stops manually or when stream stops.");
-        }
 
         private void StatusBannerDurationInfoBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -3248,7 +3294,6 @@ Most users should keep default values unless experiencing specific issues.";
                 
                 int uiUpdateRate = (int)(UIUpdateRateSlider?.Value ?? 50);
                 int dataTimeout = (int)(DataTimeoutSlider?.Value ?? 5);
-                bool autoStartLogging = AutoStartLoggingCheckBox?.IsChecked ?? false;
                 
                 // Apply UI update rate to timer
                 if (_uiUpdateTimer != null)
@@ -3263,12 +3308,12 @@ Most users should keep default values unless experiencing specific issues.";
                 }
                 
                 // Save to settings
-                _settingsManager.SetDisplaySettings(weightDecimals, uiUpdateRate, dataTimeout, autoStartLogging);
+                _settingsManager.SetDisplaySettings(weightDecimals, uiUpdateRate, dataTimeout);
                 
                 // Update weight display immediately if active
                 UpdateWeightDisplays();
                 
-                _logger.LogInfo($"Display settings applied: WeightDecimals={weightDecimals}, UIUpdateRate={uiUpdateRate}ms, DataTimeout={dataTimeout}s, AutoStartLogging={autoStartLogging}", "Settings");
+                _logger.LogInfo($"Display settings applied: WeightDecimals={weightDecimals}, UIUpdateRate={uiUpdateRate}ms, DataTimeout={dataTimeout}s", "Settings");
             }
             catch (Exception ex)
             {
@@ -3557,7 +3602,11 @@ Most users should keep default values unless experiencing specific issues.";
                 _firmwareUpdateCts?.Cancel();
                 if (_canService != null)
                 {
-                    _canService.BootStatusReceived -= OnBootStatusReceived;
+                    _canService.DataTimeout -= OnDataTimeout;
+                    if (_settingsManager.Settings.EnableBootloaderFeatures)
+                    {
+                        _canService.BootStatusReceived -= OnBootStatusReceived;
+                    }
                 }
                 _logger.LogInfo("Application closing", "Main");
             }
@@ -3699,6 +3748,15 @@ Most users should keep default values unless experiencing specific issues.";
                     StopLoggingBtn.IsEnabled = true;
                     LoggingStatusTxt.Text = $"Logging to: {_dataLogger.GetLogFilePath()}";
                     LoggingStatusTxt.Foreground = System.Windows.Media.Brushes.Green;
+                    
+                    // Update logging status indicator
+                    if (LoggingStatusIndicator != null)
+                    {
+                        LoggingStatusIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 167, 69)); // Green
+                    }
+                    
+                    // Update LogsWindow checkbox if open
+                    _logsWindow?.UpdateLoggingState(true);
                     }
                     else
                     {
@@ -3722,11 +3780,64 @@ Most users should keep default values unless experiencing specific issues.";
                 StopLoggingBtn.IsEnabled = false;
                 LoggingStatusTxt.Text = $"Stopped. Logged {_dataLogger.GetLogLineCount()} lines.";
                 LoggingStatusTxt.Foreground = System.Windows.Media.Brushes.Orange;
+                
+                // Update logging status indicator
+                if (LoggingStatusIndicator != null)
+                {
+                    LoggingStatusIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 53, 69)); // Red
+                }
+                
+                // Update LogsWindow checkbox if open
+                _logsWindow?.UpdateLoggingState(false);
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error stopping logging: {ex.Message}", "Logging Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void InitializeLoggingUI()
+        {
+            try
+            {
+                // Initialize logging UI state based on actual logging status
+                if (_dataLogger.IsLogging)
+                {
+                    StartLoggingBtn.IsEnabled = false;
+                    StopLoggingBtn.IsEnabled = true;
+                    LoggingStatusTxt.Text = $"Logging to: {_dataLogger.GetLogFilePath()}";
+                    LoggingStatusTxt.Foreground = System.Windows.Media.Brushes.Green;
+                    
+                    // Update logging status indicator
+                    if (LoggingStatusIndicator != null)
+                    {
+                        LoggingStatusIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 167, 69)); // Green
+                    }
+                    
+                    // Update LogsWindow checkbox if open
+                    _logsWindow?.UpdateLoggingState(true);
+                }
+                else
+                {
+                    StartLoggingBtn.IsEnabled = true;
+                    StopLoggingBtn.IsEnabled = false;
+                    LoggingStatusTxt.Text = "Not logging";
+                    LoggingStatusTxt.Foreground = System.Windows.Media.Brushes.Gray;
+                    
+                    // Update logging status indicator
+                    if (LoggingStatusIndicator != null)
+                    {
+                        LoggingStatusIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 53, 69)); // Red
+                    }
+                    
+                    // Update LogsWindow checkbox if open
+                    _logsWindow?.UpdateLoggingState(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Failed to initialize logging UI: {ex.Message}", "UI");
             }
         }
 
@@ -3766,7 +3877,13 @@ Most users should keep default values unless experiencing specific issues.";
         {
             try
             {
-                var monitorWindow = new MonitorWindow();
+                // Close popup
+                if (ToolsMenuPopup != null)
+                {
+                    ToolsMenuPopup.IsOpen = false;
+                }
+
+                var monitorWindow = new MonitorWindow(_canService);
                 monitorWindow.Owner = this;
                 monitorWindow.Show();
             }
@@ -3816,17 +3933,81 @@ Most users should keep default values unless experiencing specific issues.";
             }
         }
 
+        private LogsWindow? _logsWindow;
+
         private void OpenLogsWindow_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var logsWindow = new LogsWindow(_logger);
-                logsWindow.Owner = this;
-                logsWindow.Show();
+                // Close popup
+                if (ToolsMenuPopup != null)
+                {
+                    ToolsMenuPopup.IsOpen = false;
+                }
+
+                // If window already exists, bring it to front
+                if (_logsWindow != null && _logsWindow.IsLoaded)
+                {
+                    _logsWindow.Activate();
+                    _logsWindow.Focus();
+                    return;
+                }
+
+                _logsWindow = new LogsWindow(_logger, _dataLogger);
+                _logsWindow.Owner = this;
+                _logsWindow.Closed += (s, args) => { _logsWindow = null; };
+                _logsWindow.Show();
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error opening logs window: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private LogFilesManagerWindow? _logFilesManagerWindow;
+
+        private void ToolsMenuBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (ToolsMenuPopup != null)
+                {
+                    ToolsMenuPopup.IsOpen = !ToolsMenuPopup.IsOpen;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Tools menu error: {ex.Message}", "UI");
+            }
+        }
+
+        private void OpenLogFilesManager_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Close popup
+                if (ToolsMenuPopup != null)
+                {
+                    ToolsMenuPopup.IsOpen = false;
+                }
+
+                // If window already exists, bring it to front
+                if (_logFilesManagerWindow != null && _logFilesManagerWindow.IsLoaded)
+                {
+                    _logFilesManagerWindow.Activate();
+                    _logFilesManagerWindow.Focus();
+                    return;
+                }
+
+                _logFilesManagerWindow = new LogFilesManagerWindow();
+                _logFilesManagerWindow.Owner = this;
+                _logFilesManagerWindow.Closed += (s, args) => { _logFilesManagerWindow = null; };
+                _logFilesManagerWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error opening log files manager: {ex.Message}", "Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -3949,10 +4130,127 @@ Most users should keep default values unless experiencing specific issues.";
                 
                 // Add to status history
                 _statusHistoryManager.AddStatusEntry(e.SystemStatus, e.ErrorFlags, e.ADCMode);
+                
+                // Update System Status UI panel
+                UpdateSystemStatusUI(e);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"System status handler error: {ex.Message}", "CAN");
+            }
+        }
+
+        private void UpdateSystemStatusUI(SystemStatusEventArgs e)
+        {
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    // Update status indicator color based on system status
+                    if (SystemStatusIndicator != null)
+                    {
+                        SystemStatusIndicator.Fill = e.SystemStatus switch
+                        {
+                            0 => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 174, 96)),   // Green - OK
+                            1 => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 193, 7)),   // Yellow - Warning
+                            2 => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 53, 69)),   // Red - Error
+                            3 => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(139, 0, 0)),     // Dark Red - Critical
+                            _ => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(128, 128, 128)) // Gray - Unknown
+                        };
+                    }
+                    
+                    // Update status text
+                    if (SystemStatusText != null)
+                    {
+                        SystemStatusText.Text = e.SystemStatus switch
+                        {
+                            0 => "OK",
+                            1 => "Warning",
+                            2 => "Error",
+                            3 => "Critical",
+                            _ => "Unknown"
+                        };
+                    }
+                    
+                    // Update error flags display
+                    if (ErrorCountTxt != null)
+                    {
+                        if (e.ErrorFlags == 0)
+                        {
+                            ErrorCountTxt.Text = "Errors: None";
+                        }
+                        else
+                        {
+                            ErrorCountTxt.Text = $"Errors: 0x{e.ErrorFlags:X2}";
+                        }
+                    }
+                    
+                    // Update last update time
+                    if (LastUpdateTxt != null)
+                    {
+                        LastUpdateTxt.Text = $"Updated: {e.Timestamp:HH:mm:ss}";
+                    }
+                    
+                    // Calculate and update data rate
+                    if (_lastStatusUpdateTime != DateTime.MinValue)
+                    {
+                        TimeSpan timeSinceLastUpdate = e.Timestamp - _lastStatusUpdateTime;
+                        if (timeSinceLastUpdate.TotalSeconds > 0 && timeSinceLastUpdate.TotalSeconds < 10.0) // Sanity check: between 0.1Hz and reasonable max
+                        {
+                            _statusUpdateRate = 1.0 / timeSinceLastUpdate.TotalSeconds;
+                        }
+                        else
+                        {
+                            _statusUpdateRate = 0.0; // Reset if time gap is too large
+                        }
+                    }
+                    _lastStatusUpdateTime = e.Timestamp;
+                    
+                    // Update data rate display
+                    if (DataRateTxt != null)
+                    {
+                        if (_statusUpdateRate > 0 && _statusUpdateRate < 1000.0) // Reasonable range: 0.1 Hz to 1000 Hz
+                        {
+                            DataRateTxt.Text = $"Rate: {_statusUpdateRate:F2} Hz";
+                        }
+                        else
+                        {
+                            DataRateTxt.Text = "Rate: --";
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"System status UI update error: {ex.Message}", "UI");
+            }
+        }
+
+        private void OnDataTimeout(object? sender, string timeoutMessage)
+        {
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    // Stop all streams if any are running
+                    if (_leftStreamRunning || _rightStreamRunning)
+                    {
+                        _canService?.StopAllStreams();
+                        _leftStreamRunning = false;
+                        _rightStreamRunning = false;
+                        
+                        _logger.LogWarning("Data timeout: Stopped all streams due to no data received", "CAN");
+                    }
+                    
+                    // Update UI status
+                    UpdateStreamingIndicators();
+                    ShowStatusBanner("⚠ No Data Received - Streams Stopped", false);
+                    ShowInlineStatus("Data timeout: No messages received. Streams stopped.", true);
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Data timeout handler error: {ex.Message}", "CAN");
             }
         }
 
@@ -3961,6 +4259,19 @@ Most users should keep default values unless experiencing specific issues.";
             try
             {
                 var (adcMode, systemStatus, errorFlags, lastUpdate) = SettingsManager.Instance.GetLastKnownSystemStatus();
+                
+                // Initialize System Status UI with last known status
+                if (lastUpdate != DateTime.MinValue)
+                {
+                    var statusArgs = new SystemStatusEventArgs
+                    {
+                        SystemStatus = systemStatus,
+                        ErrorFlags = errorFlags,
+                        ADCMode = adcMode,
+                        Timestamp = lastUpdate
+                    };
+                    UpdateSystemStatusUI(statusArgs);
+                }
                 
                 // Set current ADC mode for calibration loading
                 _currentADCMode = adcMode;

@@ -31,7 +31,6 @@ namespace SuspensionPCB_CAN_WPF
         public int WeightDisplayDecimals { get; set; } = 0; // 0=integer, 1=one decimal, 2=two decimals
         public int UIUpdateRateMs { get; set; } = 50; // UI refresh rate in milliseconds
         public int DataTimeoutSeconds { get; set; } = 5; // CAN data timeout in seconds
-        public bool AutoStartLogging { get; set; } = false; // Auto-start logging on stream
         
         // UI Visibility Settings (Medium Priority)
         public int StatusBannerDurationMs { get; set; } = 3000; // Status banner display duration
@@ -48,6 +47,9 @@ namespace SuspensionPCB_CAN_WPF
         public int ClockUpdateIntervalMs { get; set; } = 1000; // Clock refresh rate
         public int CalibrationCaptureDelayMs { get; set; } = 500; // Delay before capturing calibration point
         public bool ShowCalibrationQualityMetrics { get; set; } = true; // Display R² and error metrics
+        
+        // Bootloader Settings
+        public bool EnableBootloaderFeatures { get; set; } = true; // Enable/disable all bootloader functionality
     }
 
     /// <summary>
@@ -239,16 +241,15 @@ namespace SuspensionPCB_CAN_WPF
         /// <summary>
         /// Set display and performance settings
         /// </summary>
-        public void SetDisplaySettings(int weightDecimals, int uiUpdateRate, int dataTimeout, bool autoStartLogging)
+        public void SetDisplaySettings(int weightDecimals, int uiUpdateRate, int dataTimeout)
         {
             try
             {
                 _settings.WeightDisplayDecimals = weightDecimals;
                 _settings.UIUpdateRateMs = uiUpdateRate;
                 _settings.DataTimeoutSeconds = dataTimeout;
-                _settings.AutoStartLogging = autoStartLogging;
                 SaveSettings();
-                ProductionLogger.Instance.LogInfo($"Display settings saved: WeightDecimals={weightDecimals}, UIUpdateRate={uiUpdateRate}ms, DataTimeout={dataTimeout}s, AutoStartLogging={autoStartLogging}", "Settings");
+                ProductionLogger.Instance.LogInfo($"Display settings saved: WeightDecimals={weightDecimals}, UIUpdateRate={uiUpdateRate}ms, DataTimeout={dataTimeout}s", "Settings");
             }
             catch (Exception ex)
             {
@@ -297,6 +298,23 @@ namespace SuspensionPCB_CAN_WPF
             catch (Exception ex)
             {
                 ProductionLogger.Instance.LogError($"Failed to save advanced settings: {ex.Message}", "Settings");
+            }
+        }
+        
+        /// <summary>
+        /// Set bootloader feature enable/disable
+        /// </summary>
+        public void SetBootloaderFeaturesEnabled(bool enabled)
+        {
+            try
+            {
+                _settings.EnableBootloaderFeatures = enabled;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"Bootloader features {(enabled ? "enabled" : "disabled")}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to save bootloader setting: {ex.Message}", "Settings");
             }
         }
     }

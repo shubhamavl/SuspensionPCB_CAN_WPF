@@ -100,12 +100,11 @@
                             Click="SettingsToggle_Click"
                             Height="36" MinWidth="100" Margin="0,0,10,0"/>
                     
-                    <!-- Window Access Buttons -->
-                    <Button Content="Open Monitor" Style="{StaticResource ModernButton}" 
-                            Background="{StaticResource InfoCyan}" Click="OpenMonitorWindow_Click"
-                            Height="36" MinWidth="120" Margin="0,0,6,0"/>
-                    <Button Content="Open Logs" Style="{StaticResource ModernButton}" 
-                            Background="{StaticResource GrayMedium}" Click="OpenLogsWindow_Click"
+                    <!-- Tools Menu Button -->
+                    <Button x:Name="ToolsMenuBtn" Content="🔧 Tools ▼" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="{StaticResource GrayMedium}"
+                            Click="ToolsMenuBtn_Click"
                             Height="36" MinWidth="100" Margin="0,0,6,0"/>
                 </StackPanel>
                 
@@ -147,6 +146,27 @@
             </StackPanel>
         </Border>
 
+        <!-- Tools Menu Popup -->
+        <Popup x:Name="ToolsMenuPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=ToolsMenuBtn}"
+               StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="White" BorderBrush="#FFCCCCCC" BorderThickness="1" 
+                    CornerRadius="4" Padding="0" MinWidth="180">
+                <Border.Effect>
+                    <DropShadowEffect Color="#40000000" BlurRadius="10" ShadowDepth="3"/>
+                </Border.Effect>
+                <StackPanel>
+                    <Button Content="📊 Open Monitor" Style="{StaticResource ModernButton}" 
+                            Background="#FF17A2B8" Click="OpenMonitorWindow_Click"
+                            Height="36" Margin="5,5,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
+                    <Button Content="📝 Open Logs" Style="{StaticResource ModernButton}" 
+                            Background="#FF95A5A6" Click="OpenLogsWindow_Click"
+                            Height="36" Margin="5,2,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
+                    <Button Content="📁 Log Files" Style="{StaticResource ModernButton}" 
+                            Background="#FF95A5A6" Click="OpenLogFilesManager_Click"
+                            Height="36" Margin="5,2,5,5" HorizontalContentAlignment="Left" Padding="10,0"/>
+                </StackPanel>
+            </Border>
+        </Popup>
 
         <!-- Settings Panel (initially collapsed) -->
         <Border x:Name="SettingsPanel" Grid.Row="2" Visibility="Collapsed" 
@@ -348,20 +368,6 @@
                                        FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
                         </StackPanel>
                         
-                        <!-- Auto-start Logging -->
-                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
-                            <CheckBox x:Name="AutoStartLoggingCheckBox" Content="Auto-start logging when stream begins" 
-                                      IsChecked="False" Checked="AutoStartLoggingCheckBox_Changed" 
-                                      Unchecked="AutoStartLoggingCheckBox_Changed"
-                                      FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
-                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
-                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
-                                    Click="AutoStartLoggingInfoBtn_Click"
-                                    ToolTip="Info: Auto-start Logging"/>
-                        </StackPanel>
-                        <TextBlock Text="Automatically start data logging when you start a stream (Left or Right)" 
-                                   FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0"/>
                     </StackPanel>
                 </GroupBox>
 
@@ -574,6 +580,22 @@
                         </StackPanel>
                         <TextBlock Text="Display R² coefficient and maximum error percentage in calibration dialogs" 
                                    FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0"/>
+                        
+                        <!-- Enable Bootloader Features -->
+                        <Separator Margin="0,15,0,10"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <CheckBox x:Name="EnableBootloaderFeaturesCheckBox" Content="Enable Bootloader Features" 
+                                      IsChecked="True" Checked="EnableBootloaderFeaturesCheckBox_Changed" 
+                                      Unchecked="EnableBootloaderFeaturesCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="EnableBootloaderFeaturesInfoBtn_Click"
+                                    ToolTip="Info: Enable Bootloader Features"/>
+                        </StackPanel>
+                        <TextBlock Text="Enable firmware update, bootloader query, and all bootloader-related functionality. Disable to hide bootloader UI and prevent automatic bootloader queries on connection." 
+                                   FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </GroupBox>
 
@@ -716,8 +738,8 @@
                             
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
                                 <TextBlock Text="Status:" FontSize="11" Margin="0,0,5,0"/>
-                                <Ellipse Width="10" Height="10" Fill="#FF27AE60" Margin="0,0,5,0"/>
-                                <TextBlock Text="OK" FontSize="11" FontWeight="Bold"/>
+                                <Ellipse x:Name="SystemStatusIndicator" Width="10" Height="10" Fill="#FF27AE60" Margin="0,0,5,0"/>
+                                <TextBlock x:Name="SystemStatusText" Text="OK" FontSize="11" FontWeight="Bold"/>
                             </StackPanel>
                             
                             <TextBlock x:Name="DataRateTxt" Text="Rate: --" FontSize="11" 
@@ -748,7 +770,7 @@
                                        HorizontalAlignment="Center" Margin="0,0,0,10"/>
                             
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
-                                <Ellipse Width="10" Height="10" Fill="#FFDC3545" Margin="0,0,5,0"/>
+                                <Ellipse x:Name="LoggingStatusIndicator" Width="10" Height="10" Fill="#FFDC3545" Margin="0,0,5,0"/>
                                 <TextBlock x:Name="LoggingStatusTxt" Text="Not logging" FontSize="11"/>
                             </StackPanel>
                             
@@ -773,7 +795,7 @@
                 </Grid>
 
                 <!-- Firmware Update -->
-                <GroupBox Header="Firmware Update" Style="{StaticResource ResponsiveGroupBox}" Margin="0,15,0,0">
+                <GroupBox x:Name="FirmwareUpdateGroupBox" Header="Firmware Update" Style="{StaticResource ResponsiveGroupBox}" Margin="0,15,0,0">
                     <StackPanel Margin="15">
                         <TextBlock x:Name="FirmwareStatusText" Text="Status: Idle" FontWeight="Bold" Margin="0,0,0,4"/>
                         <TextBlock x:Name="FirmwareFilePathText" Text="Selected file: (none)" FontSize="11" Margin="0,0,0,6"/>

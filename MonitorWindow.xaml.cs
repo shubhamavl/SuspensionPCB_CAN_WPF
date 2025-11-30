@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -11,13 +12,15 @@ namespace SuspensionPCB_CAN_WPF
         private readonly ObservableCollection<CANMessageEntry> _messages;
         private DispatcherTimer? _updateTimer;
         private bool _isMonitoring = false;
+        private CANService? _canService;
 
-        public MonitorWindow()
+        public MonitorWindow(CANService? canService = null)
         {
             InitializeComponent();
             
             _messages = new ObservableCollection<CANMessageEntry>();
             MessageListBox.ItemsSource = _messages;
+            _canService = canService;
 
             InitializeUI();
         }
@@ -37,7 +40,19 @@ namespace SuspensionPCB_CAN_WPF
                 MonitorStatusTxt.Text = "Monitoring...";
                 MonitorStatusTxt.Foreground = System.Windows.Media.Brushes.Green;
 
-                // Start update timer
+                // Subscribe to CANService if available
+                if (_canService != null)
+                {
+                    _canService.MessageReceived += OnCANMessageReceived;
+                    MonitorStatusTxt.Text = "Monitoring (Connected)...";
+                }
+                else
+                {
+                    MonitorStatusTxt.Text = "Monitoring (No CAN Service)...";
+                    MonitorStatusTxt.Foreground = System.Windows.Media.Brushes.Orange;
+                }
+
+                // Start update timer (for UI updates only, messages come from events)
                 _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
                 _updateTimer.Tick += UpdateTimer_Tick;
                 _updateTimer.Start();
@@ -58,6 +73,12 @@ namespace SuspensionPCB_CAN_WPF
                 StopMonitorBtn.IsEnabled = false;
                 MonitorStatusTxt.Text = "Stopped";
                 MonitorStatusTxt.Foreground = System.Windows.Media.Brushes.Red;
+
+                // Unsubscribe from CANService
+                if (_canService != null)
+                {
+                    _canService.MessageReceived -= OnCANMessageReceived;
+                }
 
                 // Stop update timer
                 _updateTimer?.Stop();
@@ -90,20 +111,44 @@ namespace SuspensionPCB_CAN_WPF
             {
                 if (!_isMonitoring) return;
 
-                // Simulate CAN message monitoring
-                // In a real implementation, this would connect to the CAN service
-                // and display actual CAN messages
-                
-                // For now, just show a placeholder message
-                if (_messages.Count == 0)
-                {
-                    AddMessage("TX", "0x100", "01 02 03 04", "Stream Start Request");
-                }
+                // Timer is now only for UI updates (message count, etc.)
+                // Actual messages come from CANService.MessageReceived event
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Update timer error: {ex.Message}", "Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OnCANMessageReceived(CANMessage message)
+        {
+            try
+            {
+                if (!_isMonitoring || message == null) return;
+
+                Dispatcher.Invoke(() =>
+                {
+                    string direction = message.Direction;
+                    string canId = $"0x{message.ID:X3}";
+                    string data = message.GetDataHexString();
+                    
+                    // Create ViewModel to get decoded description
+                    var rxIds = new HashSet<uint> { 0x200, 0x201, 0x300 };
+                    var txIds = new HashSet<uint> { 0x040, 0x041, 0x044, 0x030, 0x031, 0x032 };
+                    var vm = new CANMessageViewModel(message, rxIds, txIds);
+                    string description = vm.Decoded;
+                    
+                    AddMessage(direction, canId, data, description);
+                });
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show($"CAN message receive error: {ex.Message}", "Error", 
+                                  MessageBoxButton.OK, MessageBoxImage.Error);
+                });
             }
         }
 
@@ -148,6 +193,105 @@ namespace SuspensionPCB_CAN_WPF
             MessageCountTxt.Text = $"{_messages.Count} messages";
         }
 
+        private void ExportBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_messages.Count == 0)
+                {
+                    MessageBox.Show("No messages to export.", "Export", 
+                                  MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // Create save file dialog
+                var saveDialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "CSV files (*.csv)|*.csv|Text files (*.txt)|*.txt|All files (*.*)|*.*",
+                    FilterIndex = 1,
+                    FileName = $"can_monitor_{DateTime.Now:yyyyMMdd_HHmmss}",
+                    DefaultExt = "csv",
+                    Title = "Export CAN Monitor Messages"
+                };
+
+                // Set default directory to application data directory
+                try
+                {
+                    string defaultDir = SettingsManager.Instance.Settings.SaveDirectory;
+                    if (Directory.Exists(defaultDir))
+                    {
+                        saveDialog.InitialDirectory = defaultDir;
+                    }
+                }
+                catch
+                {
+                    // Use default if settings directory doesn't exist
+                }
+
+                if (saveDialog.ShowDialog() == true)
+                {
+                    ExportMessagesToFile(saveDialog.FileName);
+                    MessageBox.Show($"Successfully exported {_messages.Count} messages to:\n{saveDialog.FileName}", 
+                                  "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Export error: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ExportMessagesToFile(string filePath)
+        {
+            try
+            {
+                bool isCsv = filePath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
+                
+                using (var writer = new StreamWriter(filePath))
+                {
+                    if (isCsv)
+                    {
+                        // Write CSV header
+                        writer.WriteLine("Timestamp,Direction,CAN_ID,Data,Description");
+                        
+                        // Write CSV data
+                        foreach (var message in _messages)
+                        {
+                            // Escape commas and quotes in CSV
+                            string escapedDescription = message.Description.Replace("\"", "\"\"");
+                            writer.WriteLine($"{message.Timestamp},{message.Direction},{message.CanId},\"{message.Data}\",\"{escapedDescription}\"");
+                        }
+                    }
+                    else
+                    {
+                        // Write text format with headers
+                        writer.WriteLine("CAN Bus Monitor - Message Export");
+                        writer.WriteLine($"Export Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                        writer.WriteLine($"Total Messages: {_messages.Count}");
+                        writer.WriteLine(new string('-', 100));
+                        writer.WriteLine();
+                        
+                        // Write column headers
+                        writer.WriteLine(string.Format("{0,-12} {1,-10} {2,-10} {3,-20} {4}", 
+                            "Timestamp", "Direction", "CAN ID", "Data", "Description"));
+                        writer.WriteLine(new string('-', 100));
+                        
+                        // Write message data
+                        foreach (var message in _messages)
+                        {
+                            writer.WriteLine(string.Format("{0,-12} {1,-10} {2,-10} {3,-20} {4}", 
+                                message.Timestamp, message.Direction, message.CanId, message.Data, message.Description));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to write file: {ex.Message}", ex);
+            }
+        }
+
         private void CloseBtn_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -169,6 +313,13 @@ namespace SuspensionPCB_CAN_WPF
             {
                 _isMonitoring = false;
                 _updateTimer?.Stop();
+                
+                // Unsubscribe from CANService
+                if (_canService != null)
+                {
+                    _canService.MessageReceived -= OnCANMessageReceived;
+                }
+                
                 base.OnClosed(e);
             }
             catch (Exception ex)

@@ -102,6 +102,8 @@
         <Border Grid.Row="2" Background="#FFF0F0F0" Padding="15,10">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <TextBlock x:Name="MessageCountTxt" Text="0 messages" VerticalAlignment="Center" Margin="0,0,20,0"/>
+                <Button x:Name="ExportBtn" Content="💾 Export" Style="{StaticResource ModernButton}" 
+                        Background="#FF3498DB" Click="ExportBtn_Click" Width="100" Margin="0,0,5,0"/>
                 <Button x:Name="CloseBtn" Content="Close" Style="{StaticResource ModernButton}" 
                         Background="#FF95A5A6" Click="CloseBtn_Click" Width="100"/>
             </StackPanel>

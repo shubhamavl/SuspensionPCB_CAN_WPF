@@ -356,7 +356,7 @@ namespace SuspensionPCB_CAN_WPF
                 // Fire event for TX messages so they appear in monitor (adapter may already fire this, but ensure it's fired)
                 if (result)
                 {
-                    var txMessage = new CANMessage(id, data);
+                    var txMessage = new CANMessage(id, data, "TX");
                     MessageReceived?.Invoke(txMessage);
                 }
 
