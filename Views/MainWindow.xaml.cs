@@ -491,7 +491,35 @@ namespace SuspensionPCB_CAN_WPF.Views
             {
                 _logger.LogError($"Adapter type selection error: {ex.Message}", "UI");
             }
+        }
+
+        private void PcanChannelCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            try
+            {
+                // Save configuration immediately when PCAN channel changes
+                SaveConfiguration();
+                _logger.LogInfo("PCAN channel setting saved", "Settings");
             }
+            catch (Exception ex)
+            {
+                _logger.LogError($"PCAN channel selection error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void BaudRateCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            try
+            {
+                // Save configuration immediately when baud rate changes
+                SaveConfiguration();
+                _logger.LogInfo("Baud rate setting saved", "Settings");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Baud rate selection error: {ex.Message}", "Settings");
+            }
+        }
 
         private string GetSelectedAdapterType()
             {
