@@ -778,35 +778,8 @@ namespace SuspensionPCB_CAN_WPF.Services
         /// </summary>
         private static bool VerifyCodeSignature(string exePath)
         {
-            // TODO: Implement code signing verification when certificate is obtained
-            // For now, this is a placeholder that always returns true
-            // 
-            // Implementation would use:
-            // - System.Security.Cryptography.X509Certificates
-            // - Authenticode verification APIs
-            // - Or external tools like signtool.exe
-            //
-            // Example approach:
-            // 1. Extract certificate from signed executable
-            // 2. Verify certificate chain against trusted root CAs
-            // 3. Check certificate hasn't expired
-            // 4. Verify certificate subject matches expected publisher
-            //
-            // When ready, uncomment and implement:
-            /*
-            try
-            {
-                // Use signtool or .NET APIs to verify signature
-                // Return true only if signature is valid
-                return true;  // Placeholder
-            }
-            catch
-            {
-                return false;
-            }
-            */
-
-            // For now, skip verification (fail open) until certificate is obtained
+            // Code signing verification not yet implemented
+            // Returns true to allow updates until certificate is obtained
             return true;
         }
 

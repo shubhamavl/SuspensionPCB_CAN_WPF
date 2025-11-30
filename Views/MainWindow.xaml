@@ -5,7 +5,7 @@
         Title="LMV Suspension Axle Weight Measurement System Monitor" Height="850" Width="1500" 
         MinWidth="1000" MinHeight="600" MaxWidth="2400" MaxHeight="1400"
         WindowStartupLocation="CenterScreen" ResizeMode="CanResize"
-        Background="#FFF5F5F5" Icon="Assets/AVL_Icon.ico">
+        Background="#FFF5F5F5" Icon="pack://application:,,,/Assets/AVL_Icon.ico">
 
     <Window.Resources>
         <!-- Status Banner Animation -->

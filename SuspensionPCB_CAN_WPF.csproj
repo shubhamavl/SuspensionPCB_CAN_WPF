@@ -34,7 +34,9 @@
 
   <ItemGroup>
     <Resource Include="Assets\AVL_Logo.jpg" />
-    <Resource Include="Assets\AVL_Icon.ico" />
+    <Resource Include="Assets\AVL_Icon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Resource>
   </ItemGroup>
 
   <!-- Exclude SuspensionPCB_Updater directory from compilation (it's a separate project) -->
