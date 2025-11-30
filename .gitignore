@@ -66,6 +66,7 @@ config.json
 settings.json
 app_settings.json
 tare_config.json
+Suspension_Config.json
 
 # Temporary files
 *.tmp
