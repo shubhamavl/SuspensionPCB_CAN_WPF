@@ -457,6 +457,163 @@ namespace SuspensionPCB_CAN_WPF
             return dto;
         }
 
+        /// <summary>
+        /// Fetches all releases from GitHub, sorted by version (newest first).
+        /// Only includes releases that have a valid portable ZIP asset.
+        /// Handles pagination if there are more than 30 releases.
+        /// </summary>
+        public async Task<List<GithubReleaseDto>> GetAllReleasesAsync(CancellationToken cancellationToken = default)
+        {
+            var allReleases = new List<GithubReleaseDto>();
+            int page = 1;
+            const int perPage = 30; // GitHub API default is 30, max is 100
+
+            try
+            {
+                while (true)
+                {
+                    var url = $"https://api.github.com/repos/{RepositoryOwner}/{RepositoryName}/releases?page={page}&per_page={perPage}";
+                    using var response = await HttpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var statusCode = (int)response.StatusCode;
+                        _logger.LogWarning($"GitHub releases API returned {statusCode} for page {page}", "UpdateService");
+                        
+                        if (statusCode == 404)
+                        {
+                            _logger.LogWarning($"Repository or releases not found: {RepositoryOwner}/{RepositoryName}", "UpdateService");
+                            break;
+                        }
+                        else if (statusCode == 403)
+                        {
+                            _logger.LogWarning("GitHub API rate limit may have been exceeded", "UpdateService");
+                            break;
+                        }
+                        
+                        // For other errors, try to continue with what we have
+                        if (allReleases.Count > 0)
+                            break;
+                        return allReleases;
+                    }
+
+                    await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+
+                    var releases = await JsonSerializer.DeserializeAsync<List<GithubReleaseDto>>(stream, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    }, cancellationToken).ConfigureAwait(false);
+
+                    if (releases == null || releases.Count == 0)
+                    {
+                        // No more releases
+                        break;
+                    }
+
+                    // Filter releases to only include those with valid portable ZIP assets
+                    foreach (var release in releases)
+                    {
+                        var asset = release.Assets?.Find(a =>
+                            !string.IsNullOrEmpty(a.BrowserDownloadUrl) &&
+                            !string.IsNullOrEmpty(a.Name) &&
+                            a.Name.Contains(AssetNameSubstring, StringComparison.OrdinalIgnoreCase) &&
+                            a.Name.EndsWith(AssetExtension, StringComparison.OrdinalIgnoreCase));
+
+                        if (asset != null && IsValidDownloadUrl(asset.BrowserDownloadUrl))
+                        {
+                            // Only include releases with valid version tags
+                            if (ParseVersionFromTag(release.TagName) != null)
+                            {
+                                allReleases.Add(release);
+                            }
+                            else
+                            {
+                                _logger.LogWarning($"Skipping release '{release.TagName}' - invalid version format", "UpdateService");
+                            }
+                        }
+                    }
+
+                    // If we got fewer than perPage releases, we've reached the end
+                    if (releases.Count < perPage)
+                    {
+                        break;
+                    }
+
+                    page++;
+                }
+
+                // Sort by version (newest first)
+                allReleases.Sort((a, b) =>
+                {
+                    var versionA = ParseVersionFromTag(a.TagName);
+                    var versionB = ParseVersionFromTag(b.TagName);
+                    
+                    if (versionA == null && versionB == null) return 0;
+                    if (versionA == null) return 1;
+                    if (versionB == null) return -1;
+                    
+                    return versionB.CompareTo(versionA); // Descending order (newest first)
+                });
+
+                _logger.LogInfo($"Fetched {allReleases.Count} valid releases from GitHub", "UpdateService");
+                return allReleases;
+            }
+            catch (HttpRequestException httpEx)
+            {
+                _logger.LogWarning($"Network error while fetching releases: {httpEx.Message}", "UpdateService");
+                // Return what we have so far, if any
+                return allReleases;
+            }
+            catch (TaskCanceledException)
+            {
+                _logger.LogWarning("Fetching releases timed out", "UpdateService");
+                return allReleases;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Unexpected error while fetching releases: {ex.Message}", "UpdateService");
+                return allReleases;
+            }
+        }
+
+        /// <summary>
+        /// Converts a GithubReleaseDto to UpdateInfo for use with download/install logic.
+        /// </summary>
+        public UpdateInfo? ConvertReleaseToUpdateInfo(GithubReleaseDto release)
+        {
+            if (release == null)
+                return null;
+
+            var asset = release.Assets?.Find(a =>
+                !string.IsNullOrEmpty(a.BrowserDownloadUrl) &&
+                !string.IsNullOrEmpty(a.Name) &&
+                a.Name.Contains(AssetNameSubstring, StringComparison.OrdinalIgnoreCase) &&
+                a.Name.EndsWith(AssetExtension, StringComparison.OrdinalIgnoreCase));
+
+            if (asset == null)
+                return null;
+
+            if (!IsValidDownloadUrl(asset.BrowserDownloadUrl))
+                return null;
+
+            var version = ParseVersionFromTag(release.TagName);
+            if (version == null)
+                return null;
+
+            var currentVersion = GetCurrentVersion();
+            var expectedHash = ExtractSha256FromReleaseNotes(release.Body);
+
+            return new UpdateInfo
+            {
+                CurrentVersion = currentVersion,
+                LatestVersion = version,
+                DownloadUrl = asset.BrowserDownloadUrl ?? string.Empty,
+                AssetFileName = asset.Name ?? "update.zip",
+                ReleaseNotes = release.Body,
+                ExpectedSha256Hash = expectedHash
+            };
+        }
+
         private static Version GetCurrentVersion()
         {
             try
@@ -654,7 +811,7 @@ namespace SuspensionPCB_CAN_WPF
 
         #region GitHub DTOs
 
-        private sealed class GithubReleaseDto
+        public sealed class GithubReleaseDto
         {
             [JsonPropertyName("tag_name")]
             public string TagName { get; set; } = string.Empty;
@@ -665,11 +822,14 @@ namespace SuspensionPCB_CAN_WPF
             [JsonPropertyName("body")]
             public string? Body { get; set; }
 
+            [JsonPropertyName("published_at")]
+            public string? PublishedAt { get; set; }
+
             [JsonPropertyName("assets")]
             public System.Collections.Generic.List<GithubAssetDto>? Assets { get; set; }
         }
 
-        private sealed class GithubAssetDto
+        public sealed class GithubAssetDto
         {
             [JsonPropertyName("name")]
             public string? Name { get; set; }

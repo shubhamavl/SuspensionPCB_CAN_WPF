@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
 using System.Windows.Media;
@@ -1541,30 +1542,115 @@ namespace SuspensionPCB_CAN_WPF
                 if (!info.IsUpdateAvailable)
                 {
                     HideDownloadStatus();
-                    MessageBox.Show(
-                        $"You are already running the latest version.\n\nCurrent version: {info.CurrentVersion}",
+                    // Show dialog with option to view version history
+                    var noUpdateResult = MessageBox.Show(
+                        $"You are already running the latest version.\n\nCurrent version: {info.CurrentVersion}\n\n" +
+                        $"Would you like to view all available versions?",
                         "No Updates Available",
-                        MessageBoxButton.OK,
+                        MessageBoxButton.YesNo,
                         MessageBoxImage.Information);
+                    
+                    if (noUpdateResult == MessageBoxResult.Yes)
+                    {
+                        await ShowVersionHistoryDialogAsync();
+                    }
                     return;
                 }
 
-                string updateMessage =
-                    $"A new version is available.\n\n" +
-                    $"Current version: {info.CurrentVersion}\n" +
-                    $"Latest version:  {info.LatestVersion}\n\n" +
-                    $"Do you want to download and install it now?";
-
-                var dialogResult = MessageBox.Show(updateMessage, "Update Available", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (dialogResult != MessageBoxResult.Yes)
+                // Show custom dialog with options: Install Latest or View All Versions
+                var updateOptionsWindow = new Window
                 {
-                    HideDownloadStatus();
-                    _logger.LogInfo("User declined update installation.", "Update");
-                    return;
-                }
+                    Title = "Update Available",
+                    Width = 450,
+                    Height = 250,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Owner = this,
+                    ResizeMode = ResizeMode.NoResize,
+                    Background = new SolidColorBrush(Color.FromRgb(245, 245, 245))
+                };
 
-                // Start download process
-                await StartUpdateDownloadAsync(info);
+                var stackPanel = new StackPanel { Margin = new Thickness(20) };
+                
+                var titleText = new TextBlock
+                {
+                    Text = "Update Available",
+                    FontSize = 18,
+                    FontWeight = FontWeights.Bold,
+                    Margin = new Thickness(0, 0, 0, 10)
+                };
+                stackPanel.Children.Add(titleText);
+
+                var messageText = new TextBlock
+                {
+                    Text = $"Current version: {info.CurrentVersion}\nLatest version:  {info.LatestVersion}",
+                    FontSize = 14,
+                    Margin = new Thickness(0, 0, 0, 20),
+                    TextWrapping = TextWrapping.Wrap
+                };
+                stackPanel.Children.Add(messageText);
+
+                var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+                
+                var installLatestBtn = new Button
+                {
+                    Content = "Install Latest",
+                    Width = 140,
+                    Height = 35,
+                    Margin = new Thickness(5),
+                    Background = new SolidColorBrush(Color.FromRgb(40, 167, 69)),
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeights.SemiBold,
+                    Cursor = Cursors.Hand
+                };
+                installLatestBtn.Click += async (s, e) =>
+                {
+                    updateOptionsWindow.DialogResult = true;
+                    updateOptionsWindow.Close();
+                    await StartUpdateDownloadAsync(info);
+                };
+                buttonPanel.Children.Add(installLatestBtn);
+
+                var viewAllBtn = new Button
+                {
+                    Content = "View All Versions",
+                    Width = 140,
+                    Height = 35,
+                    Margin = new Thickness(5),
+                    Background = new SolidColorBrush(Color.FromRgb(27, 94, 150)),
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeights.SemiBold,
+                    Cursor = Cursors.Hand
+                };
+                viewAllBtn.Click += async (s, e) =>
+                {
+                    updateOptionsWindow.DialogResult = false;
+                    updateOptionsWindow.Close();
+                    await ShowVersionHistoryDialogAsync();
+                };
+                buttonPanel.Children.Add(viewAllBtn);
+
+                var cancelBtn = new Button
+                {
+                    Content = "Cancel",
+                    Width = 100,
+                    Height = 35,
+                    Margin = new Thickness(5),
+                    Background = new SolidColorBrush(Color.FromRgb(220, 53, 69)),
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeights.SemiBold,
+                    Cursor = Cursors.Hand
+                };
+                cancelBtn.Click += (s, e) =>
+                {
+                    updateOptionsWindow.DialogResult = false;
+                    updateOptionsWindow.Close();
+                };
+                buttonPanel.Children.Add(cancelBtn);
+
+                stackPanel.Children.Add(buttonPanel);
+                updateOptionsWindow.Content = stackPanel;
+
+                updateOptionsWindow.ShowDialog();
             }
             catch (Exception ex)
             {
@@ -1578,6 +1664,93 @@ namespace SuspensionPCB_CAN_WPF
                 if (CheckUpdatesBtn != null)
                     CheckUpdatesBtn.IsEnabled = true;
             }
+        }
+
+        /// <summary>
+        /// Shows a warning dialog when user attempts to downgrade to an older version.
+        /// Returns true if user confirms the downgrade, false otherwise.
+        /// </summary>
+        private MessageBoxResult ShowDowngradeWarningDialog(Version currentVersion, Version targetVersion)
+        {
+            string message = 
+                $"⚠️ You are about to downgrade from version {currentVersion} to version {targetVersion}.\n\n" +
+                $"This may cause compatibility issues:\n" +
+                $"• Settings or calibration data format may have changed\n" +
+                $"• Features available in newer versions will be unavailable\n" +
+                $"• Some data may not be compatible with the older version\n\n" +
+                $"⚠️ Recommendation: Backup your settings and calibration data before proceeding.\n\n" +
+                $"Do you want to continue with the downgrade?";
+
+            return MessageBox.Show(message, 
+                "Downgrade Warning", 
+                MessageBoxButton.YesNo, 
+                MessageBoxImage.Warning);
+        }
+
+        /// <summary>
+        /// Shows the version history dialog and handles version selection and installation.
+        /// </summary>
+        private async Task ShowVersionHistoryDialogAsync()
+        {
+            try
+            {
+                var dialog = new VersionSelectionDialog
+                {
+                    Owner = this
+                };
+
+                bool? result = dialog.ShowDialog();
+                
+                if (result == true && dialog.SelectedVersionInfo != null)
+                {
+                    var selectedInfo = dialog.SelectedVersionInfo;
+                    var currentVersion = GetCurrentVersion();
+                    
+                    // Check if this is a downgrade
+                    if (selectedInfo.LatestVersion < currentVersion)
+                    {
+                        var warningResult = ShowDowngradeWarningDialog(currentVersion, selectedInfo.LatestVersion);
+                        if (warningResult != MessageBoxResult.Yes)
+                        {
+                            _logger.LogInfo("User cancelled downgrade after warning", "Update");
+                            return;
+                        }
+                    }
+                    
+                    // Proceed with download/install
+                    await StartUpdateDownloadAsync(selectedInfo);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error showing version history dialog: {ex.Message}", "Update");
+                MessageBox.Show($"Error opening version history: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private Version GetCurrentVersion()
+        {
+            try
+            {
+                var assembly = typeof(App).Assembly;
+                var infoAttr = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+                if (!string.IsNullOrWhiteSpace(infoAttr?.InformationalVersion)
+                    && Version.TryParse(infoAttr.InformationalVersion.Split('+')[0], out var infoVersion))
+                {
+                    return infoVersion;
+                }
+
+                var asmVersion = assembly.GetName().Version;
+                if (asmVersion != null)
+                    return asmVersion;
+            }
+            catch
+            {
+                // Fall through to default
+            }
+
+            return new Version(1, 0, 0, 0);
         }
 
         private async Task StartUpdateDownloadAsync(UpdateService.UpdateInfo info)
