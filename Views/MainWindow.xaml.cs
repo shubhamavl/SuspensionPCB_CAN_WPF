@@ -141,33 +141,68 @@ namespace SuspensionPCB_CAN_WPF.Views
 
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            try
             {
-                try
+                // Check for Ctrl modifier
+                bool ctrlPressed = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+
+                if (ctrlPressed)
                 {
-                if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control)
-                {
-                    RequestLeftBtn_Click(sender, new RoutedEventArgs());
+                    // Connection Management
+                    if (e.Key == Key.K)
+                    {
+                        ConnectionToggle_Click(sender, new RoutedEventArgs());
+                        e.Handled = true;
+                    }
+                    // Streaming Control
+                    else if (e.Key == Key.L)
+                    {
+                        RequestLeftBtn_Click(sender, new RoutedEventArgs());
+                        e.Handled = true;
+                    }
+                    else if (e.Key == Key.R)
+                    {
+                        RequestRightBtn_Click(sender, new RoutedEventArgs());
+                        e.Handled = true;
+                    }
+                    else if (e.Key == Key.S)
+                    {
+                        StopAll_Click(sender, new RoutedEventArgs());
+                        e.Handled = true;
+                    }
+                    // ADC Mode Switching
+                    else if (e.Key == Key.I)
+                    {
+                        InternalADCBtn_Click(sender, e);
+                        e.Handled = true;
+                    }
+                    else if (e.Key == Key.A)
+                    {
+                        ADS1115Btn_Click(sender, e);
+                        e.Handled = true;
+                    }
+                    // Window Management
+                    else if (e.Key == Key.T)
+                    {
+                        SettingsToggle_Click(sender, new RoutedEventArgs());
+                        e.Handled = true;
+                    }
+                    else if (e.Key == Key.M)
+                    {
+                        OpenMonitorWindow_Click(sender, new RoutedEventArgs());
+                        e.Handled = true;
+                    }
+                    else if (e.Key == Key.P)
+                    {
+                        OpenLogFilesManager_Click(sender, new RoutedEventArgs());
+                        e.Handled = true;
+                    }
                 }
-                else if (e.Key == Key.R && Keyboard.Modifiers == ModifierKeys.Control)
+                // Function Keys
+                else if (e.Key == Key.F1)
                 {
-                    RequestRightBtn_Click(sender, new RoutedEventArgs());
-                }
-                else if (e.Key == Key.S && Keyboard.Modifiers == ModifierKeys.Control)
-                {
-                    StopAll_Click(sender, new RoutedEventArgs());
-                }
-                else if (e.Key == Key.T && Keyboard.Modifiers == ModifierKeys.Control)
-                {
-                    ResetTare_Click(sender, new RoutedEventArgs());
-                }
-                else if (e.Key == Key.I && Keyboard.Modifiers == ModifierKeys.Control)
-                {
-                    InternalADCBtn_Click(sender, e);
-                    e.Handled = true;
-                }
-                else if (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
-                {
-                    ADS1115Btn_Click(sender, e);
+                    KeyboardShortcutsBtn_Click(sender, new RoutedEventArgs());
                     e.Handled = true;
                 }
                 else if (e.Key == Key.F5)
@@ -175,6 +210,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     if (_canService?.IsConnected == false)
                     {
                         ConnectionToggle_Click(sender, new RoutedEventArgs());
+                        e.Handled = true;
                     }
                 }
             }

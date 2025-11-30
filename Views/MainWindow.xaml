@@ -32,12 +32,7 @@
         </Storyboard>
     </Window.Resources>
 
-    <Window.InputBindings>
-        <KeyBinding Key="K" Modifiers="Ctrl" Command="{Binding ConnectionToggleCommand}"/>
-        <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding StartLeftCommand}"/>
-        <KeyBinding Key="R" Modifiers="Ctrl" Command="{Binding StartRightCommand}"/>
-        <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding StopAllCommand}"/>
-    </Window.InputBindings>
+    <!-- Keyboard shortcuts are handled in code-behind Window_KeyDown event handler -->
 
     <Grid>
         <Grid.RowDefinitions>
