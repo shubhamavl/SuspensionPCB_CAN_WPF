@@ -153,8 +153,8 @@
                     <Button Content="📊 Open Monitor" Style="{StaticResource ModernButton}" 
                             Background="#FF17A2B8" Click="OpenMonitorWindow_Click"
                             Height="36" Margin="5,5,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
-                    <Button Content="📈 Open Graphs" Style="{StaticResource ModernButton}" 
-                            Background="#FF27AE60" Click="OpenGraphWindow_Click"
+                    <Button Content="🚗 LMV Axle Weight" Style="{StaticResource ModernButton}" 
+                            Background="#FF27AE60" Click="OpenLMVAxleWindow_Click"
                             Height="36" Margin="5,2,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
                     <Button Content="📝 Open Logs" Style="{StaticResource ModernButton}" 
                             Background="#FF95A5A6" Click="OpenLogsWindow_Click"
@@ -686,6 +686,12 @@
                                         Width="150" Height="32" Margin="3,0"/>
                                 <Button Content="Reset Tare" Style="{StaticResource DangerButton}" 
                                         Click="ResetTare_Click" Height="32" Width="90" Margin="3,0"/>
+                                <Button Content="📈 Suspension Graph" Style="{StaticResource ModernButton}" 
+                                        Background="#FF27AE60" Click="OpenGraphWindow_Click" 
+                                        Height="32" Width="100" Margin="3,0"/>
+                                <Button Content="🚗 LMV Axle" Style="{StaticResource ModernButton}" 
+                                        Background="#FF27AE60" Click="OpenLMVAxleWindow_Click" 
+                                        Height="32" Width="110" Margin="3,0"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>

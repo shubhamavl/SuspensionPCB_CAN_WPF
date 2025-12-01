@@ -3992,6 +3992,39 @@ Most users should keep default values unless experiencing specific issues.";
             }
         }
 
+        private LMVAxleWeightWindow? _lmvAxleWindow;
+
+        private void OpenLMVAxleWindow_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Close popup
+                if (ToolsMenuPopup != null)
+                {
+                    ToolsMenuPopup.IsOpen = false;
+                }
+
+                // If window already exists, bring it to front
+                if (_lmvAxleWindow != null && _lmvAxleWindow.IsLoaded)
+                {
+                    _lmvAxleWindow.Activate();
+                    _lmvAxleWindow.Focus();
+                    return;
+                }
+
+                _lmvAxleWindow = new LMVAxleWeightWindow(_canService, _weightProcessor);
+                _lmvAxleWindow.Owner = this;
+                _lmvAxleWindow.Closed += (s, args) => { _lmvAxleWindow = null; };
+                _lmvAxleWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error opening LMV axle window: {ex.Message}", "UI");
+                MessageBox.Show($"Error opening LMV axle window: {ex.Message}", "Error",
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void OpenSimulatorControl_Click(object sender, RoutedEventArgs e)
         {
             try
