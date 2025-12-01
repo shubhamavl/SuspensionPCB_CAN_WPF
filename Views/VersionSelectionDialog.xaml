@@ -4,7 +4,7 @@
         Title="Version History - Select Version to Install" 
         Height="600" Width="800" MinHeight="500" MinWidth="700"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
-        Background="#FFF8F9FA" Icon="Assets/AVL_Icon.ico">
+        Background="#FFF8F9FA" Icon="pack://application:,,,/Assets/AVL_Icon.ico">
     
     <Window.Resources>
         <Style x:Key="ModernButton" TargetType="Button">

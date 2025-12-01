@@ -4,7 +4,7 @@
         Title="LMV Suspension Axle Weight Measurement System Monitor - Production Logs" Height="600" Width="1000" 
         MinWidth="800" MinHeight="500" MaxWidth="2000" MaxHeight="1200"
         WindowStartupLocation="CenterScreen" ResizeMode="CanResize"
-        Background="#FFF5F5F5" Icon="Assets/AVL_Icon.ico">
+        Background="#FFF5F5F5" Icon="pack://application:,,,/Assets/AVL_Icon.ico">
     
     <Window.Resources>
         <!-- Modern Button Style -->
@@ -65,7 +65,7 @@
         <!-- Row 0: Header -->
         <Border Grid.Row="0" Background="#FF5D6D7E" Padding="20">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <Image Source="Assets/AVL_Logo.jpg" Width="50" Height="50" Margin="0,0,15,0" 
+                <Image Source="pack://application:,,,/Assets/AVL_Logo.jpg" Width="50" Height="50" Margin="0,0,15,0" 
                        VerticalAlignment="Center"/>
                 <TextBlock Text="Production Logs" FontSize="22" FontWeight="Bold" 
                            Foreground="White" HorizontalAlignment="Center"/>

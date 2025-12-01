@@ -4,7 +4,7 @@
         Title="Simulator Control" Height="600" Width="700" 
         MinWidth="600" MinHeight="500" MaxWidth="900" MaxHeight="800"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
-        Background="#FFF5F5F5" Icon="Assets/AVL_Icon.ico">
+        Background="#FFF5F5F5" Icon="pack://application:,,,/Assets/AVL_Icon.ico">
     
     <Grid Margin="20">
         <Grid.RowDefinitions>

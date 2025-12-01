@@ -4,7 +4,7 @@
         Title="LMV Suspension Axle Weight Measurement System Monitor - Calibration" 
         Height="750" Width="700" MinHeight="750" MinWidth="700"
         WindowStartupLocation="CenterOwner" WindowState="Normal"
-        ResizeMode="CanResize" Background="#FFF8F9FA" Icon="Assets/AVL_Icon.ico">
+        ResizeMode="CanResize" Background="#FFF8F9FA" Icon="pack://application:,,,/Assets/AVL_Icon.ico">
 
     <Window.Resources>
         <!-- Modern Professional Styles -->
@@ -188,7 +188,7 @@
                 
                 <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                        <Image Source="Assets/AVL_Logo.jpg" Width="32" Height="32" Margin="0,0,15,0" 
+                        <Image Source="pack://application:,,,/Assets/AVL_Logo.jpg" Width="32" Height="32" Margin="0,0,15,0" 
                                VerticalAlignment="Center"/>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="{Binding Side, StringFormat='{}{0} Side Calibration'}" 

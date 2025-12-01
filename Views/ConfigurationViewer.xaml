@@ -4,7 +4,7 @@
         Title="Configuration Viewer" Height="800" Width="1000" 
         MinWidth="600" MinHeight="400" MaxWidth="1200" MaxHeight="800"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
-        Background="#FFF5F5F5" Icon="Assets/AVL_Icon.ico">
+        Background="#FFF5F5F5" Icon="pack://application:,,,/Assets/AVL_Icon.ico">
 
     <Window.Resources>
         <Style x:Key="ConfigCard" TargetType="Border">

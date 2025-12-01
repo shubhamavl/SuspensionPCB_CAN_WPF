@@ -4,7 +4,7 @@
         Title="CAN Bus Monitor" Height="400" Width="700" 
         MinWidth="500" MinHeight="300" MaxWidth="1000" MaxHeight="600"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
-        Background="#FFF5F5F5" Icon="Assets/AVL_Icon.ico">
+        Background="#FFF5F5F5" Icon="pack://application:,,,/Assets/AVL_Icon.ico">
     
     <Window.Resources>
         <Style x:Key="ModernButton" TargetType="Button">
