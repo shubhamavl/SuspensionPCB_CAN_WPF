@@ -153,6 +153,9 @@
                     <Button Content="📊 Open Monitor" Style="{StaticResource ModernButton}" 
                             Background="#FF17A2B8" Click="OpenMonitorWindow_Click"
                             Height="36" Margin="5,5,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
+                    <Button Content="📈 Open Graphs" Style="{StaticResource ModernButton}" 
+                            Background="#FF27AE60" Click="OpenGraphWindow_Click"
+                            Height="36" Margin="5,2,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
                     <Button Content="📝 Open Logs" Style="{StaticResource ModernButton}" 
                             Background="#FF95A5A6" Click="OpenLogsWindow_Click"
                             Height="36" Margin="5,2,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>

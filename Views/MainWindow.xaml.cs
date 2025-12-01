@@ -3961,6 +3961,37 @@ Most users should keep default values unless experiencing specific issues.";
             }
         }
 
+        private void OpenGraphWindow_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Close popup
+                if (ToolsMenuPopup != null)
+                {
+                    ToolsMenuPopup.IsOpen = false;
+                }
+
+                // If window already exists, bring it to front
+                if (_graphWindow != null && _graphWindow.IsLoaded)
+                {
+                    _graphWindow.Activate();
+                    _graphWindow.Focus();
+                    return;
+                }
+
+                _graphWindow = new SuspensionGraphWindow(_canService, _weightProcessor);
+                _graphWindow.Owner = this;
+                _graphWindow.Closed += (s, args) => { _graphWindow = null; };
+                _graphWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error opening graph window: {ex.Message}", "UI");
+                MessageBox.Show($"Error opening graph window: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void OpenSimulatorControl_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -4001,6 +4032,7 @@ Most users should keep default values unless experiencing specific issues.";
         }
 
         private LogsWindow? _logsWindow;
+        private SuspensionGraphWindow? _graphWindow;
 
         private void OpenLogsWindow_Click(object sender, RoutedEventArgs e)
         {
