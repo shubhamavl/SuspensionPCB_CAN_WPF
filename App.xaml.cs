@@ -1,4 +1,6 @@
 ﻿using System.Windows;
+using System.IO;
+using SuspensionPCB_CAN_WPF.Views;
 
 namespace SuspensionPCB_CAN_WPF
 {
@@ -15,6 +17,10 @@ namespace SuspensionPCB_CAN_WPF
                                "System Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 args.Handled = true;
             };
+
+            // Manually create and show MainWindow
+            var mainWindow = new MainWindow();
+            mainWindow.Show();
         }
 
         protected override void OnExit(ExitEventArgs e)

@@ -54,7 +54,7 @@ A professional Windows WPF application for real-time weight monitoring and calib
 4. **Connect** your USB-CAN adapter
 5. **Configure** COM port and transmission rate
 
-The portable version includes the .NET runtime and stores all data files next to the executable. See [PORTABLE_DEPLOYMENT.md](PORTABLE_DEPLOYMENT.md) for details.
+The portable version includes the .NET runtime and stores all data files next to the executable. See [docs/DISTRIBUTION_GUIDE.md](docs/DISTRIBUTION_GUIDE.md) for details.
 
 ### Development/Source Version
 1. **Clone** the repository

@@ -1,0 +1,993 @@
+﻿<Window x:Class="SuspensionPCB_CAN_WPF.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        Title="LMV Suspension Axle Weight Measurement System Monitor" Height="850" Width="1500" 
+        MinWidth="1000" MinHeight="600" MaxWidth="2400" MaxHeight="1400"
+        WindowStartupLocation="CenterScreen" ResizeMode="CanResize"
+        Background="#FFF5F5F5" Icon="pack://application:,,,/Assets/AVL_Icon.ico">
+
+    <Window.Resources>
+        <!-- Status Banner Animation -->
+        <Storyboard x:Key="SlideDownAnimation">
+            <DoubleAnimation Storyboard.TargetProperty="Height" 
+                           From="0" To="40" Duration="0:0:0.3">
+                <DoubleAnimation.EasingFunction>
+                    <PowerEase EasingMode="EaseOut" Power="2"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" 
+                           From="0" To="1" Duration="0:0:0.3"/>
+        </Storyboard>
+        
+        <Storyboard x:Key="SlideUpAnimation">
+            <DoubleAnimation Storyboard.TargetProperty="Height" 
+                           From="40" To="0" Duration="0:0:0.3">
+                <DoubleAnimation.EasingFunction>
+                    <PowerEase EasingMode="EaseIn" Power="2"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" 
+                           From="1" To="0" Duration="0:0:0.3"/>
+        </Storyboard>
+    </Window.Resources>
+
+    <!-- Keyboard shortcuts are handled in code-behind Window_KeyDown event handler -->
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource PrimaryBlue}" Padding="15,10">
+            <Border.Effect>
+                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="2" Opacity="0.2" BlurRadius="6"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- AVL Logo -->
+                <Image Grid.Column="0" Source="pack://application:,,,/Assets/AVL_Logo.jpg" Width="50" Height="50" 
+                       VerticalAlignment="Center" Margin="0,0,15,0"/>
+                
+                <!-- CAN Info -->
+                <TextBlock Grid.Column="1" Text="CAN: 250 kbps" VerticalAlignment="Center" 
+                           FontWeight="Bold" Foreground="White" Margin="0,0,20,0"/>
+                
+                <!-- Control Buttons -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <!-- Connection Toggle -->
+                    <ToggleButton x:Name="ConnectionToggle" Content="🔌 Connect" 
+                                  Style="{StaticResource ToggleButton}"
+                                  Click="ConnectionToggle_Click"
+                                  Height="36" MinWidth="120" Margin="0,0,10,0"/>
+                    
+                    <!-- Start Buttons -->
+                    <Button x:Name="RequestLeftBtn" Content="▶ Start Left" 
+                            Style="{StaticResource SuccessButton}" 
+                            Click="RequestLeftBtn_Click" IsEnabled="False" 
+                            Height="36" MinWidth="110" Margin="0,0,6,0"/>
+                    <Button x:Name="RequestRightBtn" Content="▶ Start Right" 
+                            Style="{StaticResource SuccessButton}" 
+                            Click="RequestRightBtn_Click" IsEnabled="False"
+                            Height="36" MinWidth="110" Margin="0,0,10,0"/>
+                    
+                    <!-- Stop All -->
+                    <Button x:Name="StopAllBtn" Content="⏹ Stop All" 
+                            Style="{StaticResource DangerButton}" 
+                            Click="StopAll_Click" IsEnabled="False"
+                            Height="36" MinWidth="100" Margin="0,0,10,0"/>
+                    
+                    <!-- Settings -->
+                    <Button x:Name="SettingsToggleBtn" Content="⚙ Settings" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="{StaticResource GrayMedium}"
+                            Click="SettingsToggle_Click"
+                            Height="36" MinWidth="100" Margin="0,0,10,0"/>
+                    
+                    <!-- Tools Menu Button -->
+                    <Button x:Name="ToolsMenuBtn" Content="🔧 Tools ▼" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="{StaticResource GrayMedium}"
+                            Click="ToolsMenuBtn_Click"
+                            Height="36" MinWidth="100" Margin="0,0,6,0"/>
+                </StackPanel>
+                
+                <!-- Status on Right -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock Text="Status:" Foreground="White" VerticalAlignment="Center" Margin="5,0"/>
+                    <Ellipse x:Name="StatusIndicator" Width="12" Height="12" 
+                             Fill="{StaticResource DangerRed}" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="StatusText" Text="Disconnected" 
+                               Foreground="White" VerticalAlignment="Center" Margin="5,0,10,0"/>
+                    
+                    <!-- ADC Mode Indicator -->
+                    <TextBlock Text="ADC:" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBlock x:Name="HeaderAdcModeTxt" Text="Internal 12-bit" 
+                               Foreground="White" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    
+                    <!-- Transmission Rate Dropdown -->
+                    <TextBlock Text="Rate:" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <ComboBox x:Name="HeaderRateCombo" Width="80" Height="24" 
+                              SelectedIndex="2" SelectionChanged="HeaderRateCombo_SelectionChanged"
+                              Background="White" Foreground="#FF2C3E50" BorderBrush="White">
+                        <ComboBoxItem Content="100Hz"/>
+                        <ComboBoxItem Content="500Hz"/>
+                        <ComboBoxItem Content="1kHz"/>
+                        <ComboBoxItem Content="1Hz"/>
+                    </ComboBox>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Status Banner -->
+        <Border x:Name="StatusBanner" Grid.Row="1" Height="0" 
+                Background="{StaticResource SuccessGreen}" 
+                Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" 
+                        VerticalAlignment="Center">
+                <TextBlock x:Name="StatusBannerText" Text="✓ Connected Successfully" 
+                           Foreground="White" FontWeight="SemiBold" Margin="10"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Tools Menu Popup -->
+        <Popup x:Name="ToolsMenuPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=ToolsMenuBtn}"
+               StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="White" BorderBrush="#FFCCCCCC" BorderThickness="1" 
+                    CornerRadius="4" Padding="0" MinWidth="180">
+                <Border.Effect>
+                    <DropShadowEffect Color="#40000000" BlurRadius="10" ShadowDepth="3"/>
+                </Border.Effect>
+                <StackPanel>
+                    <Button Content="📊 Open Monitor" Style="{StaticResource ModernButton}" 
+                            Background="#FF17A2B8" Click="OpenMonitorWindow_Click"
+                            Height="36" Margin="5,5,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
+                    <Button Content="📝 Open Logs" Style="{StaticResource ModernButton}" 
+                            Background="#FF95A5A6" Click="OpenLogsWindow_Click"
+                            Height="36" Margin="5,2,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
+                    <Button Content="📁 Log Files" Style="{StaticResource ModernButton}" 
+                            Background="#FF95A5A6" Click="OpenLogFilesManager_Click"
+                            Height="36" Margin="5,2,5,5" HorizontalContentAlignment="Left" Padding="10,0"/>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- Settings Panel (initially collapsed) -->
+        <Border x:Name="SettingsPanel" Grid.Row="2" Visibility="Collapsed" 
+                Background="#FFF0F0F0" BorderBrush="#FFCCCCCC" BorderThickness="1" 
+                Padding="15" Margin="15,0" MaxHeight="600">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                <!-- CAN Adapter Selection -->
+                <GroupBox Header="CAN Adapter Configuration" Margin="0,0,0,10">
+                    <StackPanel Margin="10">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Adapter Type:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="AdapterTypeCombo" Width="180" Margin="0,0,10,0" SelectionChanged="AdapterTypeCombo_SelectionChanged">
+                                <ComboBoxItem Content="USB-CAN-A Serial" Tag="USB"/>
+                                <ComboBoxItem Content="PCAN" Tag="PCAN"/>
+                                <ComboBoxItem Content="Simulator" Tag="SIM"/>
+                            </ComboBox>
+                            <ComboBox x:Name="PcanChannelCombo" Width="100" Margin="0,0,10,0" Visibility="Collapsed" SelectionChanged="PcanChannelCombo_SelectionChanged">
+                                <ComboBoxItem Content="USB1" Tag="0x51"/>
+                                <ComboBoxItem Content="USB2" Tag="0x52"/>
+                                <ComboBoxItem Content="USB3" Tag="0x53"/>
+                                <ComboBoxItem Content="USB4" Tag="0x54"/>
+                                <ComboBoxItem Content="USB5" Tag="0x55"/>
+                                <ComboBoxItem Content="USB6" Tag="0x56"/>
+                                <ComboBoxItem Content="USB7" Tag="0x57"/>
+                                <ComboBoxItem Content="USB8" Tag="0x58"/>
+                            </ComboBox>
+                            <ComboBox x:Name="BaudRateCombo" Width="120" SelectedIndex="1" SelectionChanged="BaudRateCombo_SelectionChanged">
+                                <ComboBoxItem Content="125 kbps"/>
+                                <ComboBoxItem Content="250 kbps"/>
+                                <ComboBoxItem Content="500 kbps"/>
+                                <ComboBoxItem Content="1 Mbps"/>
+                            </ComboBox>
+                        </StackPanel>
+                        <TextBlock x:Name="AdapterHintTxt" Text="Select CAN adapter type. USB-CAN-A Serial uses COM port, PCAN uses PCANBasic.dll" 
+                                   FontSize="10" Foreground="#FF95A5A6" Margin="0,0,0,10"/>
+                        <TextBlock x:Name="PcanStatusTxt" Text="" FontSize="10" Foreground="#FFE74C3C" Visibility="Collapsed"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <Separator Margin="0,0,0,10"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Save Directory:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
+                    <TextBox x:Name="SaveDirectoryTxt" Width="380" IsReadOnly="True" Margin="0,0,10,0"/>
+                    <Button x:Name="BrowseSaveDirBtn" Content="Browse..." Style="{StaticResource ModernButton}" Click="BrowseSaveDirBtn_Click"/>
+                </StackPanel>
+                <TextBlock x:Name="SaveDirHintTxt" Text="Choose where CSV logs, calibration JSON and tare JSON will be stored" FontSize="10" Foreground="#FF95A5A6"/>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <!-- Weight Filtering Configuration -->
+                <GroupBox Margin="0,0,0,10">
+                    <GroupBox.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Weight Filtering" FontWeight="SemiBold"/>
+                            <Button x:Name="WeightFilteringInfoBtn" Content="ℹ" Width="20" Height="20" 
+                                    Margin="8,0,0,0" Padding="0" FontSize="12" FontWeight="Bold"
+                                    Background="Transparent" BorderThickness="0" Foreground="#FF3498DB"
+                                    Cursor="Hand" Click="WeightFilteringInfoBtn_Click"
+                                    ToolTip="Click for detailed information about weight filtering settings"/>
+                        </StackPanel>
+                    </GroupBox.Header>
+                    <StackPanel Margin="10">
+                        <!-- Enable/Disable Filtering -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <CheckBox x:Name="FilterEnabledCheckBox" Content="Enable Weight Filtering" 
+                                      IsChecked="True" Checked="FilterEnabledCheckBox_Changed" 
+                                      Unchecked="FilterEnabledCheckBox_Changed"
+                                      VerticalAlignment="Center" FontWeight="SemiBold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="FilterEnabledInfoBtn_Click"
+                                    ToolTip="Info: Enable/Disable Weight Filtering"/>
+                        </StackPanel>
+                        
+                        <!-- Filter Type Selection -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Filter Type:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="FilterTypeCombo" Width="280" Margin="0,0,10,0" 
+                                      SelectionChanged="FilterTypeCombo_SelectionChanged">
+                                <ComboBoxItem Content="EMA (Exponential Moving Average)" Tag="EMA" IsSelected="True"/>
+                                <ComboBoxItem Content="SMA (Simple Moving Average)" Tag="SMA"/>
+                                <ComboBoxItem Content="None (No Filtering)" Tag="None"/>
+                            </ComboBox>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="FilterTypeInfoBtn_Click"
+                                    ToolTip="Info: Filter Type Selection"/>
+                            <TextBlock Text="EMA: Fast response, smooth. SMA: Very smooth, slower." 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- EMA Alpha Setting (only visible when EMA selected) -->
+                        <StackPanel x:Name="EmaSettingsPanel" Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="EMA Alpha:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="EmaAlphaSlider" Width="200" Minimum="0.05" Maximum="0.5" 
+                                    Value="0.15" TickFrequency="0.05" IsSnapToTickEnabled="True"
+                                    ValueChanged="EmaAlphaSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="EmaAlphaValueTxt" Text="0.15" Width="50" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="EmaAlphaInfoBtn_Click"
+                                    ToolTip="Info: EMA Alpha Parameter"/>
+                            <TextBlock Text="(Lower = smoother, Higher = more responsive)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- SMA Window Size (only visible when SMA selected) -->
+                        <StackPanel x:Name="SmaSettingsPanel" Orientation="Horizontal" Margin="0,0,0,10" Visibility="Collapsed">
+                            <TextBlock Text="SMA Window Size:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="SmaWindowSlider" Width="200" Minimum="5" Maximum="50" 
+                                    Value="10" TickFrequency="5" IsSnapToTickEnabled="True"
+                                    ValueChanged="SmaWindowSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="SmaWindowValueTxt" Text="10 samples" Width="80" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="SmaWindowInfoBtn_Click"
+                                    ToolTip="Info: SMA Window Size"/>
+                            <TextBlock Text="(More samples = smoother, slower response)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <TextBlock Text="Filtering reduces weight display jitter from ADC noise. EMA is recommended for most cases." 
+                                   FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <!-- Display Settings -->
+                <GroupBox Margin="0,0,0,10">
+                    <GroupBox.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Display Settings" FontWeight="SemiBold"/>
+                            <Button x:Name="DisplaySettingsInfoBtn" Content="ℹ" Width="20" Height="20" 
+                                    Margin="8,0,0,0" Padding="0" FontSize="12" FontWeight="Bold"
+                                    Background="Transparent" BorderThickness="0" Foreground="#FF3498DB"
+                                    Cursor="Hand" Click="DisplaySettingsInfoBtn_Click"
+                                    ToolTip="Click for detailed information about display settings"/>
+                        </StackPanel>
+                    </GroupBox.Header>
+                    <StackPanel Margin="10">
+                        <!-- Weight Display Format -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Weight Display:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="WeightFormatCombo" Width="280" Margin="0,0,10,0" 
+                                      SelectionChanged="WeightFormatCombo_SelectionChanged">
+                                <ComboBoxItem Content="Integer (50 kg)" Tag="0" IsSelected="True"/>
+                                <ComboBoxItem Content="One Decimal (50.3 kg)" Tag="1"/>
+                                <ComboBoxItem Content="Two Decimals (50.25 kg)" Tag="2"/>
+                            </ComboBox>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="WeightFormatInfoBtn_Click"
+                                    ToolTip="Info: Weight Display Format"/>
+                            <TextBlock Text="Choose how many decimal places to show" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- UI Update Rate -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="UI Update Rate:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="UIUpdateRateSlider" Width="200" Minimum="10" Maximum="200" 
+                                    Value="50" TickFrequency="10" IsSnapToTickEnabled="True"
+                                    ValueChanged="UIUpdateRateSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="UIUpdateRateValueTxt" Text="50 ms (20 Hz)" Width="100" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="UIUpdateRateInfoBtn_Click"
+                                    ToolTip="Info: UI Update Rate"/>
+                            <TextBlock Text="(Lower = faster updates, Higher = better performance)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Data Timeout -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Data Timeout:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="DataTimeoutSlider" Width="200" Minimum="1" Maximum="30" 
+                                    Value="5" TickFrequency="1" IsSnapToTickEnabled="True"
+                                    ValueChanged="DataTimeoutSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="DataTimeoutValueTxt" Text="5 seconds" Width="80" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="DataTimeoutInfoBtn_Click"
+                                    ToolTip="Info: Data Timeout"/>
+                            <TextBlock Text="(How long to wait before reporting timeout)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                    </StackPanel>
+                </GroupBox>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <!-- UI Visibility Settings -->
+                <GroupBox Margin="0,0,0,10">
+                    <GroupBox.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="UI Visibility Settings" FontWeight="SemiBold"/>
+                            <Button x:Name="UIVisibilityInfoBtn" Content="ℹ" Width="20" Height="20" 
+                                    Margin="8,0,0,0" Padding="0" FontSize="12" FontWeight="Bold"
+                                    Background="Transparent" BorderThickness="0" Foreground="#FF3498DB"
+                                    Cursor="Hand" Click="UIVisibilityInfoBtn_Click"
+                                    ToolTip="Click for detailed information about UI visibility settings"/>
+                        </StackPanel>
+                    </GroupBox.Header>
+                    <StackPanel Margin="10">
+                        <!-- Status Banner Duration -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Status Banner Duration:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="StatusBannerDurationSlider" Width="200" Minimum="1" Maximum="10" 
+                                    Value="3" TickFrequency="1" IsSnapToTickEnabled="True"
+                                    ValueChanged="StatusBannerDurationSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="StatusBannerDurationValueTxt" Text="3 seconds" Width="80" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="StatusBannerDurationInfoBtn_Click"
+                                    ToolTip="Info: Status Banner Duration"/>
+                            <TextBlock Text="(How long status messages display)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Message History Limit -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Message History Limit:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="MessageHistoryLimitSlider" Width="200" Minimum="100" Maximum="5000" 
+                                    Value="1000" TickFrequency="100" IsSnapToTickEnabled="True"
+                                    ValueChanged="MessageHistoryLimitSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="MessageHistoryLimitValueTxt" Text="1000 messages" Width="100" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="MessageHistoryLimitInfoBtn_Click"
+                                    ToolTip="Info: Message History Limit"/>
+                            <TextBlock Text="(Max messages stored in memory)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Show/Hide UI Elements -->
+                        <TextBlock Text="Show/Hide UI Elements:" FontWeight="SemiBold" Margin="0,5,0,5"/>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
+                            <CheckBox x:Name="ShowRawADCCheckBox" Content="Show Raw ADC Display" 
+                                      IsChecked="True" Checked="ShowRawADCCheckBox_Changed" 
+                                      Unchecked="ShowRawADCCheckBox_Changed" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ShowRawADCInfoBtn_Click"
+                                    ToolTip="Info: Show Raw ADC Display"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
+                            <CheckBox x:Name="ShowCalibratedWeightCheckBox" Content="Show Calibrated Weight (before tare)" 
+                                      IsChecked="False" Checked="ShowCalibratedWeightCheckBox_Changed" 
+                                      Unchecked="ShowCalibratedWeightCheckBox_Changed" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ShowCalibratedWeightInfoBtn_Click"
+                                    ToolTip="Info: Show Calibrated Weight"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
+                            <CheckBox x:Name="ShowStreamingIndicatorsCheckBox" Content="Show Streaming Status Indicators" 
+                                      IsChecked="True" Checked="ShowStreamingIndicatorsCheckBox_Changed" 
+                                      Unchecked="ShowStreamingIndicatorsCheckBox_Changed" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ShowStreamingIndicatorsInfoBtn_Click"
+                                    ToolTip="Info: Show Streaming Indicators"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
+                            <CheckBox x:Name="ShowCalibrationIconsCheckBox" Content="Show Calibration Status Icons" 
+                                      IsChecked="True" Checked="ShowCalibrationIconsCheckBox_Changed" 
+                                      Unchecked="ShowCalibrationIconsCheckBox_Changed" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ShowCalibrationIconsInfoBtn_Click"
+                                    ToolTip="Info: Show Calibration Icons"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <!-- Advanced Settings -->
+                <GroupBox Margin="0,0,0,10">
+                    <GroupBox.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Advanced Settings" FontWeight="SemiBold"/>
+                            <Button x:Name="AdvancedSettingsInfoBtn" Content="ℹ" Width="20" Height="20" 
+                                    Margin="8,0,0,0" Padding="0" FontSize="12" FontWeight="Bold"
+                                    Background="Transparent" BorderThickness="0" Foreground="#FF3498DB"
+                                    Cursor="Hand" Click="AdvancedSettingsInfoBtn_Click"
+                                    ToolTip="Click for detailed information about advanced settings"/>
+                        </StackPanel>
+                    </GroupBox.Header>
+                    <StackPanel Margin="10">
+                        <!-- TX Indicator Flash Duration -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="TX Indicator Flash:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="TXIndicatorFlashSlider" Width="200" Minimum="50" Maximum="500" 
+                                    Value="200" TickFrequency="50" IsSnapToTickEnabled="True"
+                                    ValueChanged="TXIndicatorFlashSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="TXIndicatorFlashValueTxt" Text="200 ms" Width="70" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="TXIndicatorFlashInfoBtn_Click"
+                                    ToolTip="Info: TX Indicator Flash Duration"/>
+                            <TextBlock Text="(Flash duration when sending CAN messages)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Batch Processing Size -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Batch Processing Size:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="BatchProcessingSizeSlider" Width="200" Minimum="10" Maximum="100" 
+                                    Value="50" TickFrequency="10" IsSnapToTickEnabled="True"
+                                    ValueChanged="BatchProcessingSizeSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="BatchProcessingSizeValueTxt" Text="50 messages" Width="90" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="BatchProcessingSizeInfoBtn_Click"
+                                    ToolTip="Info: Batch Processing Size"/>
+                            <TextBlock Text="(Messages processed per batch)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Clock Update Interval -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Clock Update Interval:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="ClockUpdateIntervalSlider" Width="200" Minimum="500" Maximum="5000" 
+                                    Value="1000" TickFrequency="500" IsSnapToTickEnabled="True"
+                                    ValueChanged="ClockUpdateIntervalSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="ClockUpdateIntervalValueTxt" Text="1000 ms" Width="70" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ClockUpdateIntervalInfoBtn_Click"
+                                    ToolTip="Info: Clock Update Interval"/>
+                            <TextBlock Text="(Clock refresh rate)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Calibration Capture Delay -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Calibration Capture Delay:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="CalibrationCaptureDelaySlider" Width="200" Minimum="100" Maximum="2000" 
+                                    Value="500" TickFrequency="100" IsSnapToTickEnabled="True"
+                                    ValueChanged="CalibrationCaptureDelaySlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="CalibrationCaptureDelayValueTxt" Text="500 ms" Width="70" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="CalibrationCaptureDelayInfoBtn_Click"
+                                    ToolTip="Info: Calibration Capture Delay"/>
+                            <TextBlock Text="(Delay before capturing calibration point)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Calibration Mode Selection -->
+                        <TextBlock Text="Calibration Mode" FontWeight="Bold" FontSize="12" 
+                                   Margin="0,10,0,5" Foreground="#FF2C3E50"/>
+                        
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Calibration Method:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="CalibrationModeComboBox" Width="250" Margin="0,0,10,0" 
+                                      SelectionChanged="CalibrationModeComboBox_SelectionChanged">
+                                <ComboBoxItem Content="Linear Regression (Global Fit)" Tag="Regression" IsSelected="True"/>
+                                <ComboBoxItem Content="Piecewise Linear Interpolation" Tag="Piecewise"/>
+                            </ComboBox>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="CalibrationModeInfoBtn_Click"
+                                    ToolTip="Info: Calibration Mode"/>
+                            <TextBlock Text="(How to convert ADC values to weight)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Calibration Averaging Settings -->
+                        <TextBlock Text="Calibration Averaging (Multi-Sample)" FontWeight="Bold" FontSize="12" 
+                                   Margin="0,10,0,5" Foreground="#FF2C3E50"/>
+                        
+                        <!-- Enable Calibration Averaging -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <CheckBox x:Name="CalibrationAveragingEnabledCheckBox" Content="Enable Multi-Sample Averaging" 
+                                      IsChecked="True" Checked="CalibrationAveragingEnabledCheckBox_Changed" 
+                                      Unchecked="CalibrationAveragingEnabledCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center" Width="250"/>
+                            <TextBlock Text="(Use multiple samples for better accuracy)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Sample Count -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Sample Count:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="CalibrationSampleCountSlider" Width="200" Minimum="10" Maximum="200" 
+                                    Value="50" TickFrequency="10" IsSnapToTickEnabled="True"
+                                    ValueChanged="CalibrationSampleCountSlider_ValueChanged" Margin="0,0,10,0"
+                                    IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
+                            <TextBlock x:Name="CalibrationSampleCountValueTxt" Text="50" Width="50" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(Number of samples to average)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Capture Duration -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Capture Duration:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="CalibrationCaptureDurationSlider" Width="200" Minimum="500" Maximum="5000" 
+                                    Value="2000" TickFrequency="500" IsSnapToTickEnabled="True"
+                                    ValueChanged="CalibrationCaptureDurationSlider_ValueChanged" Margin="0,0,10,0"
+                                    IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
+                            <TextBlock x:Name="CalibrationCaptureDurationValueTxt" Text="2000 ms" Width="70" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(Duration to collect samples)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Use Median -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <CheckBox x:Name="CalibrationUseMedianCheckBox" Content="Use Median (instead of Mean)" 
+                                      IsChecked="True" Checked="CalibrationUseMedianCheckBox_Changed" 
+                                      Unchecked="CalibrationUseMedianCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center" Width="200"
+                                      IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
+                            <TextBlock Text="(More robust to outliers)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Remove Outliers -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <CheckBox x:Name="CalibrationRemoveOutliersCheckBox" Content="Remove Outliers" 
+                                      IsChecked="True" Checked="CalibrationRemoveOutliersCheckBox_Changed" 
+                                      Unchecked="CalibrationRemoveOutliersCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center" Width="200"
+                                      IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
+                            <TextBlock Text="(Filter extreme values)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Outlier Threshold -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Outlier Threshold:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="CalibrationOutlierThresholdSlider" Width="200" Minimum="1.0" Maximum="4.0" 
+                                    Value="2.0" TickFrequency="0.5" IsSnapToTickEnabled="True"
+                                    ValueChanged="CalibrationOutlierThresholdSlider_ValueChanged" Margin="0,0,10,0"
+                                    IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
+                            <TextBlock x:Name="CalibrationOutlierThresholdValueTxt" Text="2.0 σ" Width="60" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(Standard deviations)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Max Std Dev -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Max Std Dev:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="CalibrationMaxStdDevSlider" Width="200" Minimum="5.0" Maximum="50.0" 
+                                    Value="10.0" TickFrequency="5.0" IsSnapToTickEnabled="True"
+                                    ValueChanged="CalibrationMaxStdDevSlider_ValueChanged" Margin="0,0,10,0"
+                                    IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
+                            <TextBlock x:Name="CalibrationMaxStdDevValueTxt" Text="10.0" Width="50" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(Warning threshold)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Log Format (Future) -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Log File Format:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="LogFormatCombo" Width="180" Margin="0,0,10,0" 
+                                      SelectionChanged="LogFormatCombo_SelectionChanged" IsEnabled="False">
+                                <ComboBoxItem Content="CSV (Comma Separated Values)" Tag="CSV" IsSelected="True"/>
+                                <ComboBoxItem Content="JSON (JavaScript Object Notation)" Tag="JSON"/>
+                                <ComboBoxItem Content="TXT (Plain Text)" Tag="TXT"/>
+                            </ComboBox>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="0,0,10,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="LogFormatInfoBtn_Click"
+                                    ToolTip="Info: Log File Format"/>
+                            <TextBlock Text="(Currently CSV only - JSON/TXT coming soon)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center" FontStyle="Italic"/>
+                        </StackPanel>
+                        
+                        <!-- Show Calibration Quality Metrics -->
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <CheckBox x:Name="ShowCalibrationQualityMetricsCheckBox" Content="Show Calibration Quality Metrics (R², Error %)" 
+                                      IsChecked="True" Checked="ShowCalibrationQualityMetricsCheckBox_Changed" 
+                                      Unchecked="ShowCalibrationQualityMetricsCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="ShowCalibrationQualityMetricsInfoBtn_Click"
+                                    ToolTip="Info: Show Calibration Quality Metrics"/>
+                        </StackPanel>
+                        <TextBlock Text="Display R² coefficient and maximum error percentage in calibration dialogs" 
+                                   FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0"/>
+                        
+                        <!-- Enable Bootloader Features -->
+                        <Separator Margin="0,15,0,10"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <CheckBox x:Name="EnableBootloaderFeaturesCheckBox" Content="Enable Bootloader Features" 
+                                      IsChecked="True" Checked="EnableBootloaderFeaturesCheckBox_Changed" 
+                                      Unchecked="EnableBootloaderFeaturesCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
+                                    FontSize="11" FontWeight="Bold" Background="Transparent" 
+                                    BorderThickness="0" Foreground="#FF3498DB" Cursor="Hand"
+                                    Click="EnableBootloaderFeaturesInfoBtn_Click"
+                                    ToolTip="Info: Enable Bootloader Features"/>
+                        </StackPanel>
+                        <TextBlock Text="Enable firmware update, bootloader query, and all bootloader-related functionality. Disable to hide bootloader UI and prevent automatic bootloader queries on connection." 
+                                   FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="KeyboardShortcutsBtn" Content="⌨ Keyboard Shortcuts" 
+                            Style="{StaticResource ModernButton}" 
+                            Click="KeyboardShortcutsBtn_Click" Width="180"/>
+                    <TextBlock Text="View all available keyboard shortcuts" FontSize="10" 
+                               Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="ViewConfigBtn" Content="📋 View Configuration" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF6F42C1" Click="ViewConfigBtn_Click" Width="180"/>
+                    <TextBlock Text="View calibration, tare, and settings files" FontSize="10" 
+                               Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+
+                <Separator Margin="0,10,0,10"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="OpenSimulatorControlBtn" Content="🎮 Open Simulator Control" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF17A2B8" Click="OpenSimulatorControl_Click" Width="180"
+                            Visibility="Collapsed"/>
+                    <TextBlock Text="Adjust simulator parameters in real-time" FontSize="10" 
+                               Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Main Content -->
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" 
+                      Margin="20" Padding="10">
+            <Grid MinWidth="1000">
+                <StackPanel>
+                <!-- Weight Data Display - Single Dynamic Dashboard -->
+                <GroupBox x:Name="LiveWeightDataGroupBox" Header="Live Weight Data" Style="{StaticResource ResponsiveGroupBox}">
+                    <Border Style="{StaticResource DataCard}" 
+                            BorderBrush="#FF27AE60" BorderThickness="2" 
+                            HorizontalAlignment="Center" MaxWidth="900">
+                        <StackPanel>
+                            <!-- Mode Indicator Header -->
+                            <TextBlock x:Name="DashboardModeHeader" Text="No Active Stream" 
+                                       FontSize="16" FontWeight="Bold" 
+                                       Foreground="{StaticResource PrimaryBlue}" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                            
+                            <!-- HERO: Display Weight (48pt, Bold, Centered) -->
+                            <Border Background="#FFF9F9F9" BorderBrush="#FF27AE60" 
+                                    BorderThickness="3" CornerRadius="8" 
+                                    Padding="40,30" Margin="15,15,15,10">
+                                <TextBlock x:Name="WeightDisplayTxt" Text="0.0 kg" 
+                                           FontSize="48" FontWeight="Bold"
+                                           HorizontalAlignment="Center"
+                                           Foreground="#FF27AE60"/>
+                            </Border>
+                            
+                            <!-- Compact Info Line (Single row with icons) -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" 
+                                        Margin="0,5,0,10">
+                                <Ellipse x:Name="StreamIndicator" Width="10" Height="10" 
+                                         Fill="#FFE74C3C" Margin="0,0,5,0"/>
+                                <TextBlock x:Name="StreamStatusTxt" Text="Stopped" 
+                                           FontSize="11" Margin="0,0,10,0"/>
+                                <TextBlock Text="✓" x:Name="CalStatusIcon" 
+                                           FontSize="11" Foreground="#FF27AE60" Margin="0,0,3,0"/>
+                                <TextBlock x:Name="CalStatusText" Text="Calibrated" FontSize="11" Margin="0,0,10,0"/>
+                                <TextBlock Text="Raw:" FontSize="11" Margin="0,0,3,0"/>
+                                <TextBlock x:Name="RawTxt" Text="0" FontSize="11" Margin="0,0,10,0"/>
+                                <TextBlock x:Name="TareStatusTxt" Text="Tare:✓" FontSize="11"/>
+                            </StackPanel>
+                            
+                            <!-- Compact Buttons -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,10">
+                                <Button Content="Tare" Style="{StaticResource ModernButton}" 
+                                        Background="#FF3498DB" Click="Tare_Click" 
+                                        Width="70" Height="32" Margin="3,0"/>
+                                <Button Content="Calibrate" Style="{StaticResource ModernButton}" 
+                                        Background="#FF27AE60" Click="Calibrate_Click" 
+                                        Width="70" Height="32" Margin="3,0"/>
+                                <Button Content="Reset Calibration" Style="{StaticResource ModernButton}" 
+                                        Background="#FFE74C3C" Click="ResetCalibration_Click" 
+                                        Width="150" Height="32" Margin="3,0"/>
+                                <Button Content="Reset Tare" Style="{StaticResource DangerButton}" 
+                                        Click="ResetTare_Click" Height="32" Width="90" Margin="3,0"/>
+                                <Button Content="📈 Suspension Graph" Style="{StaticResource ModernButton}" 
+                                        Background="#FF27AE60" Click="OpenGraphWindow_Click" 
+                                        Height="32" Width="100" Margin="3,0"/>
+                                <Button Content="🚗 LMV Axle" Style="{StaticResource ModernButton}" 
+                                        Background="#FF27AE60" Click="OpenLMVAxleWindow_Click" 
+                                        Height="32" Width="110" Margin="3,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </GroupBox>
+
+                <!-- Three-Column Control Panel -->
+                <Grid Margin="0,15,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Column 1: ADC Mode Control -->
+                    <Border Grid.Column="0" Style="{StaticResource DataCard}" 
+                            BorderBrush="#FF2196F3" BorderThickness="2" Margin="0,0,5,0">
+                        <StackPanel Margin="15">
+                            <TextBlock Text="ADC MODE" FontWeight="Bold" FontSize="12" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            
+                            <!-- Radio-style mode selector -->
+                            <StackPanel Margin="0,0,0,10">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                    <Ellipse x:Name="InternalModeIndicator" Width="12" Height="12" 
+                                             Fill="#FF2196F3" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Internal (12-bit)" FontSize="12"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse x:Name="ADS1115ModeIndicator" Width="12" Height="12" 
+                                             Fill="#FFCCCCCC" Margin="0,0,8,0"/>
+                                    <TextBlock Text="ADS1115 (16-bit)" FontSize="12"/>
+                                </StackPanel>
+                            </StackPanel>
+                            
+                            <Button x:Name="SwitchModeBtn" Content="Switch Mode" 
+                                    Style="{StaticResource ModernButton}" 
+                                    Background="#FF2196F3" Click="SwitchModeBtn_Click" 
+                                    Height="32" Margin="0,5,0,5"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Column 2: System Status -->
+                    <Border Grid.Column="1" Style="{StaticResource DataCard}" 
+                            BorderBrush="#FF17A2B8" BorderThickness="2" Margin="5,0">
+                        <StackPanel Margin="15">
+                            <TextBlock Text="SYSTEM STATUS" FontWeight="Bold" FontSize="12" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
+                                <TextBlock Text="Status:" FontSize="11" Margin="0,0,5,0"/>
+                                <Ellipse x:Name="SystemStatusIndicator" Width="10" Height="10" Fill="#FF27AE60" Margin="0,0,5,0"/>
+                                <TextBlock x:Name="SystemStatusText" Text="OK" FontSize="11" FontWeight="Bold"/>
+                            </StackPanel>
+                            
+                            <TextBlock x:Name="DataRateTxt" Text="Rate: --" FontSize="11" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="LastUpdateTxt" Text="Updated: --" FontSize="11" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="ErrorCountTxt" Text="Errors: 0" FontSize="11" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button x:Name="RequestStatusBtn" Content="Status" 
+                                        Style="{StaticResource ModernButton}" 
+                                        Background="#FF17A2B8" Click="RequestStatusBtn_Click" 
+                                        Width="70" Height="32" Margin="2,0"/>
+                                <Button x:Name="StatusHistoryBtn" Content="History" 
+                                        Style="{StaticResource ModernButton}" 
+                                        Background="#FF6F42C1" Click="StatusHistoryBtn_Click" 
+                                        Width="70" Height="32" Margin="2,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Column 3: Data Logging -->
+                    <Border Grid.Column="2" Style="{StaticResource DataCard}" 
+                            BorderBrush="#FF28A745" BorderThickness="2" Margin="5,0,0,0">
+                        <StackPanel Margin="15">
+                            <TextBlock Text="DATA LOGGING" FontWeight="Bold" FontSize="12" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
+                                <Ellipse x:Name="LoggingStatusIndicator" Width="10" Height="10" Fill="#FFDC3545" Margin="0,0,5,0"/>
+                                <TextBlock x:Name="LoggingStatusTxt" Text="Not logging" FontSize="11"/>
+                            </StackPanel>
+                            
+                            <TextBlock x:Name="SampleCountTxt" Text="0 samples" FontSize="11" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
+                                <Button x:Name="StartLoggingBtn" Content="Start" 
+                                        Style="{StaticResource ModernButton}" Background="#FF28A745" 
+                                        Click="StartLogging_Click" Width="70" Height="32" Margin="2,0"/>
+                                <Button x:Name="StopLoggingBtn" Content="Stop" 
+                                        Style="{StaticResource ModernButton}" Background="#FFDC3545" 
+                                        Click="StopLogging_Click" Width="70" Height="32" 
+                                        Margin="2,0" IsEnabled="False"/>
+                            </StackPanel>
+                            
+                            <Button x:Name="ExportLogBtn" Content="Export CSV" 
+                                    Style="{StaticResource ModernButton}" Background="#FF17A2B8" 
+                                    Click="ExportLog_Click" Height="32" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Firmware Update -->
+                <GroupBox x:Name="FirmwareUpdateGroupBox" Header="Firmware Update" Style="{StaticResource ResponsiveGroupBox}" Margin="0,15,0,0">
+                    <StackPanel Margin="15">
+                        <TextBlock x:Name="FirmwareStatusText" Text="Status: Idle" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="FirmwareFilePathText" Text="Selected file: (none)" FontSize="11" Margin="0,0,0,6"/>
+                        <ProgressBar x:Name="FirmwareProgressBar" Height="10" Minimum="0" Maximum="100" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="FirmwareProgressLabel" Text="0%" FontSize="10"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button x:Name="BrowseFirmwareBtn" Content="📂 Select BIN" Style="{StaticResource ModernButton}"
+                                    Click="BrowseFirmwareBtn_Click" Width="130" Margin="0,0,6,0"/>
+                            <Button x:Name="StartFirmwareUpdateBtn" Content="⬆ Start Update" Style="{StaticResource SuccessButton}"
+                                    Click="StartFirmwareUpdateBtn_Click" Width="130" Margin="0,0,6,0"/>
+                            <Button x:Name="QueryBootInfoBtn" Content="Query Boot Info" Style="{StaticResource ModernButton}"
+                                    Click="QueryBootInfoBtn_Click" Width="130" Margin="0,0,6,0"/>
+                            <Button x:Name="EnterBootloaderBtn" Content="Enter Bootloader" Style="{StaticResource DangerButton}"
+                                    Click="EnterBootloaderBtn_Click" Width="140"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- Status Bar -->
+        <StatusBar Grid.Row="4" Background="{StaticResource PrimaryBlue}" Foreground="White" Height="28">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusBarText" Text="Ready | CAN v0.7 @ 250 kbps" />
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock x:Name="StreamStatusBar" Text="Idle" />
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="TxIndicator" Width="8" Height="8" Fill="#FFDC3545" Margin="0,0,5,0"/>
+                    <TextBlock Text="TX:" Margin="0,0,5,0"/>
+                    <TextBlock x:Name="TxCountBar" Text="0" />
+                </StackPanel>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock x:Name="MessageCountBar" Text="RX: 0" />
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <Button x:Name="CheckUpdatesBtn" Content="Check for Updates"
+                        Click="CheckUpdatesBtn_Click"
+                        Background="Transparent" BorderThickness="0" Foreground="White"
+                        FontSize="10" Padding="5,2" Cursor="Hand"
+                        ToolTip="Check for application updates">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" 
+                                                Padding="{TemplateBinding Padding}"
+                                                CornerRadius="2">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#33FFFFFF"/>
+                                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="DownloadStatusText" Text="" FontSize="10" Visibility="Collapsed" Margin="0,0,10,0"/>
+                    <TextBlock x:Name="TimestampText" Text="" />
+                </StackPanel>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem HorizontalAlignment="Right">
+                <TextBlock Text="© 2025 AVL India Pvt Ltd. All rights reserved." FontSize="10" Opacity="0.8"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

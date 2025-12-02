@@ -1,8 +1,7 @@
 ﻿<Application x:Class="SuspensionPCB_CAN_WPF.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:sys="clr-namespace:System;assembly=mscorlib"
-             StartupUri="MainWindow.xaml">
+             xmlns:sys="clr-namespace:System;assembly=mscorlib">
     <Application.Resources>
         <!-- Centralized Color Resources -->
         <SolidColorBrush x:Key="PrimaryBlue" Color="#FF1B5E96"/>

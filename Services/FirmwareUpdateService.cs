@@ -3,7 +3,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using SuspensionPCB_CAN_WPF;
+using SuspensionPCB_CAN_WPF.Models;
+using SuspensionPCB_CAN_WPF.Core;
 
 namespace SuspensionPCB_CAN_WPF.Services
 {
