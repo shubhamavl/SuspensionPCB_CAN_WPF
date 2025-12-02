@@ -271,5 +271,27 @@ namespace SuspensionPCB_CAN_WPF.Services
                 ProductionLogger.Instance.LogError($"Failed to save bootloader setting: {ex.Message}", "Settings");
             }
         }
+        
+        /// <summary>
+        /// Set calibration averaging settings
+        /// </summary>
+        public void SetCalibrationAveragingSettings(int sampleCount, int durationMs, bool useMedian, bool removeOutliers, double outlierThreshold, double maxStdDev)
+        {
+            try
+            {
+                _settings.CalibrationSampleCount = sampleCount;
+                _settings.CalibrationCaptureDurationMs = durationMs;
+                _settings.CalibrationUseMedian = useMedian;
+                _settings.CalibrationRemoveOutliers = removeOutliers;
+                _settings.CalibrationOutlierThreshold = outlierThreshold;
+                _settings.CalibrationMaxStdDev = maxStdDev;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"Calibration averaging settings saved: SampleCount={sampleCount}, Duration={durationMs}ms, UseMedian={useMedian}, RemoveOutliers={removeOutliers}, OutlierThreshold={outlierThreshold:F1}σ, MaxStdDev={maxStdDev:F1}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to save calibration averaging settings: {ex.Message}", "Settings");
+            }
+        }
     }
 }

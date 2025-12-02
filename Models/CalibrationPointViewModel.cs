@@ -18,6 +18,12 @@ namespace SuspensionPCB_CAN_WPF.Models
         private bool _bothModesCaptured = false;
         private string _statusText = "Ready to capture";
         
+        // Statistics properties for multi-sample averaging
+        private double _captureMean = 0;
+        private double _captureStdDev = 0;
+        private int _captureSampleCount = 0;
+        private string _captureStabilityWarning = "";
+        
         public int PointNumber
         {
             get => _pointNumber;
@@ -91,12 +97,45 @@ namespace SuspensionPCB_CAN_WPF.Models
             set { _statusText = value; OnPropertyChanged(nameof(StatusText)); }
         }
         
+        public double CaptureMean
+        {
+            get => _captureMean;
+            set { _captureMean = value; OnPropertyChanged(nameof(CaptureMean)); }
+        }
+        
+        public double CaptureStdDev
+        {
+            get => _captureStdDev;
+            set { _captureStdDev = value; OnPropertyChanged(nameof(CaptureStdDev)); }
+        }
+        
+        public int CaptureSampleCount
+        {
+            get => _captureSampleCount;
+            set { _captureSampleCount = value; OnPropertyChanged(nameof(CaptureSampleCount)); }
+        }
+        
+        public string CaptureStabilityWarning
+        {
+            get => _captureStabilityWarning;
+            set { _captureStabilityWarning = value; OnPropertyChanged(nameof(CaptureStabilityWarning)); }
+        }
+        
         private void UpdateStatusText()
         {
             if (_bothModesCaptured && _isCaptured)
             {
                 string zeroIndicator = Math.Abs(KnownWeight) < 0.01 ? " [ZERO POINT]" : "";
-                StatusText = $"✓ Captured: {KnownWeight:F0} kg @ Internal:{InternalADC} ADS1115:{ADS1115ADC}{zeroIndicator}";
+                string statsInfo = "";
+                
+                // Show statistics if available
+                if (_captureSampleCount > 0)
+                {
+                    string stabilityIndicator = string.IsNullOrEmpty(_captureStabilityWarning) ? "✓" : "⚠";
+                    statsInfo = $" (n={_captureSampleCount}, σ={_captureStdDev:F1}){stabilityIndicator}";
+                }
+                
+                StatusText = $"✓ Captured: {KnownWeight:F0} kg @ Internal:{InternalADC} ADS1115:{ADS1115ADC}{zeroIndicator}{statsInfo}";
             }
             else if (_isCaptured)
             {

@@ -545,6 +545,14 @@ namespace SuspensionPCB_CAN_WPF.Services
         }
 
         /// <summary>
+        /// Check if the current adapter is a simulator (not real CAN hardware)
+        /// </summary>
+        public bool IsSimulatorAdapter()
+        {
+            return _adapter?.AdapterType == "Simulator";
+        }
+
+        /// <summary>
         /// Set data timeout for CAN communication
         /// </summary>
         /// <param name="timeout">Timeout duration</param>

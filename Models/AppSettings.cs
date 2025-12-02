@@ -47,6 +47,14 @@ namespace SuspensionPCB_CAN_WPF.Models
         public int CalibrationCaptureDelayMs { get; set; } = 500; // Delay before capturing calibration point
         public bool ShowCalibrationQualityMetrics { get; set; } = true; // Display R² and error metrics
         
+        // Calibration Averaging Settings
+        public int CalibrationSampleCount { get; set; } = 50; // Number of samples to collect for averaging
+        public int CalibrationCaptureDurationMs { get; set; } = 2000; // Duration to collect samples over (milliseconds)
+        public bool CalibrationUseMedian { get; set; } = true; // Use median instead of mean (more robust to outliers)
+        public bool CalibrationRemoveOutliers { get; set; } = true; // Remove outliers before averaging
+        public double CalibrationOutlierThreshold { get; set; } = 2.0; // Standard deviations for outlier removal
+        public double CalibrationMaxStdDev { get; set; } = 10.0; // Maximum acceptable standard deviation (warning threshold)
+        
         // Bootloader Settings
         public bool EnableBootloaderFeatures { get; set; } = true; // Enable/disable all bootloader functionality
     }

@@ -153,9 +153,6 @@
                     <Button Content="📊 Open Monitor" Style="{StaticResource ModernButton}" 
                             Background="#FF17A2B8" Click="OpenMonitorWindow_Click"
                             Height="36" Margin="5,5,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
-                    <Button Content="🚗 LMV Axle Weight" Style="{StaticResource ModernButton}" 
-                            Background="#FF27AE60" Click="OpenLMVAxleWindow_Click"
-                            Height="36" Margin="5,2,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
                     <Button Content="📝 Open Logs" Style="{StaticResource ModernButton}" 
                             Background="#FF95A5A6" Click="OpenLogsWindow_Click"
                             Height="36" Margin="5,2,5,2" HorizontalContentAlignment="Left" Padding="10,0"/>
@@ -543,6 +540,78 @@
                                     Click="CalibrationCaptureDelayInfoBtn_Click"
                                     ToolTip="Info: Calibration Capture Delay"/>
                             <TextBlock Text="(Delay before capturing calibration point)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Calibration Averaging Settings -->
+                        <TextBlock Text="Calibration Averaging (Multi-Sample)" FontWeight="Bold" FontSize="12" 
+                                   Margin="0,10,0,5" Foreground="#FF2C3E50"/>
+                        
+                        <!-- Sample Count -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Sample Count:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="CalibrationSampleCountSlider" Width="200" Minimum="10" Maximum="200" 
+                                    Value="50" TickFrequency="10" IsSnapToTickEnabled="True"
+                                    ValueChanged="CalibrationSampleCountSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="CalibrationSampleCountValueTxt" Text="50" Width="50" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(Number of samples to average)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Capture Duration -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Capture Duration:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="CalibrationCaptureDurationSlider" Width="200" Minimum="500" Maximum="5000" 
+                                    Value="2000" TickFrequency="500" IsSnapToTickEnabled="True"
+                                    ValueChanged="CalibrationCaptureDurationSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="CalibrationCaptureDurationValueTxt" Text="2000 ms" Width="70" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(Duration to collect samples)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Use Median -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <CheckBox x:Name="CalibrationUseMedianCheckBox" Content="Use Median (instead of Mean)" 
+                                      IsChecked="True" Checked="CalibrationUseMedianCheckBox_Changed" 
+                                      Unchecked="CalibrationUseMedianCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center" Width="200"/>
+                            <TextBlock Text="(More robust to outliers)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Remove Outliers -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <CheckBox x:Name="CalibrationRemoveOutliersCheckBox" Content="Remove Outliers" 
+                                      IsChecked="True" Checked="CalibrationRemoveOutliersCheckBox_Changed" 
+                                      Unchecked="CalibrationRemoveOutliersCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center" Width="200"/>
+                            <TextBlock Text="(Filter extreme values)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Outlier Threshold -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Outlier Threshold:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="CalibrationOutlierThresholdSlider" Width="200" Minimum="1.0" Maximum="4.0" 
+                                    Value="2.0" TickFrequency="0.5" IsSnapToTickEnabled="True"
+                                    ValueChanged="CalibrationOutlierThresholdSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="CalibrationOutlierThresholdValueTxt" Text="2.0 σ" Width="60" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(Standard deviations)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Max Std Dev -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Max Std Dev:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
+                            <Slider x:Name="CalibrationMaxStdDevSlider" Width="200" Minimum="5.0" Maximum="50.0" 
+                                    Value="10.0" TickFrequency="5.0" IsSnapToTickEnabled="True"
+                                    ValueChanged="CalibrationMaxStdDevSlider_ValueChanged" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="CalibrationMaxStdDevValueTxt" Text="10.0" Width="50" 
+                                       VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="(Warning threshold)" 
                                        FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
                         </StackPanel>
                         

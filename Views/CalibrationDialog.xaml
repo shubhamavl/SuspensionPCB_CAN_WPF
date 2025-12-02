@@ -7,6 +7,9 @@
         ResizeMode="CanResize" Background="#FFF8F9FA" Icon="pack://application:,,,/Assets/AVL_Icon.ico">
 
     <Window.Resources>
+        <!-- Converters -->
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        
         <!-- Modern Professional Styles -->
         <Style x:Key="ModernButton" TargetType="Button">
             <Setter Property="Background" Value="#FF1B5E96"/>
@@ -391,6 +394,33 @@
                                                 </Button.Template>
                                             </Button>
                                         </Grid>
+                                        
+                                        <!-- Statistics Display (shown when captured) -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,5" 
+                                                   Visibility="{Binding BothModesCaptured, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBlock Text="Statistics: " FontSize="9" Foreground="#FF6C757D" FontWeight="SemiBold" Margin="0,0,5,0"/>
+                                            <TextBlock FontSize="9" Foreground="#FF6C757D">
+                                                <Run Text="n="/><Run Text="{Binding CaptureSampleCount}"/>
+                                                <Run Text=", "/><Run Text="μ="/><Run Text="{Binding CaptureMean, StringFormat=F1}"/>
+                                                <Run Text=", "/><Run Text="σ="/><Run Text="{Binding CaptureStdDev, StringFormat=F2}"/>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding CaptureStabilityWarning}" FontSize="9" 
+                                                       Foreground="#FFFF9800" FontWeight="Bold" Margin="10,0,0,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding CaptureStabilityWarning}" Value="">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding CaptureStabilityWarning}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
                                         
                                         <!-- Status -->
                                         <TextBlock Text="{Binding StatusText}" FontSize="9" 

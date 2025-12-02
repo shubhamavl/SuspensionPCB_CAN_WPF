@@ -41,7 +41,8 @@
                 <Ellipse Width="10" Height="10" Fill="#FF3498DB" Margin="0,0,10,0"/>
                 <TextBlock x:Name="RightWeightText" Text="-- kg" Margin="0,0,20,0"/>
                 <TextBlock Text="Samples:" FontWeight="SemiBold" Margin="0,0,5,0"/>
-                <TextBlock x:Name="SampleCountText" Text="0"/>
+                <TextBlock x:Name="SampleCountText" Text="0" Margin="0,0,20,0"/>
+                <TextBlock x:Name="YAxisRangeText" Text="Y: 0-1000 kg" FontSize="10" Foreground="#FF6C757D"/>
             </StackPanel>
         </Border>
 
@@ -51,23 +52,70 @@
         <!-- Control Panel -->
         <Border Grid.Row="3" Background="#FFF0F0F0" BorderBrush="#FFCCCCCC" 
                 BorderThickness="0,1,0,0" Padding="10">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <Button x:Name="PauseBtn" Content="⏸ Pause" 
-                        Style="{StaticResource ModernButton}" 
-                        Background="#FF17A2B8" Click="PauseBtn_Click" 
-                        Width="100" Height="32" Margin="5,0"/>
-                <Button x:Name="ResumeBtn" Content="▶ Resume" 
-                        Style="{StaticResource ModernButton}" 
-                        Background="#FF28A745" Click="ResumeBtn_Click" 
-                        Width="100" Height="32" Margin="5,0" IsEnabled="False"/>
-                <Button x:Name="ClearBtn" Content="🗑 Clear" 
-                        Style="{StaticResource ModernButton}" 
-                        Background="#FF95A5A6" Click="ClearBtn_Click" 
-                        Width="100" Height="32" Margin="5,0"/>
-                <Button x:Name="ExportBtn" Content="💾 Export CSV" 
-                        Style="{StaticResource ModernButton}" 
-                        Background="#FF6F42C1" Click="ExportBtn_Click" 
-                        Width="120" Height="32" Margin="5,0"/>
+            <StackPanel>
+                <!-- Primary Controls Row -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
+                    <Button x:Name="PauseBtn" Content="⏸ Pause" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF17A2B8" Click="PauseBtn_Click" 
+                            Width="100" Height="32" Margin="5,0"/>
+                    <Button x:Name="ResumeBtn" Content="▶ Resume" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF28A745" Click="ResumeBtn_Click" 
+                            Width="100" Height="32" Margin="5,0" IsEnabled="False"/>
+                    <Button x:Name="ClearBtn" Content="🗑 Clear" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF95A5A6" Click="ClearBtn_Click" 
+                            Width="100" Height="32" Margin="5,0"/>
+                    <Button x:Name="ExportBtn" Content="💾 Export CSV" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF6F42C1" Click="ExportBtn_Click" 
+                            Width="120" Height="32" Margin="5,0"/>
+                </StackPanel>
+                
+                <!-- Separator -->
+                <Separator Margin="0,5"/>
+                
+                <!-- Axis and Display Controls Row -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,5">
+                    <Button x:Name="YAxisModeToggle" Content="Y: Auto" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF27AE60" Click="YAxisModeToggle_Click" 
+                            Width="90" Height="32" Margin="5,0"
+                            ToolTip="Toggle between Auto-scale and Fixed range Y-axis"/>
+                    <Button x:Name="XAxisModeToggle" Content="X: Samples" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF6C757D" Click="XAxisModeToggle_Click" 
+                            Width="100" Height="32" Margin="5,0"
+                            ToolTip="Toggle between Sample-based and Time-based X-axis"/>
+                    <Button x:Name="LegendToggle" Content="Legend: On" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF17A2B8" Click="LegendToggle_Click" 
+                            Width="100" Height="32" Margin="5,0"
+                            ToolTip="Show/Hide chart legend"/>
+                </StackPanel>
+                
+                <!-- Separator -->
+                <Separator Margin="0,5"/>
+                
+                <!-- Zoom Controls Row -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="ZoomInBtn" Content="🔍+ Zoom In" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF3498DB" Click="ZoomInBtn_Click" 
+                            Width="110" Height="32" Margin="5,0"
+                            ToolTip="Zoom in on the chart"/>
+                    <Button x:Name="ZoomOutBtn" Content="🔍- Zoom Out" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF3498DB" Click="ZoomOutBtn_Click" 
+                            Width="110" Height="32" Margin="5,0"
+                            ToolTip="Zoom out on the chart"/>
+                    <Button x:Name="ResetViewBtn" Content="↺ Reset View" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF95A5A6" Click="ResetViewBtn_Click" 
+                            Width="110" Height="32" Margin="5,0"
+                            ToolTip="Reset zoom and pan to default view"/>
+                </StackPanel>
             </StackPanel>
         </Border>
     </Grid>

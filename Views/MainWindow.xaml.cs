@@ -2404,6 +2404,49 @@ namespace SuspensionPCB_CAN_WPF.Views
                 if (EnableBootloaderFeaturesCheckBox != null)
                     EnableBootloaderFeaturesCheckBox.IsChecked = settings.EnableBootloaderFeatures;
                 
+                // Set calibration averaging settings
+                if (CalibrationSampleCountSlider != null)
+                {
+                    CalibrationSampleCountSlider.Value = settings.CalibrationSampleCount;
+                    if (CalibrationSampleCountValueTxt != null)
+                    {
+                        CalibrationSampleCountValueTxt.Text = $"{settings.CalibrationSampleCount}";
+                    }
+                }
+                
+                if (CalibrationCaptureDurationSlider != null)
+                {
+                    CalibrationCaptureDurationSlider.Value = settings.CalibrationCaptureDurationMs;
+                    if (CalibrationCaptureDurationValueTxt != null)
+                    {
+                        CalibrationCaptureDurationValueTxt.Text = $"{settings.CalibrationCaptureDurationMs} ms";
+                    }
+                }
+                
+                if (CalibrationUseMedianCheckBox != null)
+                    CalibrationUseMedianCheckBox.IsChecked = settings.CalibrationUseMedian;
+                
+                if (CalibrationRemoveOutliersCheckBox != null)
+                    CalibrationRemoveOutliersCheckBox.IsChecked = settings.CalibrationRemoveOutliers;
+                
+                if (CalibrationOutlierThresholdSlider != null)
+                {
+                    CalibrationOutlierThresholdSlider.Value = settings.CalibrationOutlierThreshold;
+                    if (CalibrationOutlierThresholdValueTxt != null)
+                    {
+                        CalibrationOutlierThresholdValueTxt.Text = $"{settings.CalibrationOutlierThreshold:F1} σ";
+                    }
+                }
+                
+                if (CalibrationMaxStdDevSlider != null)
+                {
+                    CalibrationMaxStdDevSlider.Value = settings.CalibrationMaxStdDev;
+                    if (CalibrationMaxStdDevValueTxt != null)
+                    {
+                        CalibrationMaxStdDevValueTxt.Text = $"{settings.CalibrationMaxStdDev:F1}";
+                    }
+                }
+                
                 // Apply advanced settings immediately
                 ApplyAdvancedSettings();
                 
@@ -2437,6 +2480,15 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Save bootloader setting
                 bool enableBootloader = EnableBootloaderFeaturesCheckBox?.IsChecked ?? true;
                 _settingsManager.SetBootloaderFeaturesEnabled(enableBootloader);
+                
+                // Save calibration averaging settings
+                int sampleCount = (int)(CalibrationSampleCountSlider?.Value ?? 50);
+                int durationMs = (int)(CalibrationCaptureDurationSlider?.Value ?? 2000);
+                bool useMedian = CalibrationUseMedianCheckBox?.IsChecked ?? true;
+                bool removeOutliers = CalibrationRemoveOutliersCheckBox?.IsChecked ?? true;
+                double outlierThreshold = CalibrationOutlierThresholdSlider?.Value ?? 2.0;
+                double maxStdDev = CalibrationMaxStdDevSlider?.Value ?? 10.0;
+                _settingsManager.SetCalibrationAveragingSettings(sampleCount, durationMs, useMedian, removeOutliers, outlierThreshold, maxStdDev);
                 
                 // Update bootloader UI visibility
                 UpdateBootloaderUIVisibility();
@@ -2534,6 +2586,84 @@ namespace SuspensionPCB_CAN_WPF.Views
         private void EnableBootloaderFeaturesCheckBox_Changed(object sender, RoutedEventArgs e)
         {
             ApplyAdvancedSettings();
+        }
+
+        private void CalibrationSampleCountSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (CalibrationSampleCountValueTxt != null)
+                {
+                    int sampleCount = (int)e.NewValue;
+                    CalibrationSampleCountValueTxt.Text = $"{sampleCount}";
+                }
+                ApplyAdvancedSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Calibration sample count slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void CalibrationCaptureDurationSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (CalibrationCaptureDurationValueTxt != null)
+                {
+                    int durationMs = (int)e.NewValue;
+                    CalibrationCaptureDurationValueTxt.Text = $"{durationMs} ms";
+                }
+                ApplyAdvancedSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Calibration capture duration slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void CalibrationUseMedianCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyAdvancedSettings();
+        }
+
+        private void CalibrationRemoveOutliersCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyAdvancedSettings();
+        }
+
+        private void CalibrationOutlierThresholdSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (CalibrationOutlierThresholdValueTxt != null)
+                {
+                    double threshold = e.NewValue;
+                    CalibrationOutlierThresholdValueTxt.Text = $"{threshold:F1} σ";
+                }
+                ApplyAdvancedSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Calibration outlier threshold slider error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void CalibrationMaxStdDevSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                if (CalibrationMaxStdDevValueTxt != null)
+                {
+                    double maxStdDev = e.NewValue;
+                    CalibrationMaxStdDevValueTxt.Text = $"{maxStdDev:F1}";
+                }
+                ApplyAdvancedSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Calibration max std dev slider error: {ex.Message}", "Settings");
+            }
         }
 
         private void EnableBootloaderFeaturesInfoBtn_Click(object sender, RoutedEventArgs e)
@@ -3979,7 +4109,7 @@ Most users should keep default values unless experiencing specific issues.";
                     return;
                 }
 
-                _graphWindow = new SuspensionGraphWindow(_canService, _weightProcessor);
+                _graphWindow = new SuspensionGraphWindow(_canService, _weightProcessor, _currentTransmissionRate);
                 _graphWindow.Owner = this;
                 _graphWindow.Closed += (s, args) => { _graphWindow = null; };
                 _graphWindow.Show();
@@ -5007,6 +5137,12 @@ Most users should keep default values unless experiencing specific issues.";
                     
                     // Save to settings
                     _settingsManager.SetTransmissionRate(_currentTransmissionRate, HeaderRateCombo.SelectedIndex);
+                    
+                    // Update graph window if open
+                    if (_graphWindow != null && _graphWindow.IsLoaded)
+                    {
+                        _graphWindow.UpdateTransmissionRate(_currentTransmissionRate);
+                    }
                     
                     _logger.LogInfo($"Transmission rate changed from header: {GetRateText(_currentTransmissionRate)}", "Settings");
                 }

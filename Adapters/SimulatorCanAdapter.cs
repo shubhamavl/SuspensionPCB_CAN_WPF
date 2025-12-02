@@ -7,6 +7,17 @@ using SuspensionPCB_CAN_WPF.Services;
 namespace SuspensionPCB_CAN_WPF.Adapters
 {
     /// <summary>
+    /// Simulation pattern types
+    /// </summary>
+    public enum SimulationPattern
+    {
+        Static,      // Constant weight (current behavior)
+        DampedSine,  // Oscillating weight that settles (like utility)
+        Step,        // Sudden weight change that settles
+        Ramp         // Linear weight increase/decrease
+    }
+
+    /// <summary>
     /// Simulator CAN adapter for testing without hardware
     /// Automatically generates realistic weight data
     /// </summary>
@@ -25,7 +36,7 @@ namespace SuspensionPCB_CAN_WPF.Adapters
         private byte _rightStreamRate = 0x03; // 1kHz default
         private byte _currentADCMode = 0; // 0=Internal, 1=ADS1115
         
-        // Simulated weight values (in kg)
+        // Simulated weight values (in kg) - used for Static pattern
         private double _leftWeightKg = 0.0;
         private double _rightWeightKg = 0.0;
         
@@ -41,6 +52,24 @@ namespace SuspensionPCB_CAN_WPF.Adapters
         private readonly Random _random = new Random();
         private double _noiseLevel = 5.0; // ±5 ADC counts noise
         private readonly object _parameterLock = new object(); // Lock for parameter access
+        
+        // Pattern simulation (per side)
+        private SimulationPattern _leftPattern = SimulationPattern.Static;
+        private SimulationPattern _rightPattern = SimulationPattern.Static;
+        private double _leftBaseline = 0.0;
+        private double _rightBaseline = 0.0;
+        private double _leftAmplitude = 200.0;
+        private double _rightAmplitude = 200.0;
+        private double _leftFrequency = 2.0; // Hz
+        private double _rightFrequency = 2.0; // Hz
+        private double _leftDamping = 0.2;
+        private double _rightDamping = 0.2;
+        private double _leftRampDuration = 5.0; // seconds
+        private double _rightRampDuration = 5.0; // seconds
+        
+        // Pattern timing (per side)
+        private DateTime _leftPatternStartTime = DateTime.Now;
+        private DateTime _rightPatternStartTime = DateTime.Now;
 
         // Protocol constants
         private const uint CAN_MSG_ID_LEFT_RAW_DATA = 0x200;
@@ -184,7 +213,9 @@ namespace SuspensionPCB_CAN_WPF.Adapters
                     // Send left side data if stream is active
                     if (_leftStreamActive)
                     {
-                        ushort leftADC = CalculateSimulatedADC(_leftWeightKg, _leftZeroADC, _leftSensitivity);
+                        // Calculate weight based on pattern
+                        double leftWeight = CalculatePatternWeight(true);
+                        ushort leftADC = CalculateSimulatedADC(leftWeight, _leftZeroADC, _leftSensitivity);
                         byte[] leftData = new byte[] { (byte)(leftADC & 0xFF), (byte)((leftADC >> 8) & 0xFF) };
                         var leftMessage = new CANMessage(CAN_MSG_ID_LEFT_RAW_DATA, leftData, DateTime.Now);
                         MessageReceived?.Invoke(leftMessage);
@@ -195,7 +226,9 @@ namespace SuspensionPCB_CAN_WPF.Adapters
                     // Send right side data if stream is active
                     if (_rightStreamActive)
                     {
-                        ushort rightADC = CalculateSimulatedADC(_rightWeightKg, _rightZeroADC, _rightSensitivity);
+                        // Calculate weight based on pattern
+                        double rightWeight = CalculatePatternWeight(false);
+                        ushort rightADC = CalculateSimulatedADC(rightWeight, _rightZeroADC, _rightSensitivity);
                         byte[] rightData = new byte[] { (byte)(rightADC & 0xFF), (byte)((rightADC >> 8) & 0xFF) };
                         var rightMessage = new CANMessage(CAN_MSG_ID_RIGHT_RAW_DATA, rightData, DateTime.Now);
                         MessageReceived?.Invoke(rightMessage);
@@ -347,6 +380,159 @@ namespace SuspensionPCB_CAN_WPF.Adapters
                 if (adcValue > maxADC) adcValue = maxADC;
                 return (ushort)adcValue;
             }
+        }
+
+        // Pattern properties (thread-safe)
+        public SimulationPattern LeftPattern
+        {
+            get { lock (_parameterLock) { return _leftPattern; } }
+            set { lock (_parameterLock) { _leftPattern = value; _leftPatternStartTime = DateTime.Now; } }
+        }
+
+        public SimulationPattern RightPattern
+        {
+            get { lock (_parameterLock) { return _rightPattern; } }
+            set { lock (_parameterLock) { _rightPattern = value; _rightPatternStartTime = DateTime.Now; } }
+        }
+
+        public double LeftBaseline
+        {
+            get { lock (_parameterLock) { return _leftBaseline; } }
+            set { lock (_parameterLock) { _leftBaseline = value; } }
+        }
+
+        public double RightBaseline
+        {
+            get { lock (_parameterLock) { return _rightBaseline; } }
+            set { lock (_parameterLock) { _rightBaseline = value; } }
+        }
+
+        public double LeftAmplitude
+        {
+            get { lock (_parameterLock) { return _leftAmplitude; } }
+            set { lock (_parameterLock) { _leftAmplitude = value; } }
+        }
+
+        public double RightAmplitude
+        {
+            get { lock (_parameterLock) { return _rightAmplitude; } }
+            set { lock (_parameterLock) { _rightAmplitude = value; } }
+        }
+
+        public double LeftFrequency
+        {
+            get { lock (_parameterLock) { return _leftFrequency; } }
+            set { lock (_parameterLock) { _leftFrequency = value; } }
+        }
+
+        public double RightFrequency
+        {
+            get { lock (_parameterLock) { return _rightFrequency; } }
+            set { lock (_parameterLock) { _rightFrequency = value; } }
+        }
+
+        public double LeftDamping
+        {
+            get { lock (_parameterLock) { return _leftDamping; } }
+            set { lock (_parameterLock) { _leftDamping = value; } }
+        }
+
+        public double RightDamping
+        {
+            get { lock (_parameterLock) { return _rightDamping; } }
+            set { lock (_parameterLock) { _rightDamping = value; } }
+        }
+
+        public double LeftRampDuration
+        {
+            get { lock (_parameterLock) { return _leftRampDuration; } }
+            set { lock (_parameterLock) { _leftRampDuration = value; } }
+        }
+
+        public double RightRampDuration
+        {
+            get { lock (_parameterLock) { return _rightRampDuration; } }
+            set { lock (_parameterLock) { _rightRampDuration = value; } }
+        }
+
+        /// <summary>
+        /// Reset pattern start time for left side (restarts pattern)
+        /// </summary>
+        public void ResetLeftPattern()
+        {
+            lock (_parameterLock)
+            {
+                _leftPatternStartTime = DateTime.Now;
+            }
+        }
+
+        /// <summary>
+        /// Reset pattern start time for right side (restarts pattern)
+        /// </summary>
+        public void ResetRightPattern()
+        {
+            lock (_parameterLock)
+            {
+                _rightPatternStartTime = DateTime.Now;
+            }
+        }
+
+        /// <summary>
+        /// Calculate weight based on pattern type
+        /// </summary>
+        private double CalculatePatternWeight(bool isLeft)
+        {
+            SimulationPattern pattern;
+            double baseline;
+            double amplitude;
+            double frequency;
+            double damping;
+            double rampDuration;
+            DateTime patternStartTime;
+
+            lock (_parameterLock)
+            {
+                if (isLeft)
+                {
+                    pattern = _leftPattern;
+                    baseline = _leftBaseline;
+                    amplitude = _leftAmplitude;
+                    frequency = _leftFrequency;
+                    damping = _leftDamping;
+                    rampDuration = _leftRampDuration;
+                    patternStartTime = _leftPatternStartTime;
+                }
+                else
+                {
+                    pattern = _rightPattern;
+                    baseline = _rightBaseline;
+                    amplitude = _rightAmplitude;
+                    frequency = _rightFrequency;
+                    damping = _rightDamping;
+                    rampDuration = _rightRampDuration;
+                    patternStartTime = _rightPatternStartTime;
+                }
+            }
+
+            double t = (DateTime.Now - patternStartTime).TotalSeconds;
+
+            return pattern switch
+            {
+                SimulationPattern.Static => isLeft ? _leftWeightKg : _rightWeightKg,
+                SimulationPattern.DampedSine => baseline + amplitude * Math.Exp(-damping * t) * Math.Sin(2 * Math.PI * frequency * t),
+                SimulationPattern.Step => baseline + amplitude * (1 - Math.Exp(-damping * t)),
+                SimulationPattern.Ramp => baseline + (amplitude * t / Math.Max(0.1, rampDuration)),
+                _ => baseline
+            };
+        }
+
+        /// <summary>
+        /// Get current pattern weight directly (for direct graph path in simulator mode)
+        /// Bypasses ADC conversion and WeightProcessor
+        /// </summary>
+        public double GetCurrentPatternWeight(bool isLeft)
+        {
+            return CalculatePatternWeight(isLeft);
         }
 
         // Legacy methods for backward compatibility
