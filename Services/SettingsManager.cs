@@ -19,6 +19,7 @@ namespace SuspensionPCB_CAN_WPF.Services
         private SettingsManager()
         {
             _settingsPath = PathHelper.GetSettingsPath(); // Portable: next to executable
+            ProductionLogger.Instance.LogInfo($"Settings file path: {_settingsPath}", "Settings");
             
             LoadSettings();
         }
@@ -48,10 +49,12 @@ namespace SuspensionPCB_CAN_WPF.Services
                 {
                     string json = File.ReadAllText(_settingsPath);
                     _settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                    ProductionLogger.Instance.LogInfo($"Settings loaded from: {_settingsPath}", "Settings");
                 }
                 else
                 {
                     _settings = new AppSettings();
+                    ProductionLogger.Instance.LogInfo($"Settings file not found, using defaults: {_settingsPath}", "Settings");
                 }
             }
             catch (Exception ex)
@@ -75,7 +78,7 @@ namespace SuspensionPCB_CAN_WPF.Services
                 }
                 
                 File.WriteAllText(_settingsPath, json);
-                ProductionLogger.Instance.LogInfo("Settings saved successfully", "Settings");
+                ProductionLogger.Instance.LogInfo($"Settings saved to: {_settingsPath}", "Settings");
             }
             catch (Exception ex)
             {
@@ -275,10 +278,11 @@ namespace SuspensionPCB_CAN_WPF.Services
         /// <summary>
         /// Set calibration averaging settings
         /// </summary>
-        public void SetCalibrationAveragingSettings(int sampleCount, int durationMs, bool useMedian, bool removeOutliers, double outlierThreshold, double maxStdDev)
+        public void SetCalibrationAveragingSettings(bool enabled, int sampleCount, int durationMs, bool useMedian, bool removeOutliers, double outlierThreshold, double maxStdDev)
         {
             try
             {
+                _settings.CalibrationAveragingEnabled = enabled;
                 _settings.CalibrationSampleCount = sampleCount;
                 _settings.CalibrationCaptureDurationMs = durationMs;
                 _settings.CalibrationUseMedian = useMedian;
@@ -286,7 +290,7 @@ namespace SuspensionPCB_CAN_WPF.Services
                 _settings.CalibrationOutlierThreshold = outlierThreshold;
                 _settings.CalibrationMaxStdDev = maxStdDev;
                 SaveSettings();
-                ProductionLogger.Instance.LogInfo($"Calibration averaging settings saved: SampleCount={sampleCount}, Duration={durationMs}ms, UseMedian={useMedian}, RemoveOutliers={removeOutliers}, OutlierThreshold={outlierThreshold:F1}σ, MaxStdDev={maxStdDev:F1}", "Settings");
+                ProductionLogger.Instance.LogInfo($"Calibration averaging settings saved: Enabled={enabled}, SampleCount={sampleCount}, Duration={durationMs}ms, UseMedian={useMedian}, RemoveOutliers={removeOutliers}, OutlierThreshold={outlierThreshold:F1}σ, MaxStdDev={maxStdDev:F1}", "Settings");
             }
             catch (Exception ex)
             {

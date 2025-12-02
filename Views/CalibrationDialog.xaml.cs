@@ -283,18 +283,27 @@ namespace SuspensionPCB_CAN_WPF.Views
             {
                 // Get calibration settings
                 var settings = SettingsManager.Instance.Settings;
-                int sampleCount = settings.CalibrationSampleCount;
-                int durationMs = settings.CalibrationCaptureDurationMs;
-                bool useMedian = settings.CalibrationUseMedian;
-                bool removeOutliers = settings.CalibrationRemoveOutliers;
-                double outlierThreshold = settings.CalibrationOutlierThreshold;
-                double maxStdDev = settings.CalibrationMaxStdDev;
+                bool averagingEnabled = settings.CalibrationAveragingEnabled;
                 
-                // Step 1: Capture current mode ADC with averaging
+                // Step 1: Capture current mode ADC
                 string modeName = _adcMode == 0 ? "Internal" : "ADS1115";
-                point.StatusText = $"Collecting {modeName} ADC samples...";
                 
-                var firstResult = await CalibrationStatistics.CaptureAveragedADC(
+                ushort firstModeADC;
+                CalibrationCaptureResult? firstResult = null;
+                
+                if (averagingEnabled)
+                {
+                    // Multi-sample averaging mode
+                    int sampleCount = settings.CalibrationSampleCount;
+                    int durationMs = settings.CalibrationCaptureDurationMs;
+                    bool useMedian = settings.CalibrationUseMedian;
+                    bool removeOutliers = settings.CalibrationRemoveOutliers;
+                    double outlierThreshold = settings.CalibrationOutlierThreshold;
+                    double maxStdDev = settings.CalibrationMaxStdDev;
+                    
+                    point.StatusText = $"Collecting {modeName} ADC samples...";
+                    
+                    firstResult = await CalibrationStatistics.CaptureAveragedADC(
                     sampleCount: sampleCount,
                     durationMs: durationMs,
                     getCurrentADC: () => _currentRawADC,
@@ -309,12 +318,30 @@ namespace SuspensionPCB_CAN_WPF.Views
                     useMedian: useMedian,
                     removeOutliers: removeOutliers,
                     outlierThreshold: outlierThreshold,
-                    maxStdDev: maxStdDev
-                );
+                        maxStdDev: maxStdDev
+                    );
+                    
+                    firstModeADC = firstResult.AveragedValue;
+                    
+                    // Log first mode capture
+                    _logger.LogInfo($"Captured {modeName} ADC: {firstModeADC} (mean={firstResult.Mean:F1}, median={firstResult.Median:F1}, σ={firstResult.StandardDeviation:F2}, n={firstResult.SampleCount}, outliers={firstResult.OutliersRemoved})", "CalibrationDialog");
+                    
+                    // Warn if unstable
+                    if (!firstResult.IsStable)
+                    {
+                        _logger.LogWarning($"{modeName} ADC capture unstable: σ={firstResult.StandardDeviation:F2} > {settings.CalibrationMaxStdDev:F1}", "CalibrationDialog");
+                    }
+                }
+                else
+                {
+                    // Single sample mode (old behavior, backward compatible)
+                    point.StatusText = $"Capturing {modeName} ADC...";
+                    await System.Threading.Tasks.Task.Delay(_calibrationDelayMs); // Wait for stable reading
+                    firstModeADC = (ushort)_currentRawADC;
+                    _logger.LogInfo($"Captured {modeName} ADC (single sample): {firstModeADC}", "CalibrationDialog");
+                }
                 
-                ushort firstModeADC = firstResult.AveragedValue;
-                
-                // Store statistics for first mode (we'll use the second mode's stats for display)
+                // Store first mode ADC value
                 if (_adcMode == 0)
                 {
                     point.InternalADC = firstModeADC;
@@ -322,15 +349,6 @@ namespace SuspensionPCB_CAN_WPF.Views
                 else
                 {
                     point.ADS1115ADC = firstModeADC;
-                }
-                
-                // Log first mode capture
-                _logger.LogInfo($"Captured {modeName} ADC: {firstModeADC} (mean={firstResult.Mean:F1}, median={firstResult.Median:F1}, σ={firstResult.StandardDeviation:F2}, n={firstResult.SampleCount}, outliers={firstResult.OutliersRemoved})", "CalibrationDialog");
-                
-                // Warn if unstable
-                if (!firstResult.IsStable)
-                {
-                    _logger.LogWarning($"{modeName} ADC capture unstable: σ={firstResult.StandardDeviation:F2} > {maxStdDev:F1}", "CalibrationDialog");
                 }
                 
                 // Step 2: Switch to other ADC mode
@@ -366,29 +384,95 @@ namespace SuspensionPCB_CAN_WPF.Views
                     return;
                 }
                 
-                // Step 3: Capture second mode ADC with averaging
+                // Step 3: Capture second mode ADC
                 modeName = _adcMode == 0 ? "Internal" : "ADS1115";
-                point.StatusText = $"Collecting {modeName} ADC samples...";
                 
-                var secondResult = await CalibrationStatistics.CaptureAveragedADC(
-                    sampleCount: sampleCount,
-                    durationMs: durationMs,
-                    getCurrentADC: () => _currentRawADC,
-                    updateProgress: (current, total) =>
-                    {
-                        // Update status on UI thread
-                        Application.Current.Dispatcher.Invoke(() =>
+                ushort secondModeADC;
+                CalibrationCaptureResult? secondResult = null;
+                
+                if (averagingEnabled)
+                {
+                    // Multi-sample averaging mode
+                    int sampleCount = settings.CalibrationSampleCount;
+                    int durationMs = settings.CalibrationCaptureDurationMs;
+                    bool useMedian = settings.CalibrationUseMedian;
+                    bool removeOutliers = settings.CalibrationRemoveOutliers;
+                    double outlierThreshold = settings.CalibrationOutlierThreshold;
+                    double maxStdDev = settings.CalibrationMaxStdDev;
+                    
+                    point.StatusText = $"Collecting {modeName} ADC samples...";
+                    
+                    secondResult = await CalibrationStatistics.CaptureAveragedADC(
+                        sampleCount: sampleCount,
+                        durationMs: durationMs,
+                        getCurrentADC: () => _currentRawADC,
+                        updateProgress: (current, total) =>
                         {
-                            point.StatusText = $"Collecting {modeName} samples ({current}/{total})...";
-                        });
-                    },
-                    useMedian: useMedian,
-                    removeOutliers: removeOutliers,
-                    outlierThreshold: outlierThreshold,
-                    maxStdDev: maxStdDev
-                );
-                
-                ushort secondModeADC = secondResult.AveragedValue;
+                            // Update status on UI thread
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                point.StatusText = $"Collecting {modeName} samples ({current}/{total})...";
+                            });
+                        },
+                        useMedian: useMedian,
+                        removeOutliers: removeOutliers,
+                        outlierThreshold: outlierThreshold,
+                        maxStdDev: maxStdDev
+                    );
+                    
+                    secondModeADC = secondResult.AveragedValue;
+                    
+                    // Store statistics from second mode capture (for display)
+                    point.CaptureMean = secondResult.Mean;
+                    point.CaptureStdDev = secondResult.StandardDeviation;
+                    point.CaptureSampleCount = secondResult.SampleCount;
+                    
+                    if (!secondResult.IsStable)
+                    {
+                        point.CaptureStabilityWarning = $"Unstable: σ={secondResult.StandardDeviation:F2} > {maxStdDev:F1}";
+                        _logger.LogWarning($"{modeName} ADC capture unstable: σ={secondResult.StandardDeviation:F2} > {maxStdDev:F1}", "CalibrationDialog");
+                        
+                        // Show warning dialog
+                        var warningResult = MessageBox.Show(
+                            $"Warning: {modeName} ADC capture shows high variability (σ={secondResult.StandardDeviation:F2}).\n\n" +
+                            "This may indicate:\n" +
+                            "• Unstable weight on platform\n" +
+                            "• Electrical noise\n" +
+                            "• Mechanical vibration\n\n" +
+                            "Continue with this calibration point?",
+                            "Unstable Reading Warning",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Warning);
+                        
+                        if (warningResult == MessageBoxResult.No)
+                        {
+                            point.StatusText = "Capture cancelled by user";
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        point.CaptureStabilityWarning = "";
+                    }
+                    
+                    // Log second mode capture
+                    _logger.LogInfo($"Captured {modeName} ADC: {secondModeADC} (mean={secondResult.Mean:F1}, median={secondResult.Median:F1}, σ={secondResult.StandardDeviation:F2}, n={secondResult.SampleCount}, outliers={secondResult.OutliersRemoved})", "CalibrationDialog");
+                }
+                else
+                {
+                    // Single sample mode (old behavior, backward compatible)
+                    point.StatusText = $"Capturing {modeName} ADC...";
+                    await System.Threading.Tasks.Task.Delay(_calibrationDelayMs); // Wait for stable reading
+                    secondModeADC = (ushort)_currentRawADC;
+                    
+                    // Clear statistics for single sample mode
+                    point.CaptureMean = 0;
+                    point.CaptureStdDev = 0;
+                    point.CaptureSampleCount = 0;
+                    point.CaptureStabilityWarning = "";
+                    
+                    _logger.LogInfo($"Captured {modeName} ADC (single sample): {secondModeADC}", "CalibrationDialog");
+                }
                 
                 if (_adcMode == 0)
                 {
@@ -398,42 +482,6 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     point.ADS1115ADC = secondModeADC;
                 }
-                
-                // Store statistics from second mode capture (for display)
-                point.CaptureMean = secondResult.Mean;
-                point.CaptureStdDev = secondResult.StandardDeviation;
-                point.CaptureSampleCount = secondResult.SampleCount;
-                
-                if (!secondResult.IsStable)
-                {
-                    point.CaptureStabilityWarning = $"Unstable: σ={secondResult.StandardDeviation:F2} > {maxStdDev:F1}";
-                    _logger.LogWarning($"{modeName} ADC capture unstable: σ={secondResult.StandardDeviation:F2} > {maxStdDev:F1}", "CalibrationDialog");
-                    
-                    // Show warning dialog
-                    var warningResult = MessageBox.Show(
-                        $"Warning: {modeName} ADC capture shows high variability (σ={secondResult.StandardDeviation:F2}).\n\n" +
-                        "This may indicate:\n" +
-                        "• Unstable weight on platform\n" +
-                        "• Electrical noise\n" +
-                        "• Mechanical vibration\n\n" +
-                        "Continue with this calibration point?",
-                        "Unstable Reading Warning",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Warning);
-                    
-                    if (warningResult == MessageBoxResult.No)
-                    {
-                        point.StatusText = "Capture cancelled by user";
-                        return;
-                    }
-                }
-                else
-                {
-                    point.CaptureStabilityWarning = "";
-                }
-                
-                // Log second mode capture
-                _logger.LogInfo($"Captured {modeName} ADC: {secondModeADC} (mean={secondResult.Mean:F1}, median={secondResult.Median:F1}, σ={secondResult.StandardDeviation:F2}, n={secondResult.SampleCount}, outliers={secondResult.OutliersRemoved})", "CalibrationDialog");
                 
                 // Step 4: Mark as captured
                 point.RawADC = _adcMode == 0 ? point.InternalADC : point.ADS1115ADC; // For backward compatibility

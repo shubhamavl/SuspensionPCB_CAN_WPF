@@ -547,12 +547,23 @@
                         <TextBlock Text="Calibration Averaging (Multi-Sample)" FontWeight="Bold" FontSize="12" 
                                    Margin="0,10,0,5" Foreground="#FF2C3E50"/>
                         
+                        <!-- Enable Calibration Averaging -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <CheckBox x:Name="CalibrationAveragingEnabledCheckBox" Content="Enable Multi-Sample Averaging" 
+                                      IsChecked="True" Checked="CalibrationAveragingEnabledCheckBox_Changed" 
+                                      Unchecked="CalibrationAveragingEnabledCheckBox_Changed"
+                                      FontWeight="SemiBold" VerticalAlignment="Center" Width="250"/>
+                            <TextBlock Text="(Use multiple samples for better accuracy)" 
+                                       FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
                         <!-- Sample Count -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                             <TextBlock Text="Sample Count:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
                             <Slider x:Name="CalibrationSampleCountSlider" Width="200" Minimum="10" Maximum="200" 
                                     Value="50" TickFrequency="10" IsSnapToTickEnabled="True"
-                                    ValueChanged="CalibrationSampleCountSlider_ValueChanged" Margin="0,0,10,0"/>
+                                    ValueChanged="CalibrationSampleCountSlider_ValueChanged" Margin="0,0,10,0"
+                                    IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
                             <TextBlock x:Name="CalibrationSampleCountValueTxt" Text="50" Width="50" 
                                        VerticalAlignment="Center" FontWeight="Bold"/>
                             <TextBlock Text="(Number of samples to average)" 
@@ -564,7 +575,8 @@
                             <TextBlock Text="Capture Duration:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
                             <Slider x:Name="CalibrationCaptureDurationSlider" Width="200" Minimum="500" Maximum="5000" 
                                     Value="2000" TickFrequency="500" IsSnapToTickEnabled="True"
-                                    ValueChanged="CalibrationCaptureDurationSlider_ValueChanged" Margin="0,0,10,0"/>
+                                    ValueChanged="CalibrationCaptureDurationSlider_ValueChanged" Margin="0,0,10,0"
+                                    IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
                             <TextBlock x:Name="CalibrationCaptureDurationValueTxt" Text="2000 ms" Width="70" 
                                        VerticalAlignment="Center" FontWeight="Bold"/>
                             <TextBlock Text="(Duration to collect samples)" 
@@ -576,7 +588,8 @@
                             <CheckBox x:Name="CalibrationUseMedianCheckBox" Content="Use Median (instead of Mean)" 
                                       IsChecked="True" Checked="CalibrationUseMedianCheckBox_Changed" 
                                       Unchecked="CalibrationUseMedianCheckBox_Changed"
-                                      FontWeight="SemiBold" VerticalAlignment="Center" Width="200"/>
+                                      FontWeight="SemiBold" VerticalAlignment="Center" Width="200"
+                                      IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
                             <TextBlock Text="(More robust to outliers)" 
                                        FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
                         </StackPanel>
@@ -586,7 +599,8 @@
                             <CheckBox x:Name="CalibrationRemoveOutliersCheckBox" Content="Remove Outliers" 
                                       IsChecked="True" Checked="CalibrationRemoveOutliersCheckBox_Changed" 
                                       Unchecked="CalibrationRemoveOutliersCheckBox_Changed"
-                                      FontWeight="SemiBold" VerticalAlignment="Center" Width="200"/>
+                                      FontWeight="SemiBold" VerticalAlignment="Center" Width="200"
+                                      IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
                             <TextBlock Text="(Filter extreme values)" 
                                        FontSize="10" Foreground="#FF95A5A6" VerticalAlignment="Center"/>
                         </StackPanel>
@@ -596,7 +610,8 @@
                             <TextBlock Text="Outlier Threshold:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
                             <Slider x:Name="CalibrationOutlierThresholdSlider" Width="200" Minimum="1.0" Maximum="4.0" 
                                     Value="2.0" TickFrequency="0.5" IsSnapToTickEnabled="True"
-                                    ValueChanged="CalibrationOutlierThresholdSlider_ValueChanged" Margin="0,0,10,0"/>
+                                    ValueChanged="CalibrationOutlierThresholdSlider_ValueChanged" Margin="0,0,10,0"
+                                    IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
                             <TextBlock x:Name="CalibrationOutlierThresholdValueTxt" Text="2.0 σ" Width="60" 
                                        VerticalAlignment="Center" FontWeight="Bold"/>
                             <TextBlock Text="(Standard deviations)" 
@@ -608,7 +623,8 @@
                             <TextBlock Text="Max Std Dev:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
                             <Slider x:Name="CalibrationMaxStdDevSlider" Width="200" Minimum="5.0" Maximum="50.0" 
                                     Value="10.0" TickFrequency="5.0" IsSnapToTickEnabled="True"
-                                    ValueChanged="CalibrationMaxStdDevSlider_ValueChanged" Margin="0,0,10,0"/>
+                                    ValueChanged="CalibrationMaxStdDevSlider_ValueChanged" Margin="0,0,10,0"
+                                    IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
                             <TextBlock x:Name="CalibrationMaxStdDevValueTxt" Text="10.0" Width="50" 
                                        VerticalAlignment="Center" FontWeight="Bold"/>
                             <TextBlock Text="(Warning threshold)" 

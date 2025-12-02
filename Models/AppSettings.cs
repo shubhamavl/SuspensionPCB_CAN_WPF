@@ -48,6 +48,7 @@ namespace SuspensionPCB_CAN_WPF.Models
         public bool ShowCalibrationQualityMetrics { get; set; } = true; // Display R² and error metrics
         
         // Calibration Averaging Settings
+        public bool CalibrationAveragingEnabled { get; set; } = true; // Enable/disable multi-sample averaging
         public int CalibrationSampleCount { get; set; } = 50; // Number of samples to collect for averaging
         public int CalibrationCaptureDurationMs { get; set; } = 2000; // Duration to collect samples over (milliseconds)
         public bool CalibrationUseMedian { get; set; } = true; // Use median instead of mean (more robust to outliers)

@@ -2064,8 +2064,15 @@ namespace SuspensionPCB_CAN_WPF.Views
                     SmaWindowSlider.Value = settings.FilterWindowSize;
                 }
                 
-                // Apply settings to WeightProcessor
-                ApplyFilterSettings();
+                // Apply settings to WeightProcessor (runtime only, don't save again)
+                bool enabled = settings.FilterEnabled;
+                FilterType type = settings.FilterType switch
+                {
+                    "EMA" => FilterType.EMA,
+                    "SMA" => FilterType.SMA,
+                    _ => FilterType.None
+                };
+                _weightProcessor.ConfigureFilter(type, settings.FilterAlpha, settings.FilterWindowSize, enabled);
                 
                 _logger.LogInfo($"Filter settings loaded: Type={settings.FilterType}, Alpha={settings.FilterAlpha}, Window={settings.FilterWindowSize}, Enabled={settings.FilterEnabled}", "Settings");
             }
@@ -2220,8 +2227,35 @@ namespace SuspensionPCB_CAN_WPF.Views
                 if (ShowCalibrationIconsCheckBox != null)
                     ShowCalibrationIconsCheckBox.IsChecked = settings.ShowCalibrationIcons;
                 
-                // Apply visibility settings immediately
-                ApplyUIVisibilitySettings();
+                // Apply visibility to UI elements (runtime only, don't save again)
+                if (RawTxt != null)
+                {
+                    var parent = RawTxt.Parent as FrameworkElement;
+                    if (parent != null)
+                    {
+                        parent.Visibility = settings.ShowRawADC ? Visibility.Visible : Visibility.Collapsed;
+                    }
+                }
+                
+                // Apply visibility to streaming indicators
+                if (StreamIndicator != null)
+                {
+                    StreamIndicator.Visibility = settings.ShowStreamingIndicators ? Visibility.Visible : Visibility.Collapsed;
+                }
+                if (StreamStatusTxt != null)
+                {
+                    StreamStatusTxt.Visibility = settings.ShowStreamingIndicators ? Visibility.Visible : Visibility.Collapsed;
+                }
+                
+                // Apply visibility to calibration icons
+                if (CalStatusIcon != null)
+                {
+                    CalStatusIcon.Visibility = settings.ShowCalibrationIcons ? Visibility.Visible : Visibility.Collapsed;
+                }
+                if (CalStatusText != null)
+                {
+                    CalStatusText.Visibility = settings.ShowCalibrationIcons ? Visibility.Visible : Visibility.Collapsed;
+                }
             }
             catch (Exception ex)
             {
@@ -2404,6 +2438,10 @@ namespace SuspensionPCB_CAN_WPF.Views
                 if (EnableBootloaderFeaturesCheckBox != null)
                     EnableBootloaderFeaturesCheckBox.IsChecked = settings.EnableBootloaderFeatures;
                 
+                // Set calibration averaging enabled
+                if (CalibrationAveragingEnabledCheckBox != null)
+                    CalibrationAveragingEnabledCheckBox.IsChecked = settings.CalibrationAveragingEnabled;
+                
                 // Set calibration averaging settings
                 if (CalibrationSampleCountSlider != null)
                 {
@@ -2447,8 +2485,11 @@ namespace SuspensionPCB_CAN_WPF.Views
                     }
                 }
                 
-                // Apply advanced settings immediately
-                ApplyAdvancedSettings();
+                // Apply runtime settings (timer intervals, etc.) without saving
+                if (_clockTimer != null)
+                {
+                    _clockTimer.Interval = TimeSpan.FromMilliseconds(settings.ClockUpdateIntervalMs);
+                }
                 
                 // Update bootloader UI visibility
                 UpdateBootloaderUIVisibility();
@@ -2482,13 +2523,14 @@ namespace SuspensionPCB_CAN_WPF.Views
                 _settingsManager.SetBootloaderFeaturesEnabled(enableBootloader);
                 
                 // Save calibration averaging settings
+                bool averagingEnabled = CalibrationAveragingEnabledCheckBox?.IsChecked ?? true;
                 int sampleCount = (int)(CalibrationSampleCountSlider?.Value ?? 50);
                 int durationMs = (int)(CalibrationCaptureDurationSlider?.Value ?? 2000);
                 bool useMedian = CalibrationUseMedianCheckBox?.IsChecked ?? true;
                 bool removeOutliers = CalibrationRemoveOutliersCheckBox?.IsChecked ?? true;
                 double outlierThreshold = CalibrationOutlierThresholdSlider?.Value ?? 2.0;
                 double maxStdDev = CalibrationMaxStdDevSlider?.Value ?? 10.0;
-                _settingsManager.SetCalibrationAveragingSettings(sampleCount, durationMs, useMedian, removeOutliers, outlierThreshold, maxStdDev);
+                _settingsManager.SetCalibrationAveragingSettings(averagingEnabled, sampleCount, durationMs, useMedian, removeOutliers, outlierThreshold, maxStdDev);
                 
                 // Update bootloader UI visibility
                 UpdateBootloaderUIVisibility();
@@ -2584,6 +2626,11 @@ namespace SuspensionPCB_CAN_WPF.Views
         }
 
         private void EnableBootloaderFeaturesCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyAdvancedSettings();
+        }
+
+        private void CalibrationAveragingEnabledCheckBox_Changed(object sender, RoutedEventArgs e)
         {
             ApplyAdvancedSettings();
         }
