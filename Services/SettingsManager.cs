@@ -276,6 +276,23 @@ namespace SuspensionPCB_CAN_WPF.Services
         }
         
         /// <summary>
+        /// Set calibration mode (Regression or Piecewise)
+        /// </summary>
+        public void SetCalibrationMode(string mode)
+        {
+            try
+            {
+                _settings.CalibrationMode = mode;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"Calibration mode set to: {mode}", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to save calibration mode: {ex.Message}", "Settings");
+            }
+        }
+        
+        /// <summary>
         /// Set calibration averaging settings
         /// </summary>
         public void SetCalibrationAveragingSettings(bool enabled, int sampleCount, int durationMs, bool useMedian, bool removeOutliers, double outlierThreshold, double maxStdDev)

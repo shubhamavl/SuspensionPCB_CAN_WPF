@@ -586,6 +586,11 @@ namespace SuspensionPCB_CAN_WPF.Views
                 _ads1115Calibration = LinearCalibration.FitMultiplePoints(ads1115Points);
                 _ads1115Calibration.ADCMode = 1;
                 
+                // Build piecewise segments for both calibrations (if mode is Piecewise, segments will be used)
+                // Segments are always built from points, but only used if Mode == Piecewise
+                _internalCalibration.BuildSegmentsFromPoints();
+                _ads1115Calibration.BuildSegmentsFromPoints();
+                
                 // Set legacy _calibration for backward compatibility (use Internal)
                 _calibration = _internalCalibration;
                 
@@ -657,6 +662,13 @@ namespace SuspensionPCB_CAN_WPF.Views
                                   MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
+                
+                // Set calibration mode from settings before saving
+                var settings = SettingsManager.Instance.Settings;
+                string modeStr = settings.CalibrationMode ?? "Regression";
+                Core.CalibrationMode mode = modeStr == "Piecewise" ? Core.CalibrationMode.Piecewise : Core.CalibrationMode.Regression;
+                _internalCalibration.Mode = mode;
+                _ads1115Calibration.Mode = mode;
                 
                 // Save both calibrations
                 _internalCalibration.SaveToFile(Side, 0);  // Internal mode

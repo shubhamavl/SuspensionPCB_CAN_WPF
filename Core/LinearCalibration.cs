@@ -7,17 +7,44 @@ using System.Text.Json;
 namespace SuspensionPCB_CAN_WPF.Core
 {
     /// <summary>
+    /// Calibration mode enumeration
+    /// </summary>
+    public enum CalibrationMode
+    {
+        Regression,  // Global linear regression (default, backward compatible)
+        Piecewise    // Piecewise linear interpolation between adjacent points
+    }
+    
+    /// <summary>
+    /// Represents a single segment in piecewise linear calibration
+    /// </summary>
+    public class CalibrationSegment
+    {
+        public int XMin { get; set; }      // Minimum ADC value for this segment (inclusive)
+        public int XMax { get; set; }      // Maximum ADC value for this segment (inclusive)
+        public double Slope { get; set; }  // Slope for this segment: kg = Slope * raw + Intercept
+        public double Intercept { get; set; } // Intercept for this segment
+    }
+    
+    /// <summary>
     /// Linear calibration class for multi-point calibration using least-squares linear regression.
     /// Implements the industry-standard "Calibrate First, Then Tare" approach.
+    /// Supports both global regression and piecewise linear interpolation.
     /// </summary>
     public class LinearCalibration
     {
-        public double Slope { get; set; }           // m in equation: kg = m * raw + b
-        public double Intercept { get; set; }      // b in equation: kg = m * raw + b
+        public double Slope { get; set; }           // m in equation: kg = m * raw + b (for regression mode)
+        public double Intercept { get; set; }      // b in equation: kg = m * raw + b (for regression mode)
         public DateTime CalibrationDate { get; set; }
         public bool IsValid { get; set; }
         public string Side { get; set; } = "";     // "Left" or "Right"
         public byte ADCMode { get; set; } = 0;    // 0=Internal, 1=ADS1115
+        
+        // Calibration mode: Regression (default) or Piecewise
+        public CalibrationMode Mode { get; set; } = CalibrationMode.Regression;
+        
+        // Piecewise segments (for Piecewise mode)
+        public List<CalibrationSegment> Segments { get; set; } = new List<CalibrationSegment>();
         
         // All calibration points used for fitting
         public List<CalibrationPoint> Points { get; set; } = new List<CalibrationPoint>();
@@ -143,6 +170,7 @@ namespace SuspensionPCB_CAN_WPF.Core
         
         /// <summary>
         /// Convert raw ADC value to calibrated weight (before tare)
+        /// Routes to regression or piecewise based on Mode
         /// </summary>
         /// <param name="raw">Raw ADC value</param>
         /// <returns>Calibrated weight in kg</returns>
@@ -150,8 +178,115 @@ namespace SuspensionPCB_CAN_WPF.Core
         {
             if (!IsValid)
                 throw new InvalidOperationException("Calibration is not valid. Please calibrate first.");
-                
+            
+            // Route to appropriate conversion method based on mode
+            if (Mode == CalibrationMode.Piecewise && Segments != null && Segments.Count > 0)
+            {
+                return RawToKgPiecewise(raw);
+            }
+            else
+            {
+                return RawToKgRegression(raw);
+            }
+        }
+        
+        /// <summary>
+        /// Convert raw ADC value using global linear regression
+        /// </summary>
+        /// <param name="raw">Raw ADC value</param>
+        /// <returns>Calibrated weight in kg</returns>
+        public double RawToKgRegression(int raw)
+        {
             return Slope * raw + Intercept;
+        }
+        
+        /// <summary>
+        /// Convert raw ADC value using piecewise linear interpolation
+        /// </summary>
+        /// <param name="raw">Raw ADC value</param>
+        /// <returns>Calibrated weight in kg</returns>
+        public double RawToKgPiecewise(int raw)
+        {
+            if (Segments == null || Segments.Count == 0)
+            {
+                // Fallback to regression if segments not available
+                return RawToKgRegression(raw);
+            }
+            
+            // Handle edge cases: below first segment
+            if (raw < Segments[0].XMin)
+            {
+                var firstSegment = Segments[0];
+                return firstSegment.Slope * raw + firstSegment.Intercept;
+            }
+            
+            // Handle edge cases: above last segment
+            if (raw > Segments[Segments.Count - 1].XMax)
+            {
+                var lastSegment = Segments[Segments.Count - 1];
+                return lastSegment.Slope * raw + lastSegment.Intercept;
+            }
+            
+            // Find the segment containing this raw value
+            // Segments should be sorted by XMin, so we can do a linear search
+            // (Binary search could be used for many segments, but linear is simpler and fast enough for typical use)
+            foreach (var segment in Segments)
+            {
+                if (raw >= segment.XMin && raw <= segment.XMax)
+                {
+                    return segment.Slope * raw + segment.Intercept;
+                }
+            }
+            
+            // Should not reach here if segments are properly constructed, but fallback to regression
+            return RawToKgRegression(raw);
+        }
+        
+        /// <summary>
+        /// Build piecewise segments from calibration points
+        /// Points must be sorted by RawADC (ascending)
+        /// </summary>
+        public void BuildSegmentsFromPoints()
+        {
+            if (Points == null || Points.Count < 2)
+            {
+                // Need at least 2 points for piecewise interpolation
+                Segments = new List<CalibrationSegment>();
+                return;
+            }
+            
+            // Sort points by RawADC (ascending)
+            var sortedPoints = Points.OrderBy(p => p.RawADC).ToList();
+            
+            Segments = new List<CalibrationSegment>();
+            
+            // Create segments between adjacent points
+            for (int i = 0; i < sortedPoints.Count - 1; i++)
+            {
+                var p1 = sortedPoints[i];
+                var p2 = sortedPoints[i + 1];
+                
+                // Skip if points have same ADC value (would cause division by zero)
+                if (p1.RawADC == p2.RawADC)
+                    continue;
+                
+                // Calculate slope and intercept for this segment
+                // Using two-point form: y = m*x + b
+                // m = (y2 - y1) / (x2 - x1)
+                // b = y1 - m*x1
+                double slope = (p2.KnownWeight - p1.KnownWeight) / (double)(p2.RawADC - p1.RawADC);
+                double intercept = p1.KnownWeight - slope * p1.RawADC;
+                
+                var segment = new CalibrationSegment
+                {
+                    XMin = p1.RawADC,
+                    XMax = p2.RawADC,
+                    Slope = slope,
+                    Intercept = intercept
+                };
+                
+                Segments.Add(segment);
+            }
         }
         
         /// <summary>
@@ -235,6 +370,21 @@ namespace SuspensionPCB_CAN_WPF.Core
             {
                 string jsonString = File.ReadAllText(filename);
                 var calibration = JsonSerializer.Deserialize<LinearCalibration>(jsonString);
+                
+                // Backward compatibility: if segments are missing but points exist, build segments lazily
+                if (calibration != null && calibration.Points != null && calibration.Points.Count >= 2)
+                {
+                    if (calibration.Segments == null || calibration.Segments.Count == 0)
+                    {
+                        // Old calibration file - build segments from points if mode is Piecewise
+                        // Otherwise, keep Regression mode (default)
+                        if (calibration.Mode == CalibrationMode.Piecewise)
+                        {
+                            calibration.BuildSegmentsFromPoints();
+                        }
+                    }
+                }
+                
                 return calibration;
             }
             catch (Exception ex)

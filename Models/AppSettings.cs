@@ -56,6 +56,9 @@ namespace SuspensionPCB_CAN_WPF.Models
         public double CalibrationOutlierThreshold { get; set; } = 2.0; // Standard deviations for outlier removal
         public double CalibrationMaxStdDev { get; set; } = 10.0; // Maximum acceptable standard deviation (warning threshold)
         
+        // Calibration Mode Settings
+        public string CalibrationMode { get; set; } = "Regression"; // "Regression" or "Piecewise" - global calibration mode
+        
         // Bootloader Settings
         public bool EnableBootloaderFeatures { get; set; } = true; // Enable/disable all bootloader functionality
     }

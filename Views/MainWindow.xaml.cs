@@ -1123,11 +1123,50 @@ namespace SuspensionPCB_CAN_WPF.Views
             _rightCalibrationInternal = LinearCalibration.LoadFromFile("Right", 0);
             _rightCalibrationADS1115 = LinearCalibration.LoadFromFile("Right", 1);
             
+            // Apply calibration mode from settings to all loaded calibrations
+            string calibrationMode = _settingsManager.Settings.CalibrationMode ?? "Regression";
+            UpdateCalibrationMode(calibrationMode);
+            
             // Update WeightProcessor with calibrations for current active mode
             UpdateWeightProcessorCalibration();
             
             // Update UI calibration status icons
             UpdateCalibrationStatusIcons();
+        }
+        
+        /// <summary>
+        /// Update calibration mode for all loaded calibrations
+        /// </summary>
+        private void UpdateCalibrationMode(string mode)
+        {
+            CalibrationMode calibrationMode = mode == "Piecewise" ? Core.CalibrationMode.Piecewise : Core.CalibrationMode.Regression;
+            
+            if (_leftCalibrationInternal != null)
+                _leftCalibrationInternal.Mode = calibrationMode;
+            if (_leftCalibrationADS1115 != null)
+                _leftCalibrationADS1115.Mode = calibrationMode;
+            if (_rightCalibrationInternal != null)
+                _rightCalibrationInternal.Mode = calibrationMode;
+            if (_rightCalibrationADS1115 != null)
+                _rightCalibrationADS1115.Mode = calibrationMode;
+            
+            // Rebuild segments if switching to piecewise mode and segments are missing
+            if (calibrationMode == Core.CalibrationMode.Piecewise)
+            {
+                if (_leftCalibrationInternal != null && (_leftCalibrationInternal.Segments == null || _leftCalibrationInternal.Segments.Count == 0))
+                    _leftCalibrationInternal.BuildSegmentsFromPoints();
+                if (_leftCalibrationADS1115 != null && (_leftCalibrationADS1115.Segments == null || _leftCalibrationADS1115.Segments.Count == 0))
+                    _leftCalibrationADS1115.BuildSegmentsFromPoints();
+                if (_rightCalibrationInternal != null && (_rightCalibrationInternal.Segments == null || _rightCalibrationInternal.Segments.Count == 0))
+                    _rightCalibrationInternal.BuildSegmentsFromPoints();
+                if (_rightCalibrationADS1115 != null && (_rightCalibrationADS1115.Segments == null || _rightCalibrationADS1115.Segments.Count == 0))
+                    _rightCalibrationADS1115.BuildSegmentsFromPoints();
+            }
+            
+            // Update WeightProcessor to use new mode
+            UpdateWeightProcessorCalibration();
+            
+            _logger.LogInfo($"Calibration mode updated to: {mode}", "MainWindow");
         }
 
         /// <summary>
@@ -2430,6 +2469,20 @@ namespace SuspensionPCB_CAN_WPF.Views
                     }
                 }
                 
+                // Set calibration mode
+                if (CalibrationModeComboBox != null)
+                {
+                    string mode = settings.CalibrationMode ?? "Regression";
+                    foreach (System.Windows.Controls.ComboBoxItem item in CalibrationModeComboBox.Items)
+                    {
+                        if (item.Tag?.ToString() == mode)
+                        {
+                            CalibrationModeComboBox.SelectedItem = item;
+                            break;
+                        }
+                    }
+                }
+                
                 // Set show calibration quality metrics
                 if (ShowCalibrationQualityMetricsCheckBox != null)
                     ShowCalibrationQualityMetricsCheckBox.IsChecked = settings.ShowCalibrationQualityMetrics;
@@ -2515,8 +2568,19 @@ namespace SuspensionPCB_CAN_WPF.Views
                 int calibrationDelay = (int)(CalibrationCaptureDelaySlider?.Value ?? 500);
                 bool showQualityMetrics = ShowCalibrationQualityMetricsCheckBox?.IsChecked ?? true;
                 
+                // Get calibration mode
+                string calibrationMode = "Regression"; // Default
+                if (CalibrationModeComboBox?.SelectedItem is System.Windows.Controls.ComboBoxItem modeItem)
+                {
+                    calibrationMode = modeItem.Tag?.ToString() ?? "Regression";
+                }
+                
                 // Save settings
                 _settingsManager.SetAdvancedSettings(txFlashMs, logFormat, batchSize, clockInterval, calibrationDelay, showQualityMetrics);
+                _settingsManager.SetCalibrationMode(calibrationMode);
+                
+                // Update calibration mode for all loaded calibrations
+                UpdateCalibrationMode(calibrationMode);
                 
                 // Save bootloader setting
                 bool enableBootloader = EnableBootloaderFeaturesCheckBox?.IsChecked ?? true;
@@ -2630,6 +2694,29 @@ namespace SuspensionPCB_CAN_WPF.Views
             ApplyAdvancedSettings();
         }
 
+        private void CalibrationModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            ApplyAdvancedSettings();
+        }
+        
+        private void CalibrationModeInfoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show(
+                "Calibration Mode:\n\n" +
+                "• Linear Regression (Global Fit):\n" +
+                "  Uses all calibration points to create a single linear equation.\n" +
+                "  Best for linear sensors with consistent response.\n" +
+                "  Provides R² quality metric.\n\n" +
+                "• Piecewise Linear Interpolation:\n" +
+                "  Creates linear segments between adjacent calibration points.\n" +
+                "  Best for non-linear sensors or when you need exact point matching.\n" +
+                "  More accurate at calibration points, but no global quality metric.\n\n" +
+                "Note: Mode applies to all calibrations (Left/Right, Internal/ADS1115).",
+                "Calibration Mode Information",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        
         private void CalibrationAveragingEnabledCheckBox_Changed(object sender, RoutedEventArgs e)
         {
             ApplyAdvancedSettings();
