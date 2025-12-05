@@ -45,11 +45,11 @@ namespace SuspensionPCB_CAN_WPF.Views
         private LinearCalibration? _rightCalibrationInternal;
         private LinearCalibration? _rightCalibrationADS1115;
         private TareManager _tareManager = new TareManager();
-        private byte _currentADCMode = 0; // Track current ADC mode (0=Internal, 1=ADS1115)
+        private byte _currentADCMode = 1; // Track current ADC mode (0=Internal, 1=ADS1115) - DEFAULT TO ADS1115
         
         // Active mode tracking for single dashboard
         private string _activeSide = ""; // "Left" or "Right" or ""
-        private byte _activeADCMode = 0; // 0=Internal, 1=ADS1115
+        private byte _activeADCMode = 1; // 0=Internal, 1=ADS1115 - DEFAULT TO ADS1115
         private DataLogger _dataLogger = new DataLogger();
         private StatusHistoryManager _statusHistoryManager = new StatusHistoryManager(100);
         
@@ -4683,7 +4683,11 @@ Most users should keep default values unless experiencing specific issues.";
                 }
                 else
                 {
-                    _logger.LogInfo("No previous ADC mode found in settings, using default", "Settings");
+                    // Default to ADS1115 if no previous mode found
+                    _currentADCMode = 1;  // ADS1115
+                    _activeADCMode = 1;   // ADS1115
+                    UpdateAdcModeIndicators("ADS1115", "#FF4CAF50");
+                    _logger.LogInfo("No previous ADC mode found in settings, defaulting to ADS1115", "Settings");
                 }
             }
             catch (Exception ex)
