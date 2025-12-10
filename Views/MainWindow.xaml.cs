@@ -39,7 +39,7 @@ namespace SuspensionPCB_CAN_WPF.Views
         private bool _firmwareUpdateInProgress;
         private readonly object _statisticsLock = new object();
 
-        // v0.7 Calibration and Tare functionality - Mode-specific calibrations
+        // v0.9 Calibration and Tare functionality - Mode-specific calibrations
         private LinearCalibration? _leftCalibrationInternal;
         private LinearCalibration? _leftCalibrationADS1115;
         private LinearCalibration? _rightCalibrationInternal;
@@ -77,7 +77,7 @@ namespace SuspensionPCB_CAN_WPF.Views
         private SettingsManager _settingsManager = SettingsManager.Instance;
         private WeightProcessor _weightProcessor = new WeightProcessor();
 
-        // v0.7 Protocol - Only semantic IDs
+        // v0.9 Protocol - Only semantic IDs
         private readonly HashSet<uint> _rxMessageIds = new HashSet<uint> {
             0x200,  // Left side raw ADC data
             0x201,  // Right side raw ADC data
@@ -224,7 +224,7 @@ namespace SuspensionPCB_CAN_WPF.Views
         {
             try
             {
-                // Use v0.7 semantic stream control to stop all streams
+                // Use v0.9 semantic stream control to stop all streams
                 bool stopped = _canService?.StopAllStreams() ?? false;
                 
                 // Flash TX indicator to show message was sent
@@ -380,7 +380,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     timer.Interval = TimeSpan.FromSeconds(3);
                     timer.Tick += (s, e) =>
                     {
-                        StatusBarText.Text = "Ready | CAN v0.7 @ 250 kbps";
+                        StatusBarText.Text = "Ready | CAN v0.9 @ 250 kbps";
                         StatusBarText.Foreground = System.Windows.Media.Brushes.White;
                         timer.Stop();
                     };
@@ -748,7 +748,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     ResetStatistics();
                     string adapterName = GetSelectedAdapterType();
                     ShowStatusBanner("✓ Connected Successfully", true);
-                    ShowInlineStatus($"{adapterName} Connected Successfully. Protocol: CAN v0.7", false);
+                    ShowInlineStatus($"{adapterName} Connected Successfully. Protocol: CAN v0.9", false);
                     if (ConnectionToggle != null) ConnectionToggle.IsChecked = true;
                     SaveConfiguration(); // Save adapter settings
                     
@@ -822,7 +822,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     else if (vm.Direction == "TX") _txMessages++;
                 }
 
-                // Process weight and calibration data according to protocol v0.7
+                // Process weight and calibration data according to protocol v0.9
                 lock (_dataLock)
                 {
                     ProcessProtocolMessage(message);

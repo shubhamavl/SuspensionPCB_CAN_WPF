@@ -6,7 +6,7 @@ A professional Windows WPF application for real-time weight monitoring and calib
 
 ### Core Functionality
 - **Real-time Weight Display**: Live monitoring of left and right side weights with configurable filtering
-- **CAN Bus Communication**: Protocol v0.7 compliant communication at 250 kbps
+- **CAN Bus Communication**: Protocol v0.9 compliant communication at 250 kbps
 - **High-Performance Processing**: Optimized for 1kHz data rates with multi-threaded architecture
 - **Multi-Point Calibration**: Advanced calibration system with unlimited points and least-squares regression
 - **Dual ADC Mode Support**: Independent calibration for Internal (12-bit) and ADS1115 (16-bit) modes
@@ -27,7 +27,7 @@ A professional Windows WPF application for real-time weight monitoring and calib
 ### Advanced Features
 - **Multi-threaded Architecture**: Dedicated WeightProcessor for 1kHz calibration
 - **Performance Optimization**: Lock-free reads, batched UI updates
-- **Protocol Compliance**: Full CAN v0.7 semantic ID implementation
+- **Protocol Compliance**: Full CAN v0.9 semantic ID implementation
 - **Bootloader Protocol**: Complete firmware update support (0x510-0x513)
 - **Simulator Adapter**: Software-based CAN adapter for testing without hardware
 - **CAN Monitor Export**: Export captured CAN messages to CSV/text files
@@ -291,7 +291,7 @@ SuspensionPCB_CAN_WPF/
 └── README.md                    # This file
 ```
 
-## 🔄 Protocol v0.7 Compliance
+## 🔄 Protocol v0.9 Compliance
 
 ### CAN Message IDs
 - **0x200**: Left side raw ADC data
@@ -341,6 +341,6 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 ---
 
 **Version**: 2.2.0   
-**Last Updated**: 12th December 2025
+**Last Updated**: 10 December 2025
 **Compatibility**: STM32 Suspension System v3.1  
 **USB-CAN-A Protocol**: Variable-length (Waveshare specification) - Fixed in this version

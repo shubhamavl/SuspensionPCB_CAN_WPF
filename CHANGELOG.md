@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed frame decoding to extract CAN ID from correct position (bytes 2-3 instead of bytes 5-6)
   - Fixed data extraction to use actual DLC (0-8 bytes) instead of always extracting 8 bytes
   - Added support for empty messages (DLC=0) for command messages
-  - Updated message filtering to include all v0.7 protocol message IDs (0x030, 0x031, 0x032, 0x040, 0x041, 0x044, 0x300)
+  - Updated message filtering to include all v0.9 protocol message IDs (0x030, 0x031, 0x032, 0x040, 0x041, 0x044, 0x300)
   - Protocol now correctly implements Waveshare Variable Length Protocol for both TX and RX
   - Frame format: `[0xAA] [Type] [ID_LOW] [ID_HIGH] [DATA...] [0x55]` (5-13 bytes variable length)
   - Resolves communication failures with USB-CAN-A Serial adapter
@@ -168,7 +168,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed data extraction always using 8 bytes (now correctly uses actual DLC 0-8 bytes)
   - Fixed frame parsing to handle variable-length frames correctly
   - Fixed empty message support (DLC=0) for command messages
-  - Fixed message filtering to include all v0.7 protocol message IDs
+  - Fixed message filtering to include all v0.9 protocol message IDs
   - Resolved communication failures and data corruption with USB-CAN-A Serial adapter
 - **CAN Monitor Issues**
   - Fixed TX messages not appearing (was showing "no TX only RX")
@@ -305,7 +305,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resolved file path issues in portable deployments
 
 ### Technical Details
-- Protocol: CAN v0.7 compliant
+- Protocol: CAN v0.9 compliant
 - Transmission rates: 1Hz, 100Hz, 500Hz, 1kHz
 - ADC modes: Internal 12-bit (4096 levels), ADS1115 16-bit (32768 levels)
 - CAN bitrates: 125 kbps, 250 kbps, 500 kbps, 1 Mbps
@@ -332,7 +332,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keyboard shortcuts for efficient operation
 
 ### Technical Details
-- Protocol: CAN v0.7 compliant
+- Protocol: CAN v0.9 compliant
 - Transmission rates: 1Hz, 100Hz, 500Hz, 1kHz
 - ADC modes: Internal 12-bit, ADS1115 16-bit
 - Framework: .NET 8.0 WPF

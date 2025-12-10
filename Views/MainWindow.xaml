@@ -930,7 +930,7 @@
         <!-- Status Bar -->
         <StatusBar Grid.Row="4" Background="{StaticResource PrimaryBlue}" Foreground="White" Height="28">
             <StatusBarItem>
-                <TextBlock x:Name="StatusBarText" Text="Ready | CAN v0.7 @ 250 kbps" />
+                <TextBlock x:Name="StatusBarText" Text="Ready | CAN v0.9 @ 250 kbps" />
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>

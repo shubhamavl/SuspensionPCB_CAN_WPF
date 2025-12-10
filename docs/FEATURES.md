@@ -24,8 +24,8 @@
 - ✅ **PCAN Channel Selection** - Support for USB1-USB8 channels
 - ✅ **PCAN Availability Check** - Real-time detection of PCAN driver installation
 
-### Protocol Implementation (CAN v0.7)
-- ✅ **Semantic Message IDs** - Protocol v0.7 compliant
+### Protocol Implementation (CAN v0.9)
+- ✅ **Semantic Message IDs** - Protocol v0.9 compliant
   - `0x200` - Left side raw ADC data (2 bytes)
   - `0x201` - Right side raw ADC data (2 bytes)
   - `0x040` - Start left side streaming (1 byte rate code)
@@ -46,7 +46,7 @@
 
 ### CAN Bitrate Support
 - ✅ **125 kbps** - Standard CAN speed
-- ✅ **250 kbps** - Default protocol speed (v0.7)
+- ✅ **250 kbps** - Default protocol speed (v0.9)
 - ✅ **500 kbps** - High-speed CAN
 - ✅ **1 Mbps** - Maximum CAN speed
 
@@ -511,9 +511,9 @@
 
 ---
 
-**Last Updated**: January 2025  
+**Last Updated**: 10 December 2025  
 **Version**: 2.0.1 (Unreleased)  
-**Protocol Compatibility**: CAN v0.7  
+**Protocol Compatibility**: CAN v0.9  
 **USB-CAN-A Protocol**: Variable-length (Waveshare specification)  
 **Framework**: .NET 8.0 WPF
 
