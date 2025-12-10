@@ -182,19 +182,67 @@ namespace SuspensionPCB_CAN_WPF.Adapters
 
         private void ProcessFrames()
         {
-            while (_frameBuffer.Count >= 20)
+            // Variable-length protocol: [0xAA] [Type] [ID_LOW] [ID_HIGH] [DATA...] [0x55]
+            // Minimum frame length: 5 bytes (header + type + ID(2) + footer, DLC=0)
+            // Maximum frame length: 13 bytes (header + type + ID(2) + data(8) + footer)
+            
+            while (_frameBuffer.Count >= 5) // Minimum frame size
             {
+                // Look for frame header (0xAA)
                 if (!_frameBuffer.TryPeek(out byte first) || first != FRAME_HEADER)
                 {
                     _frameBuffer.TryDequeue(out _);
                     continue;
                 }
 
-                if (_frameBuffer.Count < 20) break;
+                // Need at least 2 bytes to read Type byte and determine DLC
+                if (_frameBuffer.Count < 2) break;
 
-                var frame = new byte[20];
-                for (int i = 0; i < 20; i++)
-                    _frameBuffer.TryDequeue(out frame[i]);
+                // Peek at first 2 bytes to determine DLC
+                // We'll temporarily dequeue them, check, and re-queue if needed
+                if (!_frameBuffer.TryDequeue(out byte header) || !_frameBuffer.TryDequeue(out byte typeByte))
+                {
+                    // Failed to peek, skip this byte and continue
+                    continue;
+                }
+
+                // Validate header
+                if (header != FRAME_HEADER)
+                {
+                    // Not a valid header, discard typeByte and continue
+                    continue;
+                }
+
+                // Extract DLC from Type byte (bits 0-3)
+                byte dlc = (byte)(typeByte & 0x0F);
+                
+                // Calculate frame length: header(1) + type(1) + ID(2) + data(DLC) + footer(1) = 5 + DLC
+                int frameLength = 5 + dlc;
+
+                // Check if we have enough bytes for complete frame (we already have header + type, need ID(2) + data(DLC) + footer(1))
+                int remainingBytes = 2 + dlc + 1; // ID(2) + data(DLC) + footer(1)
+                if (_frameBuffer.Count < remainingBytes)
+                {
+                    // Not enough bytes, re-queue what we took and wait
+                    _frameBuffer.Enqueue(header);
+                    _frameBuffer.Enqueue(typeByte);
+                    break;
+                }
+
+                // We have enough bytes, build the complete frame
+                var frame = new byte[frameLength];
+                frame[0] = header;
+                frame[1] = typeByte;
+                
+                // Extract remaining bytes: ID(2) + data(DLC) + footer(1)
+                for (int i = 2; i < frameLength; i++)
+                {
+                    if (!_frameBuffer.TryDequeue(out frame[i]))
+                    {
+                        // Frame extraction failed, this shouldn't happen but handle it
+                        return;
+                    }
+                }
 
                 DecodeFrame(frame);
             }
@@ -202,17 +250,41 @@ namespace SuspensionPCB_CAN_WPF.Adapters
 
         private void DecodeFrame(byte[] frame)
         {
-            if (frame.Length < 18 || frame[0] != FRAME_HEADER)
+            // Variable-length protocol format: [0xAA] [Type] [ID_LOW] [ID_HIGH] [DATA...] [0x55]
+            // Minimum frame length: 5 bytes (DLC=0)
+            if (frame.Length < 5 || frame[0] != FRAME_HEADER)
                 return;
 
             try
             {
-                // Extract real CAN ID (bytes 5 + 6)
-                uint canId = (uint)(frame[5] | (frame[6] << 8));
+                // Validate footer
+                if (frame[frame.Length - 1] != FRAME_FOOTER)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Invalid frame footer: expected 0x55, got 0x{frame[frame.Length - 1]:X2}");
+                    return;
+                }
 
-                // Extract CAN data (bytes 10..17 → exactly 8 bytes)
-                byte[] canData = new byte[8];
-                Array.Copy(frame, 10, canData, 0, 8);
+                // Extract Type byte (byte 1)
+                byte typeByte = frame[1];
+                byte dlc = (byte)(typeByte & 0x0F); // Extract DLC from bits 0-3
+                
+                // Validate frame length matches expected: 5 + DLC
+                int expectedLength = 5 + dlc;
+                if (frame.Length != expectedLength)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Frame length mismatch: expected {expectedLength}, got {frame.Length}");
+                    return;
+                }
+
+                // Extract CAN ID from bytes 2-3 (low byte, high byte)
+                uint canId = (uint)(frame[2] | (frame[3] << 8));
+
+                // Extract CAN data from bytes 4 to (4+DLC-1)
+                byte[] canData = new byte[dlc];
+                if (dlc > 0)
+                {
+                    Array.Copy(frame, 4, canData, 0, dlc);
+                }
 
                 // Process suspension system messages
                 if (IsSuspensionMessage(canId))
@@ -220,7 +292,7 @@ namespace SuspensionPCB_CAN_WPF.Adapters
                     var canMessage = new CANMessage(canId, canData);
                     MessageReceived?.Invoke(canMessage);
 
-                    System.Diagnostics.Debug.WriteLine($"Processed: ID=0x{canId:X3}, Data={BitConverter.ToString(canData)}");
+                    System.Diagnostics.Debug.WriteLine($"Processed: ID=0x{canId:X3}, DLC={dlc}, Data={BitConverter.ToString(canData)}");
                 }
             }
             catch (Exception ex)
@@ -231,17 +303,33 @@ namespace SuspensionPCB_CAN_WPF.Adapters
 
         private bool IsSuspensionMessage(uint canId)
         {
-            // Explicitly block 0x500 messages
-            if (canId == 0x500)
-                return false;
-
+            // Protocol v0.7 - Ultra-Minimal Suspension System - Semantic IDs
             switch (canId)
             {
-                // Weight data responses
-                case 0x200:  // Suspension weight data
-                case 0x201:  // Axle weight data
+                // Raw ADC Data Transmission (STM32 → PC3)
+                case 0x200:  // Left side raw ADC data (Ch0+Ch1)
+                case 0x201:  // Right side raw ADC data (Ch2+Ch3)
 
-                // Calibration responses
+                // Stream Control Commands (PC3 → STM32, but we receive them too for monitoring)
+                case 0x040:  // Start left side streaming
+                case 0x041:  // Start right side streaming
+                case 0x044:  // Stop all streams
+
+                // System Control Messages (PC3 → STM32, but we receive them too for monitoring)
+                case 0x030:  // Switch to Internal ADC mode
+                case 0x031:  // Switch to ADS1115 mode
+                case 0x032:  // Request system status
+
+                // System Status (STM32 → PC3)
+                case 0x300:  // System status response
+
+                // Bootloader Protocol (separate firmware)
+                case 0x510:  // Bootloader app command
+                case 0x511:  // Bootloader boot command
+                case 0x512:  // Bootloader boot data
+                case 0x513:  // Bootloader boot status
+
+                // Legacy calibration responses (for backward compatibility)
                 case 0x400:  // Variable calibration data
                 case 0x401:  // Calibration quality analysis
                 case 0x402:  // Error response
@@ -254,19 +342,27 @@ namespace SuspensionPCB_CAN_WPF.Adapters
 
         private static byte[] CreateFrame(uint id, byte[] data)
         {
+            // Variable-length protocol: [0xAA] [Type] [ID_LOW] [ID_HIGH] [DATA...] [0x55]
+            // Type byte: bit5=0 (standard frame), bit4=0 (data frame), bits 0-3=DLC (0-8)
+            byte dlc = (byte)Math.Min(data?.Length ?? 0, 8);
+            
             var frame = new List<byte>
             {
-                FRAME_HEADER,
-                (byte)(0xC0 | Math.Min(data?.Length ?? 0, 8)),
-                (byte)(id & 0xFF),
-                (byte)((id >> 8) & 0xFF)
+                FRAME_HEADER,                                    // Byte 0: Header (0xAA)
+                (byte)(0xC0 | dlc),                              // Byte 1: Type (0xC0 = standard, data, DLC)
+                (byte)(id & 0xFF),                               // Byte 2: ID low
+                (byte)((id >> 8) & 0xFF)                         // Byte 3: ID high
             };
 
-            frame.AddRange((data ?? new byte[0]).Take(8));
-            while (frame.Count < 12)
-                frame.Add(0x00);
+            // Add data bytes (only actual data, no padding)
+            if (data != null && dlc > 0)
+            {
+                frame.AddRange(data.Take(dlc));
+            }
 
-            frame.Add(FRAME_FOOTER);
+            // Add footer
+            frame.Add(FRAME_FOOTER);                             // Last byte: Footer (0x55)
+            
             return frame.ToArray();
         }
 
