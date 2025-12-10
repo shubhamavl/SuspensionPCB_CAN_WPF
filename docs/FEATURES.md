@@ -58,7 +58,12 @@
 - ✅ **Error Messages** - Detailed error reporting for connection issues
 
 ### Message Handling
-- ✅ **Frame Decoding** - USB-CAN-A 20-byte frame format parsing
+- ✅ **Frame Decoding** - USB-CAN-A variable-length protocol parsing (Waveshare specification)
+  - Variable-length frame format: `[0xAA] [Type] [ID_LOW] [ID_HIGH] [DATA...] [0x55]`
+  - Frame length: 5-13 bytes (5 + DLC, where DLC = 0-8 bytes)
+  - Type byte encoding: bit5=frame type, bit4=frame format, bits 0-3=DLC
+  - Supports empty messages (DLC=0) for command messages
+  - Dynamic frame parsing based on DLC from Type byte
 - ✅ **Message Validation** - CAN ID and data length validation
 - ✅ **TX/RX Tracking** - Separate counters for transmitted/received messages
 - ✅ **Message Queue** - Thread-safe message buffering
@@ -506,9 +511,10 @@
 
 ---
 
-**Last Updated**: November 2025  
-**Version**: 2.0.0  
+**Last Updated**: January 2025  
+**Version**: 2.0.1 (Unreleased)  
 **Protocol Compatibility**: CAN v0.7  
+**USB-CAN-A Protocol**: Variable-length (Waveshare specification)  
 **Framework**: .NET 8.0 WPF
 
 

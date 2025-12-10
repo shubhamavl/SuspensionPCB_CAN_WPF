@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 12-10-2025
+
+### Fixed
+- **USB-CAN-A Protocol Mismatch** - Fixed critical TX/RX protocol incompatibility
+  - Fixed RX frame processing to use variable-length protocol (was incorrectly using fixed 20-byte format)
+  - Fixed frame decoding to extract CAN ID from correct position (bytes 2-3 instead of bytes 5-6)
+  - Fixed data extraction to use actual DLC (0-8 bytes) instead of always extracting 8 bytes
+  - Added support for empty messages (DLC=0) for command messages
+  - Updated message filtering to include all v0.7 protocol message IDs (0x030, 0x031, 0x032, 0x040, 0x041, 0x044, 0x300)
+  - Protocol now correctly implements Waveshare Variable Length Protocol for both TX and RX
+  - Frame format: `[0xAA] [Type] [ID_LOW] [ID_HIGH] [DATA...] [0x55]` (5-13 bytes variable length)
+  - Resolves communication failures with USB-CAN-A Serial adapter
+
 ## [2.0.0] - 30-11-2025
 
 ### Added
@@ -98,6 +111,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Accessible via info buttons throughout settings panel
 
 ### Changed
+- **USB-CAN-A Protocol Implementation**
+  - Migrated from fixed 20-byte protocol to variable-length protocol (Waveshare specification)
+  - Frame format now correctly implements: `[0xAA] [Type] [ID_LOW] [ID_HIGH] [DATA...] [0x55]`
+  - Dynamic frame length calculation based on DLC (5-13 bytes)
+  - Improved frame parsing with proper header/footer validation
+  - Better handling of partial frames and frame synchronization
 - **Calibration System Enhancements**
   - Upgraded from two-point to multi-point calibration support
   - Improved calibration accuracy with least-squares regression
@@ -143,6 +162,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved visual hierarchy
 
 ### Fixed
+- **USB-CAN-A Communication Issues**
+  - Fixed critical protocol mismatch between TX and RX (TX used variable-length, RX expected fixed 20-byte)
+  - Fixed CAN ID extraction from wrong byte positions (now correctly extracts from bytes 2-3)
+  - Fixed data extraction always using 8 bytes (now correctly uses actual DLC 0-8 bytes)
+  - Fixed frame parsing to handle variable-length frames correctly
+  - Fixed empty message support (DLC=0) for command messages
+  - Fixed message filtering to include all v0.7 protocol message IDs
+  - Resolved communication failures and data corruption with USB-CAN-A Serial adapter
 - **CAN Monitor Issues**
   - Fixed TX messages not appearing (was showing "no TX only RX")
   - Fixed MonitorWindow not connected to CANService

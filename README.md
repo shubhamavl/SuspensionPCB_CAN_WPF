@@ -244,9 +244,12 @@ The application supports **unlimited calibration points** using least-squares li
 
 #### Connection Problems
 - **Check COM Port**: Ensure correct port selection
-- **Driver Issues**: Install USB-CAN adapter drivers
+- **Driver Issues**: Install USB-CAN adapter drivers (CH341 driver for USB-CAN-A)
 - **Baud Rate**: Fixed at 250 kbps (v0.7 protocol)
 - **Cable**: Verify USB cable connection
+- **Protocol**: USB-CAN-A uses variable-length protocol (5-13 bytes per frame)
+  - Frame format: `[0xAA] [Type] [ID_LOW] [ID_HIGH] [DATA...] [0x55]`
+  - Supports messages with 0-8 data bytes (DLC)
 
 #### Calibration Issues
 - **Stream Required**: Ensure data streaming is active
@@ -337,6 +340,7 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 
 ---
 
-**Version**: 2.0.0  
-**Last Updated**: November 2025  
-**Compatibility**: STM32 Suspension System v3.1
+**Version**: 2.2.0   
+**Last Updated**: 12th December 2025
+**Compatibility**: STM32 Suspension System v3.1  
+**USB-CAN-A Protocol**: Variable-length (Waveshare specification) - Fixed in this version
