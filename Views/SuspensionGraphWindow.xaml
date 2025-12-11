@@ -44,11 +44,12 @@
                     <TextBlock x:Name="SampleCountText" Text="0" Margin="0,0,20,0"/>
                     <TextBlock x:Name="YAxisRangeText" Text="Y: 0-1000 kg" FontSize="10" Foreground="#FF6C757D"/>
                 </StackPanel>
-                <!-- Second Row: Min/Max, Efficiency -->
+                <!-- Second Row: Min/Max, Efficiency, Pass/Fail -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                     <TextBlock x:Name="MinWeightText" Text="Min: --" FontWeight="SemiBold" Foreground="#FF3498DB" Margin="0,0,15,0"/>
                     <TextBlock x:Name="MaxWeightText" Text="Max: --" FontWeight="SemiBold" Foreground="#FFE74C3C" Margin="0,0,15,0"/>
                     <TextBlock x:Name="EfficiencyText" Text="Efficiency: --" FontWeight="SemiBold" Foreground="#FF9B59B6" Margin="0,0,15,0"/>
+                    <TextBlock x:Name="TestResultText" Text="Result: Not Tested" FontWeight="Bold" FontSize="14" Margin="0,0,0,0"/>
                 </StackPanel>
             </StackPanel>
         </Border>

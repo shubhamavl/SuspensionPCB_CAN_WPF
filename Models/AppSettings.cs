@@ -61,6 +61,10 @@ namespace SuspensionPCB_CAN_WPF.Models
         
         // Bootloader Settings
         public bool EnableBootloaderFeatures { get; set; } = true; // Enable/disable all bootloader functionality
+        
+        // Suspension Test Settings
+        public double SuspensionEfficiencyLimitLeft { get; set; } = 85.0; // Minimum efficiency % for Pass (Left side)
+        public double SuspensionEfficiencyLimitRight { get; set; } = 85.0; // Minimum efficiency % for Pass (Right side)
     }
 }
 

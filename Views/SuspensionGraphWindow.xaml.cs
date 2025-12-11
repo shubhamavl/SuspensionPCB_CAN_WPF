@@ -89,6 +89,11 @@ namespace SuspensionPCB_CAN_WPF.Views
         // Efficiency calculation
         private double? _efficiency = null;  // Calculated efficiency percentage
 
+        // Pass/Fail validation
+        private string _testResult = "Not Tested";  // "Pass", "Fail", or "Not Tested"
+        private double _efficiencyLimit = 85.0;  // Configurable efficiency limit (loaded from settings)
+        private string _limitsString = "";  // Limit string for display (e.g., "≥85.0%")
+
         // Test data for saving
         private DateTime? _testStartTime = null;
         private DateTime? _testEndTime = null;
@@ -103,6 +108,9 @@ namespace SuspensionPCB_CAN_WPF.Views
             // Get simulator adapter reference if available (for direct pattern access)
             _simulatorAdapter = _canService?.GetSimulatorAdapter();
 
+            // Load efficiency limits from settings
+            LoadEfficiencyLimits();
+
             InitializeGraph();
             InitializeTimers();
             UpdateConnectionStatus();
@@ -113,6 +121,28 @@ namespace SuspensionPCB_CAN_WPF.Views
             {
                 _canService.RawDataReceived += OnRawDataReceived;
                 _canService.MessageReceived += CanService_MessageReceived;
+            }
+        }
+
+        /// <summary>
+        /// Load efficiency limits from settings
+        /// </summary>
+        private void LoadEfficiencyLimits()
+        {
+            try
+            {
+                var settings = Services.SettingsManager.Instance.Settings;
+                // Use side-specific limit based on current side
+                _efficiencyLimit = _isLeftSide ? settings.SuspensionEfficiencyLimitLeft : settings.SuspensionEfficiencyLimitRight;
+                _limitsString = $"≥{_efficiencyLimit:F1}%";
+                ProductionLogger.Instance.LogInfo($"Loaded efficiency limit: {_efficiencyLimit:F1}% for {(_isLeftSide ? "Left" : "Right")} side", "SuspensionGraph");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to load efficiency limits: {ex.Message}", "SuspensionGraph");
+                // Use default
+                _efficiencyLimit = 85.0;
+                _limitsString = "≥85.0%";
             }
         }
 
@@ -426,16 +456,40 @@ namespace SuspensionPCB_CAN_WPF.Views
                     }
                 }
 
-                // Update Efficiency display (if calculated)
+                // Update Efficiency and Pass/Fail display (if calculated)
                 if (EfficiencyText != null)
                 {
                     if (_efficiency.HasValue)
                     {
-                        EfficiencyText.Text = $"Efficiency: {_efficiency.Value:F1}%";
+                        // Show efficiency with Pass/Fail status and limit
+                        string resultColor = _testResult == "Pass" ? "Green" : (_testResult == "Fail" ? "Red" : "Gray");
+                        EfficiencyText.Text = $"Efficiency: {_efficiency.Value:F1}% (Limit: {_limitsString}, Result: {_testResult})";
+                        EfficiencyText.Foreground = new System.Windows.Media.SolidColorBrush(
+                            _testResult == "Pass" ? System.Windows.Media.Color.FromRgb(39, 174, 96) : // Green
+                            _testResult == "Fail" ? System.Windows.Media.Color.FromRgb(220, 53, 69) : // Red
+                            System.Windows.Media.Color.FromRgb(108, 117, 125)); // Gray
                     }
                     else
                     {
                         EfficiencyText.Text = "Efficiency: --";
+                        EfficiencyText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(108, 117, 125)); // Gray
+                    }
+                }
+
+                // Update Pass/Fail indicator (if available)
+                if (TestResultText != null)
+                {
+                    if (_testResult != "Not Tested")
+                    {
+                        TestResultText.Text = $"Result: {_testResult}";
+                        TestResultText.Foreground = new System.Windows.Media.SolidColorBrush(
+                            _testResult == "Pass" ? System.Windows.Media.Color.FromRgb(39, 174, 96) : // Green
+                            System.Windows.Media.Color.FromRgb(220, 53, 69)); // Red
+                    }
+                    else
+                    {
+                        TestResultText.Text = "Result: Not Tested";
+                        TestResultText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(108, 117, 125)); // Gray
                     }
                 }
             }
@@ -687,6 +741,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 _maxWeight = double.MinValue;
                 _hasMinMaxData = false;
                 _efficiency = null;
+                _testResult = "Not Tested";
                 _initialWeight = null;
 
                 // Reset X-axis
@@ -719,12 +774,23 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Toggle side
                 _isLeftSide = !_isLeftSide;
                 
+                // Reload efficiency limit for new side
+                LoadEfficiencyLimits();
+                
                 // Clear current data
                 _values.Clear();
                 while (_pendingWeights.TryDequeue(out _)) { }
                 while (_pendingTimestamps.TryDequeue(out _)) { }
                 _timestamps.Clear();
                 _sampleCount = 0;
+                
+                // Reset test state for new side
+                _minWeight = double.MaxValue;
+                _maxWeight = double.MinValue;
+                _hasMinMaxData = false;
+                _efficiency = null;
+                _testResult = "Not Tested";
+                _initialWeight = null;
 
                 // Update series name and color
                 var series = _suspensionChart.Series.First() as LineSeries<double>;
@@ -997,8 +1063,12 @@ namespace SuspensionPCB_CAN_WPF.Views
                         _maxWeight = double.MinValue;
                         _hasMinMaxData = false;
                         _efficiency = null;
+                        _testResult = "Not Tested";
                         
-                        ProductionLogger.Instance.LogInfo($"Test started - Initial weight: {_initialWeight:F1} kg ({(_isLeftSide ? "Left" : "Right")} side)", "SuspensionGraph");
+                        // Reload efficiency limit for current side
+                        LoadEfficiencyLimits();
+                        
+                        ProductionLogger.Instance.LogInfo($"Test started - Initial weight: {_initialWeight:F1} kg ({(_isLeftSide ? "Left" : "Right")} side), Limit: {_efficiencyLimit:F1}%", "SuspensionGraph");
                     }
                 }
             }
@@ -1009,14 +1079,18 @@ namespace SuspensionPCB_CAN_WPF.Views
         }
 
         /// <summary>
-        /// Stop test tracking - calculates efficiency (like AVL LMSV1.0)
+        /// Stop test tracking - calculates efficiency and Pass/Fail (like AVL LMSV1.0)
         /// Efficiency = (Min Weight / Initial Weight) × 100%
+        /// Pass/Fail = Efficiency >= EfficiencyLimit
         /// </summary>
         public void StopTest()
         {
             try
             {
                 _testEndTime = DateTime.Now;
+                
+                // Reload efficiency limit in case it changed or side switched
+                LoadEfficiencyLimits();
                 
                 // Calculate efficiency if we have initial weight and min/max data
                 if (_initialWeight.HasValue && _initialWeight.Value > 0 && _hasMinMaxData)
@@ -1025,14 +1099,18 @@ namespace SuspensionPCB_CAN_WPF.Views
                     double efficiencyPercent = Math.Abs((_minWeight / _initialWeight.Value) * 100.0);
                     _efficiency = efficiencyPercent;
                     
-                    ProductionLogger.Instance.LogInfo($"Test stopped - Efficiency: {_efficiency:F1}% (Min: {_minWeight:F1} kg, Initial: {_initialWeight:F1} kg)", "SuspensionGraph");
+                    // Calculate Pass/Fail based on efficiency limit
+                    CalculateTestResult();
+                    
+                    ProductionLogger.Instance.LogInfo($"Test stopped - Efficiency: {_efficiency:F1}% (Limit: {_efficiencyLimit:F1}%), Result: {_testResult}", "SuspensionGraph");
                 }
                 else
                 {
                     ProductionLogger.Instance.LogWarning("Cannot calculate efficiency - missing initial weight or min/max data", "SuspensionGraph");
+                    _testResult = "Not Tested";
                 }
                 
-                UpdateStatusDisplays(); // Update efficiency display
+                UpdateStatusDisplays(); // Update efficiency and Pass/Fail display
             }
             catch (Exception ex)
             {
@@ -1041,7 +1119,38 @@ namespace SuspensionPCB_CAN_WPF.Views
         }
 
         /// <summary>
+        /// Calculate Pass/Fail result based on efficiency and limit (like AVL LMSV1.0)
+        /// </summary>
+        private void CalculateTestResult()
+        {
+            try
+            {
+                if (_efficiency.HasValue && _efficiencyLimit > 0)
+                {
+                    if (_efficiency.Value >= _efficiencyLimit)
+                    {
+                        _testResult = "Pass";
+                    }
+                    else
+                    {
+                        _testResult = "Fail";
+                    }
+                }
+                else
+                {
+                    _testResult = "Not Tested";
+                }
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Pass/Fail calculation error: {ex.Message}", "SuspensionGraph");
+                _testResult = "Not Tested";
+            }
+        }
+
+        /// <summary>
         /// Calculate efficiency from current data (can be called anytime)
+        /// Also calculates Pass/Fail if efficiency limit is set
         /// </summary>
         private void CalculateEfficiency()
         {
@@ -1051,6 +1160,12 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     double efficiencyPercent = Math.Abs((_minWeight / _initialWeight.Value) * 100.0);
                     _efficiency = efficiencyPercent;
+                    
+                    // Also calculate Pass/Fail if limit is set
+                    if (_efficiencyLimit > 0)
+                    {
+                        CalculateTestResult();
+                    }
                 }
             }
             catch (Exception ex)
@@ -1120,6 +1235,9 @@ namespace SuspensionPCB_CAN_WPF.Views
                     MinWeight = _hasMinMaxData ? _minWeight : 0.0,
                     MaxWeight = _hasMinMaxData ? _maxWeight : 0.0,
                     Efficiency = _efficiency ?? 0.0,
+                    EfficiencyLimit = _efficiencyLimit,
+                    TestResult = _testResult,
+                    Limits = _limitsString,
                     SampleCount = _values.Count,
                     TransmissionRate = GetRateText(_currentTransmissionRate),
                     DataPoints = _values.ToArray()
@@ -1136,7 +1254,10 @@ namespace SuspensionPCB_CAN_WPF.Views
                 if (saveDialog.ShowDialog() == true)
                 {
                     await SaveTestDataToFile(testData, saveDialog.FileName);
-                    MessageBox.Show($"Test data saved successfully!\n\nSide: {testData.Side}\nEfficiency: {testData.Efficiency:F1}%\nSamples: {testData.SampleCount}", 
+                    string resultMessage = _testResult != "Not Tested" 
+                        ? $"Test data saved successfully!\n\nSide: {testData.Side}\nEfficiency: {testData.Efficiency:F1}%\nLimit: {testData.Limits}\nResult: {testData.TestResult}\nSamples: {testData.SampleCount}"
+                        : $"Test data saved successfully!\n\nSide: {testData.Side}\nEfficiency: {testData.Efficiency:F1}%\nSamples: {testData.SampleCount}";
+                    MessageBox.Show(resultMessage, 
                         "Save Successful", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
@@ -1167,6 +1288,9 @@ namespace SuspensionPCB_CAN_WPF.Views
                         MinWeight = testData.MinWeight,
                         MaxWeight = testData.MaxWeight,
                         Efficiency = testData.Efficiency,
+                        EfficiencyLimit = testData.EfficiencyLimit,
+                        TestResult = testData.TestResult,
+                        Limits = testData.Limits,
                         SampleCount = testData.SampleCount,
                         TransmissionRate = testData.TransmissionRate,
                         DataPointCount = testData.DataPoints?.Length ?? 0,
