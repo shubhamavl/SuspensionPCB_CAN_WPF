@@ -274,6 +274,120 @@ namespace SuspensionPCB_CAN_WPF.Views
         }
         
         /// <summary>
+        /// Enter edit mode for a calibration point
+        /// </summary>
+        private void EditPoint_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is Button button && button.DataContext is CalibrationPointViewModel point)
+                {
+                    point.IsEditing = true;
+                    _logger.LogInfo($"Entered edit mode for point {point.PointNumber}", "CalibrationDialog");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error entering edit mode: {ex.Message}", "CalibrationDialog");
+                MessageBox.Show($"Error entering edit mode: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        /// <summary>
+        /// Save manually entered ADC values for a calibration point
+        /// </summary>
+        private void SavePoint_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is Button button && button.DataContext is CalibrationPointViewModel point)
+                {
+                    // Validate ADC values
+                    if (point.InternalADC == 0 && point.ADS1115ADC == 0)
+                    {
+                        MessageBox.Show("Please enter at least one ADC value (Internal or ADS1115).", 
+                                      "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                    
+                    // Validate ranges
+                    if (point.InternalADC > 4095)
+                    {
+                        MessageBox.Show($"Internal ADC value must be between 0-4095. Current: {point.InternalADC}", 
+                                      "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                    
+                    if (point.ADS1115ADC > 32767)
+                    {
+                        MessageBox.Show($"ADS1115 ADC value must be between 0-32767. Current: {point.ADS1115ADC}", 
+                                      "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                    
+                    // Validate weight input
+                    if (point.KnownWeight < 0)
+                    {
+                        MessageBox.Show("Weight cannot be negative.\n\nEnter 0 for empty platform or a positive weight.", 
+                                      "Invalid Input", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                    
+                    if (point.KnownWeight > 10000)
+                    {
+                        MessageBox.Show("Weight cannot exceed 10,000 kg.\n\nEnter a reasonable weight value.", 
+                                      "Invalid Input", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                    
+                    // Mark as captured if both values are set
+                    if (point.InternalADC > 0 && point.ADS1115ADC > 0)
+                    {
+                        point.BothModesCaptured = true;
+                        point.IsCaptured = true;
+                    }
+                    else if (point.InternalADC > 0 || point.ADS1115ADC > 0)
+                    {
+                        point.IsCaptured = true;
+                    }
+                    
+                    point.IsEditing = false;
+                    UpdateCapturedCount();
+                    _logger.LogInfo($"Saved manual values for point {point.PointNumber}: Internal={point.InternalADC}, ADS1115={point.ADS1115ADC}, Weight={point.KnownWeight:F1} kg", "CalibrationDialog");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error saving point: {ex.Message}", "CalibrationDialog");
+                MessageBox.Show($"Error saving point: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        /// <summary>
+        /// Cancel edit mode for a calibration point
+        /// </summary>
+        private void CancelEdit_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is Button button && button.DataContext is CalibrationPointViewModel point)
+                {
+                    // Exit edit mode without saving changes
+                    point.IsEditing = false;
+                    _logger.LogInfo($"Cancelled edit for point {point.PointNumber}", "CalibrationDialog");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error cancelling edit: {ex.Message}", "CalibrationDialog");
+                MessageBox.Show($"Error cancelling edit: {ex.Message}", "Error", 
+                              MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        /// <summary>
         /// Capture both ADC modes automatically when stream is available
         /// Uses multi-sample averaging for improved accuracy
         /// </summary>

@@ -16,6 +16,7 @@ namespace SuspensionPCB_CAN_WPF.Models
         private double _knownWeight = 0;
         private bool _isCaptured = false;
         private bool _bothModesCaptured = false;
+        private bool _isEditing = false;
         private string _statusText = "Ready to capture";
         
         // Statistics properties for multi-sample averaging
@@ -41,6 +42,8 @@ namespace SuspensionPCB_CAN_WPF.Models
             get => _internalADC;
             set 
             { 
+                if (value > 4095)
+                    throw new ArgumentOutOfRangeException(nameof(InternalADC), $"Internal ADC value must be between 0-4095. Value: {value}");
                 _internalADC = value; 
                 OnPropertyChanged(nameof(InternalADC));
                 UpdateStatusText();
@@ -52,6 +55,8 @@ namespace SuspensionPCB_CAN_WPF.Models
             get => _ads1115ADC;
             set 
             { 
+                if (value > 32767)
+                    throw new ArgumentOutOfRangeException(nameof(ADS1115ADC), $"ADS1115 ADC value must be between 0-32767. Value: {value}");
                 _ads1115ADC = value; 
                 OnPropertyChanged(nameof(ADS1115ADC));
                 UpdateStatusText();
@@ -96,6 +101,19 @@ namespace SuspensionPCB_CAN_WPF.Models
             get => _statusText;
             set { _statusText = value; OnPropertyChanged(nameof(StatusText)); }
         }
+
+        public bool IsEditing
+        {
+            get => _isEditing;
+            set
+            {
+                _isEditing = value;
+                OnPropertyChanged(nameof(IsEditing));
+                OnPropertyChanged(nameof(IsNotEditing));
+            }
+        }
+
+        public bool IsNotEditing => !_isEditing;
         
         public double CaptureMean
         {
