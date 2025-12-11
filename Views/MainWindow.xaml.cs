@@ -119,23 +119,38 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     SettingsPanel.Visibility = Visibility.Visible;
                     SettingsToggleBtn.Content = "⚙ Hide";
-                    
-                    // Update filter settings UI when panel is opened
-                    if (FilterTypeCombo != null && FilterTypeCombo.SelectedItem == null)
-                    {
-                        LoadFilterSettings();
-                    }
-                    // Load display settings when panel opens
+
+                    // Always reload settings when panel opens so UI reflects saved values
+                    LoadSaveDirectorySettings();
+                    LoadFilterSettings();
                     LoadDisplaySettings();
-                    // Load UI visibility settings when panel opens
                     LoadUIVisibilitySettings();
-                    // Load advanced settings when panel opens
                     LoadAdvancedSettings();
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Settings toggle error: {ex.Message}", "UI");
+            }
+        }
+
+        private void SaveSettingsBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Apply current UI selections and persist to disk
+                ApplyFilterSettings();
+                ApplyDisplaySettings();
+                ApplyUIVisibilitySettings();
+                ApplyAdvancedSettings();
+                _settingsManager.SaveSettings();
+                ShowInlineStatus("✓ Settings saved");
+                _logger.LogInfo("Manual settings save completed", "Settings");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Manual settings save failed: {ex.Message}", "Settings");
+                ShowInlineStatus("✗ Failed to save settings", true);
             }
         }
 
@@ -1055,12 +1070,12 @@ namespace SuspensionPCB_CAN_WPF.Views
                 if (_dataLogger.IsLogging && !string.IsNullOrEmpty(_activeSide))
                 {
                     var dataToLog = isLeft ? leftData : rightData;
-                    double tareBaseline = _tareManager.IsTared(_activeSide, _activeADCMode) 
-                        ? _tareManager.GetBaselineKg(_activeSide, _activeADCMode) 
+                    double tareOffset = _tareManager.IsTared(_activeSide, _activeADCMode) 
+                        ? _tareManager.GetOffsetKg(_activeSide, _activeADCMode) 
                         : 0.0;
                     
                     _dataLogger.LogDataPoint(_activeSide, dataToLog.RawADC, dataToLog.CalibratedWeight, dataToLog.TaredWeight, 
-                                           tareBaseline, currentCalibration?.Slope ?? 0, currentCalibration?.Intercept ?? 0, _activeADCMode);
+                                           tareOffset, currentCalibration?.Slope ?? 0, currentCalibration?.Intercept ?? 0, _activeADCMode);
                 }
                 
                 // Update calibration status icons
@@ -1186,7 +1201,7 @@ namespace SuspensionPCB_CAN_WPF.Views
             // Reset filters when calibration changes
             _weightProcessor.ResetFilters();
             
-            // Only update ADC mode for the active side to ensure correct tare baseline is used
+            // Update ADC mode for the active side to ensure correct tare baseline is used
             // This prevents applying tare from wrong ADC mode when switching modes
             if (_activeSide == "Left")
             {
@@ -1196,7 +1211,13 @@ namespace SuspensionPCB_CAN_WPF.Views
             {
                 _weightProcessor.SetADCMode(false, _activeADCMode);
             }
-            // If no active side, don't update ADC mode (keep previous values)
+            else
+            {
+                // No active side yet (during initialization) - set ADC mode for both sides
+                // This ensures the WeightProcessor has the correct mode from startup
+                _weightProcessor.SetADCMode(true, _currentADCMode);
+                _weightProcessor.SetADCMode(false, _currentADCMode);
+            }
         }
         
         private void Tare_Click(object sender, RoutedEventArgs e)
@@ -1220,7 +1241,15 @@ namespace SuspensionPCB_CAN_WPF.Views
                 
                 double currentCalibratedKg = currentCalibration.RawToKg(_currentRawADC);
                 
-                // Use mode-specific tare (active ADC mode)
+                // Tare only works when weight is negative (calibrator removed)
+                if (currentCalibratedKg >= 0)
+                {
+                    MessageBox.Show($"Tare only works when weight is negative (calibrator removed).\n\nCurrent weight: {currentCalibratedKg:F1} kg\n\nPlease remove the calibrator weight first.", 
+                                  "Tare Requires Negative Weight", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                
+                // Use mode-specific tare (active ADC mode) - stores negative offset
                 _tareManager.Tare(_activeSide, currentCalibratedKg, _activeADCMode);
                 
                 _tareManager.SaveToFile();
@@ -1230,8 +1259,8 @@ namespace SuspensionPCB_CAN_WPF.Views
                 
                 UpdateWeightDisplays();
                 string modeText = _activeADCMode == 0 ? "Internal" : "ADS1115";
-                int roundedBaseline = (int)Math.Round(currentCalibratedKg);
-                MessageBox.Show($"{_activeSide} side ({modeText}) tared successfully.\nBaseline: {roundedBaseline} kg", 
+                double offset = _tareManager.GetOffsetKg(_activeSide, _activeADCMode);
+                MessageBox.Show($"{_activeSide} side ({modeText}) tared successfully.\nOffset: +{offset:F1} kg\n\nAll future readings will be compensated by adding {offset:F1} kg.\nExample: If weight shows -23 kg, after tare it will show 0 kg.", 
                               "Tare Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -1261,7 +1290,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 _tareManager.SaveToFile();
                 UpdateWeightDisplays();
                 string modeText = _activeADCMode == 0 ? "Internal" : "ADS1115";
-                MessageBox.Show($"{_activeSide} side ({modeText}) tare reset successfully.", "Reset Complete", 
+                MessageBox.Show($"{_activeSide} side ({modeText}) tare offset cleared successfully.\n\nReadings will no longer be compensated.", "Reset Complete", 
                               MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -1480,6 +1509,7 @@ namespace SuspensionPCB_CAN_WPF.Views
             
             // Load adapter configuration
             LoadConfiguration();
+            LoadSaveDirectorySettings();
             
             // Load filter settings
             LoadFilterSettings();
@@ -2069,15 +2099,39 @@ namespace SuspensionPCB_CAN_WPF.Views
             }
         }
 
+        private void LoadSaveDirectorySettings()
+        {
+            try
+            {
+                var settings = _settingsManager.Settings;
+                string dir = string.IsNullOrWhiteSpace(settings.SaveDirectory)
+                    ? PathHelper.GetDataDirectory()
+                    : settings.SaveDirectory;
+                if (SaveDirectoryTxt != null)
+                {
+                    SaveDirectoryTxt.Text = dir;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error loading save directory: {ex.Message}", "Settings");
+            }
+        }
+
         private void LoadFilterSettings()
         {
             try
             {
                 var settings = _settingsManager.Settings;
                 
+                string filterType = string.IsNullOrWhiteSpace(settings.FilterType) ? "EMA" : settings.FilterType;
+                double filterAlpha = Math.Clamp(settings.FilterAlpha, 0.05, 0.5);
+                int filterWindowSize = settings.FilterWindowSize > 0 ? settings.FilterWindowSize : 10;
+                bool filterEnabled = settings.FilterEnabled;
+                
                 if (FilterEnabledCheckBox != null)
                 {
-                    FilterEnabledCheckBox.IsChecked = settings.FilterEnabled;
+                    FilterEnabledCheckBox.IsChecked = filterEnabled;
                 }
                 
                 // Set filter type
@@ -2085,35 +2139,45 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     foreach (System.Windows.Controls.ComboBoxItem item in FilterTypeCombo.Items)
                     {
-                        if (item.Tag?.ToString() == settings.FilterType)
+                        if (item.Tag?.ToString() == filterType)
                         {
                             FilterTypeCombo.SelectedItem = item;
                             break;
                         }
                     }
                 }
-                
+
+                // Ensure visibility matches saved filter type
+                if (EmaSettingsPanel != null)
+                {
+                    EmaSettingsPanel.Visibility = filterType == "EMA" ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                if (SmaSettingsPanel != null)
+                {
+                    SmaSettingsPanel.Visibility = filterType == "SMA" ? Visibility.Visible : Visibility.Collapsed;
+                }
+
                 if (EmaAlphaSlider != null)
                 {
-                    EmaAlphaSlider.Value = settings.FilterAlpha;
+                    EmaAlphaSlider.Value = filterAlpha;
                 }
                 
                 if (SmaWindowSlider != null)
                 {
-                    SmaWindowSlider.Value = settings.FilterWindowSize;
+                    SmaWindowSlider.Value = filterWindowSize;
                 }
                 
                 // Apply settings to WeightProcessor (runtime only, don't save again)
-                bool enabled = settings.FilterEnabled;
-                FilterType type = settings.FilterType switch
+                FilterType type = filterType switch
                 {
                     "EMA" => FilterType.EMA,
                     "SMA" => FilterType.SMA,
                     _ => FilterType.None
                 };
-                _weightProcessor.ConfigureFilter(type, settings.FilterAlpha, settings.FilterWindowSize, enabled);
+                _weightProcessor.ConfigureFilter(type, filterAlpha, filterWindowSize, filterEnabled);
                 
-                _logger.LogInfo($"Filter settings loaded: Type={settings.FilterType}, Alpha={settings.FilterAlpha}, Window={settings.FilterWindowSize}, Enabled={settings.FilterEnabled}", "Settings");
+                _logger.LogInfo($"Filter settings loaded: Type={filterType}, Alpha={filterAlpha}, Window={filterWindowSize}, Enabled={filterEnabled}", "Settings");
             }
             catch (Exception ex)
             {
@@ -2127,12 +2191,16 @@ namespace SuspensionPCB_CAN_WPF.Views
             {
                 var settings = _settingsManager.Settings;
                 
+                int weightDecimals = (settings.WeightDisplayDecimals < 0 || settings.WeightDisplayDecimals > 2) ? 0 : settings.WeightDisplayDecimals;
+                int uiUpdateRateMs = Math.Clamp(settings.UIUpdateRateMs, 10, 200);
+                int dataTimeoutSeconds = Math.Clamp(settings.DataTimeoutSeconds, 1, 30);
+                
                 // Set weight display format
                 if (WeightFormatCombo != null)
                 {
                     foreach (System.Windows.Controls.ComboBoxItem item in WeightFormatCombo.Items)
                     {
-                        if (item.Tag?.ToString() == settings.WeightDisplayDecimals.ToString())
+                        if (item.Tag?.ToString() == weightDecimals.ToString())
                         {
                             WeightFormatCombo.SelectedItem = item;
                             break;
@@ -2143,23 +2211,23 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Set UI update rate
                 if (UIUpdateRateSlider != null)
                 {
-                    UIUpdateRateSlider.Value = settings.UIUpdateRateMs;
+                    UIUpdateRateSlider.Value = uiUpdateRateMs;
                     // Update display text
                     if (UIUpdateRateValueTxt != null)
                     {
-                        double rateHz = 1000.0 / settings.UIUpdateRateMs;
-                        UIUpdateRateValueTxt.Text = $"{settings.UIUpdateRateMs} ms ({rateHz:F1} Hz)";
+                        double rateHz = 1000.0 / uiUpdateRateMs;
+                        UIUpdateRateValueTxt.Text = $"{uiUpdateRateMs} ms ({rateHz:F1} Hz)";
                     }
                 }
                 
                 // Set data timeout
                 if (DataTimeoutSlider != null)
                 {
-                    DataTimeoutSlider.Value = settings.DataTimeoutSeconds;
+                    DataTimeoutSlider.Value = dataTimeoutSeconds;
                     // Update display text
                     if (DataTimeoutValueTxt != null)
                     {
-                        int timeoutSeconds = settings.DataTimeoutSeconds;
+                        int timeoutSeconds = dataTimeoutSeconds;
                         DataTimeoutValueTxt.Text = $"{timeoutSeconds} second{(timeoutSeconds == 1 ? "" : "s")}";
                     }
                 }
@@ -2168,18 +2236,18 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Only apply to runtime components, not save again
                 if (_uiUpdateTimer != null)
                 {
-                    _uiUpdateTimer.Interval = TimeSpan.FromMilliseconds(settings.UIUpdateRateMs);
+                    _uiUpdateTimer.Interval = TimeSpan.FromMilliseconds(uiUpdateRateMs);
                 }
                 
                 if (_canService != null)
                 {
-                    _canService.SetTimeout(TimeSpan.FromSeconds(settings.DataTimeoutSeconds));
+                    _canService.SetTimeout(TimeSpan.FromSeconds(dataTimeoutSeconds));
                 }
                 
                 // Update weight display immediately if active
                 UpdateWeightDisplays();
                 
-                _logger.LogInfo($"Display settings loaded: WeightDecimals={settings.WeightDisplayDecimals}, UIUpdateRate={settings.UIUpdateRateMs}ms, DataTimeout={settings.DataTimeoutSeconds}s", "Settings");
+                _logger.LogInfo($"Display settings loaded: WeightDecimals={weightDecimals}, UIUpdateRate={uiUpdateRateMs}ms, DataTimeout={dataTimeoutSeconds}s", "Settings");
             }
             catch (Exception ex)
             {
@@ -2235,13 +2303,20 @@ namespace SuspensionPCB_CAN_WPF.Views
             {
                 var settings = _settingsManager.Settings;
                 
+                int statusBannerDurationMs = Math.Clamp(settings.StatusBannerDurationMs, 1000, 10000);
+                int messageHistoryLimit = Math.Clamp(settings.MessageHistoryLimit, 100, 5000);
+                bool showRawADC = settings.ShowRawADC;
+                bool showCalibratedWeight = settings.ShowCalibratedWeight;
+                bool showStreamingIndicators = settings.ShowStreamingIndicators;
+                bool showCalibrationIcons = settings.ShowCalibrationIcons;
+                
                 // Set status banner duration
                 if (StatusBannerDurationSlider != null)
                 {
-                    StatusBannerDurationSlider.Value = settings.StatusBannerDurationMs / 1000.0; // Convert ms to seconds
+                    StatusBannerDurationSlider.Value = statusBannerDurationMs / 1000.0; // Convert ms to seconds
                     if (StatusBannerDurationValueTxt != null)
                     {
-                        int seconds = settings.StatusBannerDurationMs / 1000;
+                        int seconds = statusBannerDurationMs / 1000;
                         StatusBannerDurationValueTxt.Text = $"{seconds} second{(seconds == 1 ? "" : "s")}";
                     }
                 }
@@ -2249,22 +2324,22 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Set message history limit
                 if (MessageHistoryLimitSlider != null)
                 {
-                    MessageHistoryLimitSlider.Value = settings.MessageHistoryLimit;
+                    MessageHistoryLimitSlider.Value = messageHistoryLimit;
                     if (MessageHistoryLimitValueTxt != null)
                     {
-                        MessageHistoryLimitValueTxt.Text = $"{settings.MessageHistoryLimit} messages";
+                        MessageHistoryLimitValueTxt.Text = $"{messageHistoryLimit} messages";
                     }
                 }
                 
                 // Set show/hide checkboxes
                 if (ShowRawADCCheckBox != null)
-                    ShowRawADCCheckBox.IsChecked = settings.ShowRawADC;
+                    ShowRawADCCheckBox.IsChecked = showRawADC;
                 if (ShowCalibratedWeightCheckBox != null)
-                    ShowCalibratedWeightCheckBox.IsChecked = settings.ShowCalibratedWeight;
+                    ShowCalibratedWeightCheckBox.IsChecked = showCalibratedWeight;
                 if (ShowStreamingIndicatorsCheckBox != null)
-                    ShowStreamingIndicatorsCheckBox.IsChecked = settings.ShowStreamingIndicators;
+                    ShowStreamingIndicatorsCheckBox.IsChecked = showStreamingIndicators;
                 if (ShowCalibrationIconsCheckBox != null)
-                    ShowCalibrationIconsCheckBox.IsChecked = settings.ShowCalibrationIcons;
+                    ShowCalibrationIconsCheckBox.IsChecked = showCalibrationIcons;
                 
                 // Apply visibility to UI elements (runtime only, don't save again)
                 if (RawTxt != null)
@@ -2272,28 +2347,28 @@ namespace SuspensionPCB_CAN_WPF.Views
                     var parent = RawTxt.Parent as FrameworkElement;
                     if (parent != null)
                     {
-                        parent.Visibility = settings.ShowRawADC ? Visibility.Visible : Visibility.Collapsed;
+                        parent.Visibility = showRawADC ? Visibility.Visible : Visibility.Collapsed;
                     }
                 }
                 
                 // Apply visibility to streaming indicators
                 if (StreamIndicator != null)
                 {
-                    StreamIndicator.Visibility = settings.ShowStreamingIndicators ? Visibility.Visible : Visibility.Collapsed;
+                    StreamIndicator.Visibility = showStreamingIndicators ? Visibility.Visible : Visibility.Collapsed;
                 }
                 if (StreamStatusTxt != null)
                 {
-                    StreamStatusTxt.Visibility = settings.ShowStreamingIndicators ? Visibility.Visible : Visibility.Collapsed;
+                    StreamStatusTxt.Visibility = showStreamingIndicators ? Visibility.Visible : Visibility.Collapsed;
                 }
                 
                 // Apply visibility to calibration icons
                 if (CalStatusIcon != null)
                 {
-                    CalStatusIcon.Visibility = settings.ShowCalibrationIcons ? Visibility.Visible : Visibility.Collapsed;
+                    CalStatusIcon.Visibility = showCalibrationIcons ? Visibility.Visible : Visibility.Collapsed;
                 }
                 if (CalStatusText != null)
                 {
-                    CalStatusText.Visibility = settings.ShowCalibrationIcons ? Visibility.Visible : Visibility.Collapsed;
+                    CalStatusText.Visibility = showCalibrationIcons ? Visibility.Visible : Visibility.Collapsed;
                 }
             }
             catch (Exception ex)
@@ -2306,8 +2381,8 @@ namespace SuspensionPCB_CAN_WPF.Views
         {
             try
             {
-                int statusBannerDuration = (int)(StatusBannerDurationSlider?.Value ?? 3) * 1000; // Convert to ms
-                int messageHistoryLimit = (int)(MessageHistoryLimitSlider?.Value ?? 1000);
+                int statusBannerDuration = Math.Clamp((int)(StatusBannerDurationSlider?.Value ?? 3) * 1000, 1000, 10000); // Convert to ms
+                int messageHistoryLimit = Math.Clamp((int)(MessageHistoryLimitSlider?.Value ?? 1000), 100, 5000);
                 bool showRawADC = ShowRawADCCheckBox?.IsChecked ?? true;
                 bool showCalibratedWeight = ShowCalibratedWeightCheckBox?.IsChecked ?? false;
                 bool showStreamingIndicators = ShowStreamingIndicatorsCheckBox?.IsChecked ?? true;
@@ -2416,43 +2491,60 @@ namespace SuspensionPCB_CAN_WPF.Views
             {
                 var settings = _settingsManager.Settings;
                 
+                int txFlashMs = Math.Clamp(settings.TXIndicatorFlashMs, 50, 1000);
+                int batchSize = Math.Clamp(settings.BatchProcessingSize, 10, 200);
+                int clockInterval = Math.Clamp(settings.ClockUpdateIntervalMs, 100, 5000);
+                int calibrationDelay = Math.Clamp(settings.CalibrationCaptureDelayMs, 100, 5000);
+                string logFormat = string.IsNullOrWhiteSpace(settings.LogFileFormat) ? "CSV" : settings.LogFileFormat;
+                string calibrationMode = string.IsNullOrWhiteSpace(settings.CalibrationMode) ? "Regression" : settings.CalibrationMode;
+                bool showQualityMetrics = settings.ShowCalibrationQualityMetrics;
+                bool enableBootloader = settings.EnableBootloaderFeatures;
+                
+                bool averagingEnabled = settings.CalibrationAveragingEnabled;
+                int sampleCount = Math.Clamp(settings.CalibrationSampleCount, 10, 500);
+                int durationMs = Math.Clamp(settings.CalibrationCaptureDurationMs, 500, 10000);
+                bool useMedian = settings.CalibrationUseMedian;
+                bool removeOutliers = settings.CalibrationRemoveOutliers;
+                double outlierThreshold = Math.Clamp(settings.CalibrationOutlierThreshold, 1.0, 5.0);
+                double maxStdDev = Math.Clamp(settings.CalibrationMaxStdDev, 1.0, 50.0);
+                
                 // Set TX indicator flash duration
                 if (TXIndicatorFlashSlider != null)
                 {
-                    TXIndicatorFlashSlider.Value = settings.TXIndicatorFlashMs;
+                    TXIndicatorFlashSlider.Value = txFlashMs;
                     if (TXIndicatorFlashValueTxt != null)
                     {
-                        TXIndicatorFlashValueTxt.Text = $"{settings.TXIndicatorFlashMs} ms";
+                        TXIndicatorFlashValueTxt.Text = $"{txFlashMs} ms";
                     }
                 }
                 
                 // Set batch processing size
                 if (BatchProcessingSizeSlider != null)
                 {
-                    BatchProcessingSizeSlider.Value = settings.BatchProcessingSize;
+                    BatchProcessingSizeSlider.Value = batchSize;
                     if (BatchProcessingSizeValueTxt != null)
                     {
-                        BatchProcessingSizeValueTxt.Text = $"{settings.BatchProcessingSize} messages";
+                        BatchProcessingSizeValueTxt.Text = $"{batchSize} messages";
                     }
                 }
                 
                 // Set clock update interval
                 if (ClockUpdateIntervalSlider != null)
                 {
-                    ClockUpdateIntervalSlider.Value = settings.ClockUpdateIntervalMs;
+                    ClockUpdateIntervalSlider.Value = clockInterval;
                     if (ClockUpdateIntervalValueTxt != null)
                     {
-                        ClockUpdateIntervalValueTxt.Text = $"{settings.ClockUpdateIntervalMs} ms";
+                        ClockUpdateIntervalValueTxt.Text = $"{clockInterval} ms";
                     }
                 }
                 
                 // Set calibration capture delay
                 if (CalibrationCaptureDelaySlider != null)
                 {
-                    CalibrationCaptureDelaySlider.Value = settings.CalibrationCaptureDelayMs;
+                    CalibrationCaptureDelaySlider.Value = calibrationDelay;
                     if (CalibrationCaptureDelayValueTxt != null)
                     {
-                        CalibrationCaptureDelayValueTxt.Text = $"{settings.CalibrationCaptureDelayMs} ms";
+                        CalibrationCaptureDelayValueTxt.Text = $"{calibrationDelay} ms";
                     }
                 }
                 
@@ -2461,7 +2553,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     foreach (System.Windows.Controls.ComboBoxItem item in LogFormatCombo.Items)
                     {
-                        if (item.Tag?.ToString() == settings.LogFileFormat)
+                        if (item.Tag?.ToString() == logFormat)
                         {
                             LogFormatCombo.SelectedItem = item;
                             break;
@@ -2472,7 +2564,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Set calibration mode
                 if (CalibrationModeComboBox != null)
                 {
-                    string mode = settings.CalibrationMode ?? "Regression";
+                    string mode = calibrationMode;
                     foreach (System.Windows.Controls.ComboBoxItem item in CalibrationModeComboBox.Items)
                     {
                         if (item.Tag?.ToString() == mode)
@@ -2485,63 +2577,63 @@ namespace SuspensionPCB_CAN_WPF.Views
                 
                 // Set show calibration quality metrics
                 if (ShowCalibrationQualityMetricsCheckBox != null)
-                    ShowCalibrationQualityMetricsCheckBox.IsChecked = settings.ShowCalibrationQualityMetrics;
+                    ShowCalibrationQualityMetricsCheckBox.IsChecked = showQualityMetrics;
                 
                 // Set enable bootloader features
                 if (EnableBootloaderFeaturesCheckBox != null)
-                    EnableBootloaderFeaturesCheckBox.IsChecked = settings.EnableBootloaderFeatures;
+                    EnableBootloaderFeaturesCheckBox.IsChecked = enableBootloader;
                 
                 // Set calibration averaging enabled
                 if (CalibrationAveragingEnabledCheckBox != null)
-                    CalibrationAveragingEnabledCheckBox.IsChecked = settings.CalibrationAveragingEnabled;
+                    CalibrationAveragingEnabledCheckBox.IsChecked = averagingEnabled;
                 
                 // Set calibration averaging settings
                 if (CalibrationSampleCountSlider != null)
                 {
-                    CalibrationSampleCountSlider.Value = settings.CalibrationSampleCount;
+                    CalibrationSampleCountSlider.Value = sampleCount;
                     if (CalibrationSampleCountValueTxt != null)
                     {
-                        CalibrationSampleCountValueTxt.Text = $"{settings.CalibrationSampleCount}";
+                        CalibrationSampleCountValueTxt.Text = $"{sampleCount}";
                     }
                 }
                 
                 if (CalibrationCaptureDurationSlider != null)
                 {
-                    CalibrationCaptureDurationSlider.Value = settings.CalibrationCaptureDurationMs;
+                    CalibrationCaptureDurationSlider.Value = durationMs;
                     if (CalibrationCaptureDurationValueTxt != null)
                     {
-                        CalibrationCaptureDurationValueTxt.Text = $"{settings.CalibrationCaptureDurationMs} ms";
+                        CalibrationCaptureDurationValueTxt.Text = $"{durationMs} ms";
                     }
                 }
                 
                 if (CalibrationUseMedianCheckBox != null)
-                    CalibrationUseMedianCheckBox.IsChecked = settings.CalibrationUseMedian;
+                    CalibrationUseMedianCheckBox.IsChecked = useMedian;
                 
                 if (CalibrationRemoveOutliersCheckBox != null)
-                    CalibrationRemoveOutliersCheckBox.IsChecked = settings.CalibrationRemoveOutliers;
+                    CalibrationRemoveOutliersCheckBox.IsChecked = removeOutliers;
                 
                 if (CalibrationOutlierThresholdSlider != null)
                 {
-                    CalibrationOutlierThresholdSlider.Value = settings.CalibrationOutlierThreshold;
+                    CalibrationOutlierThresholdSlider.Value = outlierThreshold;
                     if (CalibrationOutlierThresholdValueTxt != null)
                     {
-                        CalibrationOutlierThresholdValueTxt.Text = $"{settings.CalibrationOutlierThreshold:F1} σ";
+                        CalibrationOutlierThresholdValueTxt.Text = $"{outlierThreshold:F1} σ";
                     }
                 }
                 
                 if (CalibrationMaxStdDevSlider != null)
                 {
-                    CalibrationMaxStdDevSlider.Value = settings.CalibrationMaxStdDev;
+                    CalibrationMaxStdDevSlider.Value = maxStdDev;
                     if (CalibrationMaxStdDevValueTxt != null)
                     {
-                        CalibrationMaxStdDevValueTxt.Text = $"{settings.CalibrationMaxStdDev:F1}";
+                        CalibrationMaxStdDevValueTxt.Text = $"{maxStdDev:F1}";
                     }
                 }
                 
                 // Apply runtime settings (timer intervals, etc.) without saving
                 if (_clockTimer != null)
                 {
-                    _clockTimer.Interval = TimeSpan.FromMilliseconds(settings.ClockUpdateIntervalMs);
+                    _clockTimer.Interval = TimeSpan.FromMilliseconds(clockInterval);
                 }
                 
                 // Update bootloader UI visibility
@@ -2557,15 +2649,15 @@ namespace SuspensionPCB_CAN_WPF.Views
         {
             try
             {
-                int txFlashMs = (int)(TXIndicatorFlashSlider?.Value ?? 200);
+                int txFlashMs = Math.Clamp((int)(TXIndicatorFlashSlider?.Value ?? 200), 50, 1000);
                 string logFormat = "CSV"; // Default to CSV for now
                 if (LogFormatCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem formatItem)
                 {
                     logFormat = formatItem.Tag?.ToString() ?? "CSV";
                 }
-                int batchSize = (int)(BatchProcessingSizeSlider?.Value ?? 50);
-                int clockInterval = (int)(ClockUpdateIntervalSlider?.Value ?? 1000);
-                int calibrationDelay = (int)(CalibrationCaptureDelaySlider?.Value ?? 500);
+                int batchSize = Math.Clamp((int)(BatchProcessingSizeSlider?.Value ?? 50), 10, 200);
+                int clockInterval = Math.Clamp((int)(ClockUpdateIntervalSlider?.Value ?? 1000), 100, 5000);
+                int calibrationDelay = Math.Clamp((int)(CalibrationCaptureDelaySlider?.Value ?? 500), 100, 5000);
                 bool showQualityMetrics = ShowCalibrationQualityMetricsCheckBox?.IsChecked ?? true;
                 
                 // Get calibration mode
@@ -2588,12 +2680,12 @@ namespace SuspensionPCB_CAN_WPF.Views
                 
                 // Save calibration averaging settings
                 bool averagingEnabled = CalibrationAveragingEnabledCheckBox?.IsChecked ?? true;
-                int sampleCount = (int)(CalibrationSampleCountSlider?.Value ?? 50);
-                int durationMs = (int)(CalibrationCaptureDurationSlider?.Value ?? 2000);
+                int sampleCount = Math.Clamp((int)(CalibrationSampleCountSlider?.Value ?? 50), 10, 500);
+                int durationMs = Math.Clamp((int)(CalibrationCaptureDurationSlider?.Value ?? 2000), 500, 10000);
                 bool useMedian = CalibrationUseMedianCheckBox?.IsChecked ?? true;
                 bool removeOutliers = CalibrationRemoveOutliersCheckBox?.IsChecked ?? true;
-                double outlierThreshold = CalibrationOutlierThresholdSlider?.Value ?? 2.0;
-                double maxStdDev = CalibrationMaxStdDevSlider?.Value ?? 10.0;
+                double outlierThreshold = Math.Clamp(CalibrationOutlierThresholdSlider?.Value ?? 2.0, 1.0, 5.0);
+                double maxStdDev = Math.Clamp(CalibrationMaxStdDevSlider?.Value ?? 10.0, 1.0, 50.0);
                 _settingsManager.SetCalibrationAveragingSettings(averagingEnabled, sampleCount, durationMs, useMedian, removeOutliers, outlierThreshold, maxStdDev);
                 
                 // Update bootloader UI visibility
@@ -3623,8 +3715,8 @@ Most users should keep default values unless experiencing specific issues.";
                     weightDecimals = int.Parse(formatItem.Tag?.ToString() ?? "0");
                 }
                 
-                int uiUpdateRate = (int)(UIUpdateRateSlider?.Value ?? 50);
-                int dataTimeout = (int)(DataTimeoutSlider?.Value ?? 5);
+                int uiUpdateRate = Math.Clamp((int)(UIUpdateRateSlider?.Value ?? 50), 10, 200);
+                int dataTimeout = Math.Clamp((int)(DataTimeoutSlider?.Value ?? 5), 1, 30);
                 
                 // Apply UI update rate to timer
                 if (_uiUpdateTimer != null)
@@ -3729,8 +3821,8 @@ Most users should keep default values unless experiencing specific issues.";
                     filterType = item.Tag?.ToString() ?? "EMA";
                 }
                 
-                double alpha = EmaAlphaSlider?.Value ?? 0.15;
-                int windowSize = (int)(SmaWindowSlider?.Value ?? 10);
+                double alpha = Math.Clamp(EmaAlphaSlider?.Value ?? 0.15, 0.05, 0.5);
+                int windowSize = Math.Max((int)(SmaWindowSlider?.Value ?? 10), 1);
                 
                 FilterType type = filterType switch
                 {
@@ -4425,9 +4517,10 @@ Most users should keep default values unless experiencing specific issues.";
                 {
                     _currentADCMode = 0;
                     _activeADCMode = 0; // Update active mode
-                    UpdateAdcModeIndicators("Internal", "#FF2196F3");
+                    UpdateAdcModeIndicators("Internal");
                     UpdateWeightProcessorCalibration();
                     UpdateDashboardMode();
+                    PersistADCMode(_currentADCMode);
                     _logger.LogInfo("Switched to Internal ADC mode (12-bit)", "Mode");
                     ShowInlineStatus("✓ Switched to Internal ADC mode");
                 }
@@ -4460,9 +4553,10 @@ Most users should keep default values unless experiencing specific issues.";
                 {
                     _currentADCMode = 1;
                     _activeADCMode = 1; // Update active mode
-                    UpdateAdcModeIndicators("ADS1115", "#FF4CAF50");
+                    UpdateAdcModeIndicators("ADS1115");
                     UpdateWeightProcessorCalibration();
                     UpdateDashboardMode();
+                    PersistADCMode(_currentADCMode);
                     _logger.LogInfo("Switched to ADS1115 mode (16-bit)", "Mode");
                     ShowInlineStatus("✓ Switched to ADS1115 mode (16-bit precision)");
                 }
@@ -4478,34 +4572,12 @@ Most users should keep default values unless experiencing specific issues.";
             }
         }
 
-        private void UpdateAdcModeIndicators(string mode, string colorHex)
-        {
-            try
-            {
-                Dispatcher.Invoke(() =>
-                {
-                    string displayText = mode == "Internal" 
-                        ? "Internal ADC (12-bit)" 
-                        : "ADS1115 (16-bit)";
-                    
-                    // Update header ADC mode display
-                    if (HeaderAdcModeTxt != null)
-                        HeaderAdcModeTxt.Text = displayText;
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Update mode indicators error: {ex.Message}", "UI");
-            }
-        }
-
         private void HandleSystemStatus(object? sender, SystemStatusEventArgs e)
         {
             try
             {
                 string mode = e.ADCMode == 0 ? "Internal" : "ADS1115";
-                string color = e.ADCMode == 0 ? "#FF2196F3" : "#FF4CAF50";
-                UpdateAdcModeIndicators(mode, color);
+                UpdateAdcModeIndicators(mode);
                 
                 // Check if ADC mode changed - reload calibrations if it did
                 if (_currentADCMode != e.ADCMode)
@@ -4516,6 +4588,7 @@ Most users should keep default values unless experiencing specific issues.";
                     LoadCalibrations();
                     UpdateWeightProcessorCalibration();
                     UpdateDashboardMode();
+                    PersistADCMode(_currentADCMode);
                 }
                 
                 // Update data logger with system status
@@ -4676,8 +4749,8 @@ Most users should keep default values unless experiencing specific issues.";
                 if (lastUpdate != DateTime.MinValue)
                 {
                     string mode = adcMode == 0 ? "Internal" : "ADS1115";
-                    string color = adcMode == 0 ? "#FF2196F3" : "#FF4CAF50";
-                    UpdateAdcModeIndicators(mode, color);
+                    // Use the method that updates both header and radio button indicators
+                    UpdateAdcModeIndicators(mode);
                     
                     _logger.LogInfo($"Initialized ADC mode from settings: {mode} (last update: {lastUpdate:yyyy-MM-dd HH:mm:ss})", "Settings");
                 }
@@ -4686,7 +4759,8 @@ Most users should keep default values unless experiencing specific issues.";
                     // Default to ADS1115 if no previous mode found
                     _currentADCMode = 1;  // ADS1115
                     _activeADCMode = 1;   // ADS1115
-                    UpdateAdcModeIndicators("ADS1115", "#FF4CAF50");
+                    // Use the method that updates both header and radio button indicators
+                    UpdateAdcModeIndicators("ADS1115");
                     _logger.LogInfo("No previous ADC mode found in settings, defaulting to ADS1115", "Settings");
                 }
             }
@@ -5159,34 +5233,31 @@ Most users should keep default values unless experiencing specific issues.";
         {
             try
             {
-                // Toggle between modes based on current header text
-                if (HeaderAdcModeTxt.Text.Contains("Internal"))
+                if (_canService == null) return;
+
+                if (_currentADCMode == 0)
                 {
                     // Switch to ADS1115
-                    if (_canService != null)
-                    {
-                        _canService.SwitchToADS1115();
-                        _currentADCMode = 1;
-                        _activeADCMode = 1;
-                        UpdateAdcModeIndicators("ADS1115");
-                        UpdateWeightProcessorCalibration();
-                        UpdateDashboardMode();
-                        _logger.LogInfo("Switched to ADS1115 mode", "ADC");
-                    }
+                    _canService.SwitchToADS1115();
+                    _currentADCMode = 1;
+                    _activeADCMode = 1;
+                    UpdateAdcModeIndicators("ADS1115");
+                    UpdateWeightProcessorCalibration();
+                    UpdateDashboardMode();
+                    PersistADCMode(_currentADCMode);
+                    _logger.LogInfo("Switched to ADS1115 mode", "ADC");
                 }
                 else
                 {
                     // Switch to Internal ADC
-                    if (_canService != null)
-                    {
-                        _canService.SwitchToInternalADC();
-                        _currentADCMode = 0;
-                        _activeADCMode = 0;
-                        UpdateAdcModeIndicators("Internal");
-                        UpdateWeightProcessorCalibration();
-                        UpdateDashboardMode();
-                        _logger.LogInfo("Switched to Internal ADC mode", "ADC");
-                    }
+                    _canService.SwitchToInternalADC();
+                    _currentADCMode = 0;
+                    _activeADCMode = 0;
+                    UpdateAdcModeIndicators("Internal");
+                    UpdateWeightProcessorCalibration();
+                    UpdateDashboardMode();
+                    PersistADCMode(_currentADCMode);
+                    _logger.LogInfo("Switched to Internal ADC mode", "ADC");
                 }
             }
             catch (Exception ex)
@@ -5194,6 +5265,20 @@ Most users should keep default values unless experiencing specific issues.";
                 _logger.LogError($"Error switching ADC mode: {ex.Message}", "ADC");
                 MessageBox.Show($"Error switching ADC mode: {ex.Message}", 
                                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void PersistADCMode(byte mode)
+        {
+            try
+            {
+                var settings = SettingsManager.Instance.Settings;
+                // Preserve last known status/error flags while updating ADC mode
+                SettingsManager.Instance.UpdateSystemStatus(mode, settings.LastKnownSystemStatus, settings.LastKnownErrorFlags);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Failed to persist ADC mode: {ex.Message}", "Settings");
             }
         }
 

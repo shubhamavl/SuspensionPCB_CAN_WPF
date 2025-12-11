@@ -113,7 +113,7 @@
                     
                     <!-- ADC Mode Indicator -->
                     <TextBlock Text="ADC:" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <TextBlock x:Name="HeaderAdcModeTxt" Text="Internal 12-bit" 
+                    <TextBlock x:Name="HeaderAdcModeTxt" Text="ADS1115 16-bit" 
                                Foreground="White" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     
                     <!-- Transmission Rate Dropdown -->
@@ -169,6 +169,16 @@
                 Padding="15" Margin="15,0" MaxHeight="600">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel>
+                <!-- Manual Save Settings (top-right inside Settings panel) -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+                    <Button x:Name="SaveSettingsBtn" Content="💾 Save Settings"
+                            Style="{StaticResource ModernButton}"
+                            Background="#FF28A745" Click="SaveSettingsBtn_Click" Width="180"/>
+                    <TextBlock Text="Manually save all current settings to disk" FontSize="10"
+                               Foreground="#FF95A5A6" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+                <Separator Margin="0,0,0,10"/>
+
                 <!-- CAN Adapter Selection -->
                 <GroupBox Header="CAN Adapter Configuration" Margin="0,0,0,10">
                     <StackPanel Margin="10">
@@ -229,7 +239,7 @@
                         <!-- Enable/Disable Filtering -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                             <CheckBox x:Name="FilterEnabledCheckBox" Content="Enable Weight Filtering" 
-                                      IsChecked="True" Checked="FilterEnabledCheckBox_Changed" 
+                                      Checked="FilterEnabledCheckBox_Changed" 
                                       Unchecked="FilterEnabledCheckBox_Changed"
                                       VerticalAlignment="Center" FontWeight="SemiBold"/>
                             <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
@@ -244,7 +254,7 @@
                             <TextBlock Text="Filter Type:" VerticalAlignment="Center" Width="120" FontWeight="SemiBold"/>
                             <ComboBox x:Name="FilterTypeCombo" Width="280" Margin="0,0,10,0" 
                                       SelectionChanged="FilterTypeCombo_SelectionChanged">
-                                <ComboBoxItem Content="EMA (Exponential Moving Average)" Tag="EMA" IsSelected="True"/>
+                                <ComboBoxItem Content="EMA (Exponential Moving Average)" Tag="EMA"/>
                                 <ComboBoxItem Content="SMA (Simple Moving Average)" Tag="SMA"/>
                                 <ComboBoxItem Content="None (No Filtering)" Tag="None"/>
                             </ComboBox>
@@ -419,7 +429,7 @@
                         <TextBlock Text="Show/Hide UI Elements:" FontWeight="SemiBold" Margin="0,5,0,5"/>
                         <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
                             <CheckBox x:Name="ShowRawADCCheckBox" Content="Show Raw ADC Display" 
-                                      IsChecked="True" Checked="ShowRawADCCheckBox_Changed" 
+                                      Checked="ShowRawADCCheckBox_Changed" 
                                       Unchecked="ShowRawADCCheckBox_Changed" VerticalAlignment="Center"/>
                             <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
                                     FontSize="11" FontWeight="Bold" Background="Transparent" 
@@ -429,7 +439,7 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
                             <CheckBox x:Name="ShowCalibratedWeightCheckBox" Content="Show Calibrated Weight (before tare)" 
-                                      IsChecked="False" Checked="ShowCalibratedWeightCheckBox_Changed" 
+                                      Checked="ShowCalibratedWeightCheckBox_Changed" 
                                       Unchecked="ShowCalibratedWeightCheckBox_Changed" VerticalAlignment="Center"/>
                             <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
                                     FontSize="11" FontWeight="Bold" Background="Transparent" 
@@ -439,7 +449,7 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
                             <CheckBox x:Name="ShowStreamingIndicatorsCheckBox" Content="Show Streaming Status Indicators" 
-                                      IsChecked="True" Checked="ShowStreamingIndicatorsCheckBox_Changed" 
+                                      Checked="ShowStreamingIndicatorsCheckBox_Changed" 
                                       Unchecked="ShowStreamingIndicatorsCheckBox_Changed" VerticalAlignment="Center"/>
                             <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
                                     FontSize="11" FontWeight="Bold" Background="Transparent" 
@@ -449,7 +459,7 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="20,0,0,5">
                             <CheckBox x:Name="ShowCalibrationIconsCheckBox" Content="Show Calibration Status Icons" 
-                                      IsChecked="True" Checked="ShowCalibrationIconsCheckBox_Changed" 
+                                      Checked="ShowCalibrationIconsCheckBox_Changed" 
                                       Unchecked="ShowCalibrationIconsCheckBox_Changed" VerticalAlignment="Center"/>
                             <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
                                     FontSize="11" FontWeight="Bold" Background="Transparent" 
@@ -570,7 +580,7 @@
                         <!-- Enable Calibration Averaging -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                             <CheckBox x:Name="CalibrationAveragingEnabledCheckBox" Content="Enable Multi-Sample Averaging" 
-                                      IsChecked="True" Checked="CalibrationAveragingEnabledCheckBox_Changed" 
+                                      Checked="CalibrationAveragingEnabledCheckBox_Changed" 
                                       Unchecked="CalibrationAveragingEnabledCheckBox_Changed"
                                       FontWeight="SemiBold" VerticalAlignment="Center" Width="250"/>
                             <TextBlock Text="(Use multiple samples for better accuracy)" 
@@ -606,7 +616,7 @@
                         <!-- Use Median -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                             <CheckBox x:Name="CalibrationUseMedianCheckBox" Content="Use Median (instead of Mean)" 
-                                      IsChecked="True" Checked="CalibrationUseMedianCheckBox_Changed" 
+                                      Checked="CalibrationUseMedianCheckBox_Changed" 
                                       Unchecked="CalibrationUseMedianCheckBox_Changed"
                                       FontWeight="SemiBold" VerticalAlignment="Center" Width="200"
                                       IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
@@ -617,7 +627,7 @@
                         <!-- Remove Outliers -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                             <CheckBox x:Name="CalibrationRemoveOutliersCheckBox" Content="Remove Outliers" 
-                                      IsChecked="True" Checked="CalibrationRemoveOutliersCheckBox_Changed" 
+                                      Checked="CalibrationRemoveOutliersCheckBox_Changed" 
                                       Unchecked="CalibrationRemoveOutliersCheckBox_Changed"
                                       FontWeight="SemiBold" VerticalAlignment="Center" Width="200"
                                       IsEnabled="{Binding IsChecked, ElementName=CalibrationAveragingEnabledCheckBox}"/>
@@ -672,7 +682,7 @@
                         <!-- Show Calibration Quality Metrics -->
                         <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
                             <CheckBox x:Name="ShowCalibrationQualityMetricsCheckBox" Content="Show Calibration Quality Metrics (R², Error %)" 
-                                      IsChecked="True" Checked="ShowCalibrationQualityMetricsCheckBox_Changed" 
+                                      Checked="ShowCalibrationQualityMetricsCheckBox_Changed" 
                                       Unchecked="ShowCalibrationQualityMetricsCheckBox_Changed"
                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
                             <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
@@ -688,7 +698,7 @@
                         <Separator Margin="0,15,0,10"/>
                         <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
                             <CheckBox x:Name="EnableBootloaderFeaturesCheckBox" Content="Enable Bootloader Features" 
-                                      IsChecked="True" Checked="EnableBootloaderFeaturesCheckBox_Changed" 
+                                      Checked="EnableBootloaderFeaturesCheckBox_Changed" 
                                       Unchecked="EnableBootloaderFeaturesCheckBox_Changed"
                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
                             <Button Content="ℹ" Width="18" Height="18" Margin="8,0,0,0" Padding="0" 
@@ -701,8 +711,6 @@
                                    FontSize="10" Foreground="#FF95A5A6" Margin="0,5,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </GroupBox>
-
-                <Separator Margin="0,10,0,10"/>
 
                 <StackPanel Orientation="Horizontal">
                     <Button x:Name="KeyboardShortcutsBtn" Content="⌨ Keyboard Shortcuts" 

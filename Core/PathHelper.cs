@@ -19,36 +19,29 @@ namespace SuspensionPCB_CAN_WPF.Core
             {
                 if (_applicationDirectory == null)
                 {
-                    // For single-file deployments, AppContext.BaseDirectory is the recommended approach
-                    // It points to the directory containing the extracted files or the executable
-                    string? baseDir = AppContext.BaseDirectory;
-                    
-                    if (!string.IsNullOrEmpty(baseDir) && Directory.Exists(baseDir))
+                    // Prefer the real executable directory (works for single-file publish)
+                    string? exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                    if (!string.IsNullOrEmpty(exePath))
                     {
-                        _applicationDirectory = baseDir;
-                    }
-                    else
-                    {
-                        // Fallback: Get the directory of the executable
-                        // Note: Assembly.Location returns empty string in single-file apps, so we use Process.MainModule first
-                        string? exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-                        if (string.IsNullOrEmpty(exePath))
+                        string? exeDir = Path.GetDirectoryName(exePath);
+                        if (!string.IsNullOrEmpty(exeDir) && Directory.Exists(exeDir))
                         {
-#pragma warning disable IL3000 // Single-file apps: Assembly.Location returns empty string
-                            // Last resort fallback (will be empty in single-file apps)
-                            exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-#pragma warning restore IL3000
-                        }
-                        
-                        if (!string.IsNullOrEmpty(exePath))
-                        {
-                            _applicationDirectory = Path.GetDirectoryName(exePath) ?? AppDomain.CurrentDomain.BaseDirectory;
-                        }
-                        else
-                        {
-                            _applicationDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                            _applicationDirectory = exeDir;
                         }
                     }
+
+                    // Fallback: AppContext.BaseDirectory (may be temp extraction in single-file)
+                    if (_applicationDirectory == null)
+                    {
+                        string? baseDir = AppContext.BaseDirectory;
+                        if (!string.IsNullOrEmpty(baseDir) && Directory.Exists(baseDir))
+                        {
+                            _applicationDirectory = baseDir;
+                        }
+                    }
+
+                    // Last resort
+                    _applicationDirectory ??= AppDomain.CurrentDomain.BaseDirectory;
                 }
                 return _applicationDirectory;
             }

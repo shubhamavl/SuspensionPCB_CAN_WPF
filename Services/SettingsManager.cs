@@ -92,7 +92,6 @@ namespace SuspensionPCB_CAN_WPF.Services
             try
             {
                 _settings.ComPort = comPort;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"COM port set to: {comPort}", "Settings");
             }
             catch (Exception ex)
@@ -107,7 +106,6 @@ namespace SuspensionPCB_CAN_WPF.Services
             {
                 _settings.TransmissionRate = rate;
                 _settings.TransmissionRateIndex = index;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"Transmission rate set to: 0x{rate:X2} (index: {index})", "Settings");
             }
             catch (Exception ex)
@@ -124,7 +122,6 @@ namespace SuspensionPCB_CAN_WPF.Services
                 if (!Directory.Exists(directory))
                     Directory.CreateDirectory(directory);
                 _settings.SaveDirectory = directory;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"Save directory set to: {directory}", "Settings");
             }
             catch (Exception ex)
@@ -147,7 +144,6 @@ namespace SuspensionPCB_CAN_WPF.Services
                 _settings.LastKnownSystemStatus = systemStatus;
                 _settings.LastKnownErrorFlags = errorFlags;
                 _settings.LastStatusUpdate = DateTime.Now;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"System status updated: ADC={adcMode}, Status={systemStatus}, Errors=0x{errorFlags:X2}", "Settings");
             }
             catch (Exception ex)
@@ -186,7 +182,6 @@ namespace SuspensionPCB_CAN_WPF.Services
                 _settings.FilterAlpha = filterAlpha;
                 _settings.FilterWindowSize = filterWindowSize;
                 _settings.FilterEnabled = filterEnabled;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"Filter settings saved: {filterType}, Alpha={filterAlpha}, Window={filterWindowSize}, Enabled={filterEnabled}", "Settings");
             }
             catch (Exception ex)
@@ -205,7 +200,6 @@ namespace SuspensionPCB_CAN_WPF.Services
                 _settings.WeightDisplayDecimals = weightDecimals;
                 _settings.UIUpdateRateMs = uiUpdateRate;
                 _settings.DataTimeoutSeconds = dataTimeout;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"Display settings saved: WeightDecimals={weightDecimals}, UIUpdateRate={uiUpdateRate}ms, DataTimeout={dataTimeout}s", "Settings");
             }
             catch (Exception ex)
@@ -227,7 +221,6 @@ namespace SuspensionPCB_CAN_WPF.Services
                 _settings.ShowCalibratedWeight = showCalibratedWeight;
                 _settings.ShowStreamingIndicators = showStreamingIndicators;
                 _settings.ShowCalibrationIcons = showCalibrationIcons;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"UI visibility settings saved: StatusBanner={statusBannerDuration}ms, MessageLimit={messageHistoryLimit}, ShowRawADC={showRawADC}, ShowCalibrated={showCalibratedWeight}, ShowIndicators={showStreamingIndicators}, ShowIcons={showCalibrationIcons}", "Settings");
             }
             catch (Exception ex)
@@ -249,7 +242,6 @@ namespace SuspensionPCB_CAN_WPF.Services
                 _settings.ClockUpdateIntervalMs = clockInterval;
                 _settings.CalibrationCaptureDelayMs = calibrationDelay;
                 _settings.ShowCalibrationQualityMetrics = showQualityMetrics;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"Advanced settings saved: TXFlash={txFlashMs}ms, LogFormat={logFormat}, BatchSize={batchSize}, ClockInterval={clockInterval}ms, CalDelay={calibrationDelay}ms, ShowQuality={showQualityMetrics}", "Settings");
             }
             catch (Exception ex)
@@ -266,7 +258,6 @@ namespace SuspensionPCB_CAN_WPF.Services
             try
             {
                 _settings.EnableBootloaderFeatures = enabled;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"Bootloader features {(enabled ? "enabled" : "disabled")}", "Settings");
             }
             catch (Exception ex)
@@ -283,7 +274,6 @@ namespace SuspensionPCB_CAN_WPF.Services
             try
             {
                 _settings.CalibrationMode = mode;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"Calibration mode set to: {mode}", "Settings");
             }
             catch (Exception ex)
@@ -306,7 +296,6 @@ namespace SuspensionPCB_CAN_WPF.Services
                 _settings.CalibrationRemoveOutliers = removeOutliers;
                 _settings.CalibrationOutlierThreshold = outlierThreshold;
                 _settings.CalibrationMaxStdDev = maxStdDev;
-                SaveSettings();
                 ProductionLogger.Instance.LogInfo($"Calibration averaging settings saved: Enabled={enabled}, SampleCount={sampleCount}, Duration={durationMs}ms, UseMedian={useMedian}, RemoveOutliers={removeOutliers}, OutlierThreshold={outlierThreshold:F1}σ, MaxStdDev={maxStdDev:F1}", "Settings");
             }
             catch (Exception ex)

@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <PlatformTarget>x64</PlatformTarget>
+    <ApplicationIcon>Assets\AVL_Icon.ico</ApplicationIcon>
     <!-- Portable deployment settings -->
     <!-- SelfContained=true means .NET runtime is INCLUDED - users DON'T need to install .NET separately -->
     <SelfContained>true</SelfContained>

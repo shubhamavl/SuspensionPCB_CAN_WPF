@@ -151,11 +151,11 @@ namespace SuspensionPCB_CAN_WPF.Views
                 leftStatus += ")";
                 TareLeftStatus.Text = leftStatus;
                 
-                // Show baseline for Internal mode (or ADS1115 if Internal not tared)
-                double leftBaseline = leftInternalTared 
-                    ? _tareManager.GetBaselineKg("Left", 0)
-                    : (leftADS1115Tared ? _tareManager.GetBaselineKg("Left", 1) : 0);
-                TareLeftBaseline.Text = leftBaseline.ToString("F3") + " kg";
+                // Show offset for Internal mode (or ADS1115 if Internal not tared)
+                double leftOffset = leftInternalTared 
+                    ? _tareManager.GetOffsetKg("Left", 0)
+                    : (leftADS1115Tared ? _tareManager.GetOffsetKg("Left", 1) : 0);
+                TareLeftBaseline.Text = leftOffset.ToString("F3") + " kg";
             }
             else
             {
@@ -173,11 +173,11 @@ namespace SuspensionPCB_CAN_WPF.Views
                 rightStatus += ")";
                 TareRightStatus.Text = rightStatus;
                 
-                // Show baseline for Internal mode (or ADS1115 if Internal not tared)
-                double rightBaseline = rightInternalTared 
-                    ? _tareManager.GetBaselineKg("Right", 0)
-                    : (rightADS1115Tared ? _tareManager.GetBaselineKg("Right", 1) : 0);
-                TareRightBaseline.Text = rightBaseline.ToString("F3") + " kg";
+                // Show offset for Internal mode (or ADS1115 if Internal not tared)
+                double rightOffset = rightInternalTared 
+                    ? _tareManager.GetOffsetKg("Right", 0)
+                    : (rightADS1115Tared ? _tareManager.GetOffsetKg("Right", 1) : 0);
+                TareRightBaseline.Text = rightOffset.ToString("F3") + " kg";
             }
             else
             {
