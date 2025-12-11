@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -20,23 +21,15 @@ namespace SuspensionPCB_CAN_WPF.Views
 {
     public partial class SuspensionGraphWindow : Window
     {
-        // Data collections for graph series
-        private readonly ObservableCollection<double> _leftValues = new();
-        private readonly ObservableCollection<double> _rightValues = new();
+        // Data collection for graph series (single-side display)
+        private readonly ObservableCollection<double> _values = new();
 
-        // Batch processing collections (non-UI thread safe)
-        private readonly List<double> _pendingLeft = new();
-        private readonly List<double> _pendingRight = new();
-        private readonly List<DateTime> _pendingLeftTimestamps = new();
-        private readonly List<DateTime> _pendingRightTimestamps = new();
-        private readonly object _lock = new object();
+        // Event-driven data collection (thread-safe)
+        private readonly ConcurrentQueue<double> _pendingWeights = new();
+        private readonly ConcurrentQueue<DateTime> _pendingTimestamps = new();
 
         // Timers
         private DispatcherTimer? _uiTimer;      // UI update timer (20 Hz)
-        
-        // Background data collection
-        private Task? _dataCollectionTask;       // Background thread for data polling
-        private CancellationTokenSource? _dataCollectionCts;
 
         // Services
         private readonly CANService? _canService;
@@ -47,7 +40,8 @@ namespace SuspensionPCB_CAN_WPF.Views
 
         // State
         private bool _isPaused = false;
-        private const int MAX_SAMPLES = 4000;    // Sliding window size
+        private bool _isLeftSide = true;  // Default to Left side
+        private const int MAX_SAMPLES = 21000;    // Sliding window size (matching AVL LMSV1.0)
         private int _sampleCount = 0;
         
         // Y-axis auto-scaling
@@ -59,8 +53,7 @@ namespace SuspensionPCB_CAN_WPF.Views
         
         // X-axis mode (Samples vs Time)
         private bool _xAxisTimeBased = false;  // Default to sample-based
-        private readonly List<DateTime> _leftTimestamps = new();
-        private readonly List<DateTime> _rightTimestamps = new();
+        private readonly List<DateTime> _timestamps = new();
         
         // Zoom/Pan state
         private double _originalXMin = 0;
@@ -75,7 +68,6 @@ namespace SuspensionPCB_CAN_WPF.Views
         // Connection status update throttling
         private DateTime _lastConnectionStatusUpdate = DateTime.MinValue;
         private const int CONNECTION_STATUS_UPDATE_INTERVAL_MS = 500;
-        private const int PAUSED_POLL_INTERVAL_MS = 100;
 
         // Transmission rate tracking
         private byte _currentTransmissionRate = 0x03; // Default 1kHz
@@ -83,6 +75,23 @@ namespace SuspensionPCB_CAN_WPF.Views
         
         // Simulator adapter reference (for direct pattern weight access)
         private SimulatorCanAdapter? _simulatorAdapter;
+
+        // Min/Max tracking (like AVL LMSV1.0)
+        private double _minWeight = double.MaxValue;
+        private double _maxWeight = double.MinValue;
+        private bool _hasMinMaxData = false;
+
+        // Weight-based Y-axis scaling (like AVL LMSV1.0)
+        private double? _initialWeight = null;  // Initial weight when test starts
+        private bool _useWeightBasedYAxis = false;  // Toggle between weight-based and auto-scale
+        private const double WEIGHT_BASED_Y_RANGE = 400.0;  // ±400 kg range (like AVL)
+
+        // Efficiency calculation
+        private double? _efficiency = null;  // Calculated efficiency percentage
+
+        // Test data for saving
+        private DateTime? _testStartTime = null;
+        private DateTime? _testEndTime = null;
 
         public SuspensionGraphWindow(CANService? canService, WeightProcessor? weightProcessor, byte transmissionRate = 0x03)
         {
@@ -97,10 +106,12 @@ namespace SuspensionPCB_CAN_WPF.Views
             InitializeGraph();
             InitializeTimers();
             UpdateConnectionStatus();
+            UpdateStatusDisplays(); // Initialize status display for Left side
 
-            // Subscribe to CAN service if available
+            // Subscribe to event-driven data collection
             if (_canService != null)
             {
+                _canService.RawDataReceived += OnRawDataReceived;
                 _canService.MessageReceived += CanService_MessageReceived;
             }
         }
@@ -121,25 +132,16 @@ namespace SuspensionPCB_CAN_WPF.Views
             _suspensionChart = new CartesianChart();
             chartContainer.Children.Add(_suspensionChart);
 
-            // Configure two series: Left Side (Green) and Right Side (Blue)
+            // Configure single series (Left or Right, switchable)
             _suspensionChart.Series = new ISeries[]
             {
                 new LineSeries<double>
                 {
-                    Values = _leftValues,
+                    Values = _values,
                     Name = "Left Side",
                     Fill = null,
                     GeometrySize = 0,
                     Stroke = new SolidColorPaint(new SKColor(39, 174, 96), 2), // Green
-                    LineSmoothness = 0
-                },
-                new LineSeries<double>
-                {
-                    Values = _rightValues,
-                    Name = "Right Side",
-                    Fill = null,
-                    GeometrySize = 0,
-                    Stroke = new SolidColorPaint(new SKColor(52, 152, 219), 2), // Blue
                     LineSmoothness = 0
                 }
             };
@@ -188,84 +190,57 @@ namespace SuspensionPCB_CAN_WPF.Views
             _uiTimer.Interval = TimeSpan.FromMilliseconds(50);
             _uiTimer.Tick += UiTimer_Tick;
             _uiTimer.Start();
-
-            // Start background data collection thread (100 Hz - 10ms polling)
-            // This runs on a background thread to avoid blocking the UI
-            _dataCollectionCts = new CancellationTokenSource();
-            _dataCollectionTask = Task.Run(async () => await DataCollectionLoop(_dataCollectionCts.Token));
         }
 
         /// <summary>
-        /// Background thread loop for data collection - does NOT block UI thread
-        /// Collects data when:
-        /// - Simulator mode: Direct pattern weights (bypasses WeightProcessor) - Always (any rate)
-        /// - Real CAN: From WeightProcessor - Only at 1kHz transmission rate
+        /// Event-driven data collection handler (replaces polling loop)
+        /// Collects data from CAN messages at 1kHz rate (1000 samples/sec)
         /// </summary>
-        private async Task DataCollectionLoop(CancellationToken cancellationToken)
+        private void OnRawDataReceived(object? sender, RawDataEventArgs e)
         {
-            const int POLL_INTERVAL_MS = 10; // 100 Hz polling
-            
-            while (!cancellationToken.IsCancellationRequested)
+            if (_isPaused) return;
+
+            try
             {
-                // Check conditions: Not paused
-                bool isSimulator = _canService?.IsSimulatorAdapter() ?? false;
-                bool isRealCan1kHz = !isSimulator && _currentTransmissionRate == RATE_1KHZ;
-                
-                // Collect data if: Simulator (any rate, direct pattern) OR Real CAN at 1kHz (via WeightProcessor)
-                bool shouldCollect = !_isPaused && 
-                                     _canService != null &&
-                                     ((isSimulator && _simulatorAdapter != null) || (isRealCan1kHz && _weightProcessor != null));
+                // Only collect data for the active side
+                bool isLeftMessage = e.Side == 0;
+                if ((isLeftMessage && !_isLeftSide) || (!isLeftMessage && _isLeftSide))
+                    return; // Skip if not the active side
 
-                if (shouldCollect)
-                {
-                    try
-                    {
-                        double leftWeight;
-                        double rightWeight;
-                        
-                        if (isSimulator && _simulatorAdapter != null)
-                        {
-                            // DIRECT PATH: Get pattern weights directly from simulator (bypasses WeightProcessor)
-                            // This is faster and doesn't require calibration/filtering setup
-                            leftWeight = _simulatorAdapter.GetCurrentPatternWeight(true);
-                            rightWeight = _simulatorAdapter.GetCurrentPatternWeight(false);
-                        }
-                        else
-                        {
-                            // REAL CAN PATH: Get processed weights from WeightProcessor (with calibration/filtering/tare)
-                            leftWeight = _weightProcessor!.LatestLeft.TaredWeight;
-                            rightWeight = _weightProcessor.LatestRight.TaredWeight;
-                        }
+                // Get weight based on mode
+                double weight = GetWeightForSide(e.Side);
 
-                        // Add to pending batch - NO DISPATCHER HERE! (Non-UI thread safe)
-                        // Always collect data (even if 0) to maintain continuous graph
-                        var timestamp = DateTime.Now;
-                        lock (_lock)
-                        {
-                            _pendingLeft.Add(leftWeight);
-                            _pendingRight.Add(rightWeight);
-                            _dataPointsCollected += 2; // Count both left and right
-                            
-                            // Store timestamps for time-based X-axis (always collect, use if needed)
-                            _pendingLeftTimestamps.Add(timestamp);
-                            _pendingRightTimestamps.Add(timestamp);
-                        }
-                        
-                        // Use shorter delay when actively collecting
-                        await Task.Delay(POLL_INTERVAL_MS, cancellationToken);
-                    }
-                    catch (Exception ex)
-                    {
-                        ProductionLogger.Instance.LogError($"Data polling error: {ex.Message}", "SuspensionGraph");
-                        await Task.Delay(POLL_INTERVAL_MS, cancellationToken);
-                    }
-                }
-                else
-                {
-                    // Longer sleep when paused or conditions not met to save CPU
-                    await Task.Delay(PAUSED_POLL_INTERVAL_MS, cancellationToken);
-                }
+                // Enqueue to thread-safe queue (event handler may be on different thread)
+                _pendingWeights.Enqueue(weight);
+                _pendingTimestamps.Enqueue(DateTime.Now);
+                Interlocked.Increment(ref _dataPointsCollected);
             }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Event-driven data collection error: {ex.Message}", "SuspensionGraph");
+            }
+        }
+
+        /// <summary>
+        /// Get weight for a specific side (handles both simulator and real CAN)
+        /// </summary>
+        private double GetWeightForSide(byte side)
+        {
+            bool isSimulator = _canService?.IsSimulatorAdapter() ?? false;
+            bool isLeft = side == 0;
+
+            if (isSimulator && _simulatorAdapter != null)
+            {
+                // DIRECT PATH: Get pattern weights directly from simulator (bypasses WeightProcessor)
+                return _simulatorAdapter.GetCurrentPatternWeight(isLeft);
+            }
+            else if (_weightProcessor != null)
+            {
+                // REAL CAN PATH: Get processed weights from WeightProcessor (with calibration/filtering/tare)
+                return isLeft ? _weightProcessor.LatestLeft.TaredWeight : _weightProcessor.LatestRight.TaredWeight;
+            }
+
+            return 0.0;
         }
 
         private void UiTimer_Tick(object? sender, EventArgs e)
@@ -284,83 +259,59 @@ namespace SuspensionPCB_CAN_WPF.Views
                     _lastRateCheck = now;
                 }
 
-                // Batch process pending data with minimal lock time
-                double[]? leftData = null;
-                double[]? rightData = null;
-                DateTime[]? leftTimestamps = null;
-                DateTime[]? rightTimestamps = null;
+                // Batch dequeue all pending data from ConcurrentQueue (thread-safe, no lock needed)
+                var batch = new List<double>();
+                var timestampBatch = new List<DateTime>();
                 
-                lock (_lock)
+                while (_pendingWeights.TryDequeue(out var weight))
                 {
-                    if (_pendingLeft.Count > 0 || _pendingRight.Count > 0)
+                    batch.Add(weight);
+                }
+                
+                while (_pendingTimestamps.TryDequeue(out var timestamp))
+                {
+                    timestampBatch.Add(timestamp);
+                }
+
+                // Process batch data
+                if (batch.Count > 0)
+                {
+                    ProcessBatchData(_values, batch.ToArray());
+                    
+                    // Store timestamps if time-based mode
+                    if (_xAxisTimeBased && timestampBatch.Count == batch.Count)
                     {
-                        leftData = _pendingLeft.ToArray();
-                        rightData = _pendingRight.ToArray();
-                        _pendingLeft.Clear();
-                        _pendingRight.Clear();
-                        
-                        // Get corresponding timestamps (always collect, use if time-based mode)
-                        if (_pendingLeftTimestamps.Count >= leftData.Length)
+                        foreach (var ts in timestampBatch)
                         {
-                            leftTimestamps = _pendingLeftTimestamps.Take(leftData.Length).ToArray();
-                            _pendingLeftTimestamps.RemoveRange(0, leftTimestamps.Length);
+                            _timestamps.Add(ts);
                         }
-                        if (_pendingRightTimestamps.Count >= rightData.Length)
-                        {
-                            rightTimestamps = _pendingRightTimestamps.Take(rightData.Length).ToArray();
-                            _pendingRightTimestamps.RemoveRange(0, rightTimestamps.Length);
-                        }
+                        // Maintain sliding window
+                        while (_timestamps.Count > MAX_SAMPLES)
+                            _timestamps.RemoveAt(0);
                     }
                 }
 
-                // Process data outside lock
-                if (leftData != null && leftData.Length > 0)
+                // Recalculate efficiency if we have initial weight and min/max data
+                if (_initialWeight.HasValue && _hasMinMaxData)
                 {
-                    ProcessBatchData(_leftValues, leftData);
-                    // Store timestamps if time-based mode
-                    if (_xAxisTimeBased && leftTimestamps != null && leftTimestamps.Length == leftData.Length)
-                    {
-                        foreach (var ts in leftTimestamps)
-                        {
-                            _leftTimestamps.Add(ts);
-                        }
-                        // Maintain sliding window
-                        while (_leftTimestamps.Count > MAX_SAMPLES)
-                            _leftTimestamps.RemoveAt(0);
-                    }
-                }
-                
-                if (rightData != null && rightData.Length > 0)
-                {
-                    ProcessBatchData(_rightValues, rightData);
-                    // Store timestamps if time-based mode
-                    if (_xAxisTimeBased && rightTimestamps != null && rightTimestamps.Length == rightData.Length)
-                    {
-                        foreach (var ts in rightTimestamps)
-                        {
-                            _rightTimestamps.Add(ts);
-                        }
-                        // Maintain sliding window
-                        while (_rightTimestamps.Count > MAX_SAMPLES)
-                            _rightTimestamps.RemoveAt(0);
-                    }
+                    CalculateEfficiency();
                 }
 
                 // Update status displays
                 UpdateStatusDisplays();
 
-                // Auto-scroll X-axis only when count changes (removed threshold for immediate scrolling)
-                int maxCount = Math.Max(_leftValues.Count, _rightValues.Count);
-                if (maxCount != _sampleCount)
+                // Auto-scroll X-axis only when count changes
+                int currentCount = _values.Count;
+                if (currentCount != _sampleCount)
                 {
                     var xAxis = _suspensionChart.XAxes.First();
-                    xAxis.MinLimit = Math.Max(0, maxCount - MAX_SAMPLES);
-                    xAxis.MaxLimit = maxCount;
-                    _sampleCount = maxCount;
+                    xAxis.MinLimit = Math.Max(0, currentCount - MAX_SAMPLES);
+                    xAxis.MaxLimit = currentCount;
+                    _sampleCount = currentCount;
                 }
                 
                 // Update Y-axis based on mode
-                if (_yAxisAutoScale)
+                if (_yAxisAutoScale || _useWeightBasedYAxis)
                 {
                     UpdateYAxisAutoScale();
                 }
@@ -387,6 +338,7 @@ namespace SuspensionPCB_CAN_WPF.Views
         /// <summary>
         /// Efficiently process batch data for ObservableCollection
         /// Optimized to reduce UI notifications by batching operations
+        /// Also tracks Min/Max values for efficiency calculation (like AVL LMSV1.0)
         /// </summary>
         private void ProcessBatchData(ObservableCollection<double> collection, double[] newData)
         {
@@ -408,12 +360,23 @@ namespace SuspensionPCB_CAN_WPF.Views
                 }
             }
 
-            // Add all new data items
+            // Add all new data items and track Min/Max
             // Note: ObservableCollection doesn't support AddRange, so we add individually
             // but we've already removed excess items, so this is more efficient
             for (int i = 0; i < addCount; i++)
             {
-                collection.Add(newData[i]);
+                double weight = newData[i];
+                collection.Add(weight);
+
+                // Track Min/Max for efficiency calculation (like AVL LMSV1.0)
+                if (!double.IsNaN(weight) && !double.IsInfinity(weight))
+                {
+                    if (weight < _minWeight)
+                        _minWeight = weight;
+                    if (weight > _maxWeight)
+                        _maxWeight = weight;
+                    _hasMinMaxData = true;
+                }
             }
         }
 
@@ -421,18 +384,60 @@ namespace SuspensionPCB_CAN_WPF.Views
         {
             try
             {
-                // Update current weight displays - read only TaredWeight property to avoid struct copy
+                // Update current weight display for active side only
                 if (_weightProcessor != null)
                 {
-                    double leftWeight = _weightProcessor.LatestLeft.TaredWeight;
-                    double rightWeight = _weightProcessor.LatestRight.TaredWeight;
+                    double weight = _isLeftSide 
+                        ? _weightProcessor.LatestLeft.TaredWeight 
+                        : _weightProcessor.LatestRight.TaredWeight;
 
-                    LeftWeightText.Text = $"{leftWeight:F1} kg";
-                    RightWeightText.Text = $"{rightWeight:F1} kg";
+                    // Update active side display
+                    if (_isLeftSide)
+                    {
+                        if (ActiveSideLabel != null) ActiveSideLabel.Text = "Left Side:";
+                        if (ActiveSideIndicator != null) ActiveSideIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 174, 96)); // Green
+                        LeftWeightText.Text = $"{weight:F1} kg";
+                        RightWeightText.Text = "-- kg";
+                    }
+                    else
+                    {
+                        if (ActiveSideLabel != null) ActiveSideLabel.Text = "Right Side:";
+                        if (ActiveSideIndicator != null) ActiveSideIndicator.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(52, 152, 219)); // Blue
+                        LeftWeightText.Text = "-- kg";
+                        RightWeightText.Text = $"{weight:F1} kg";
+                    }
                 }
 
-                // Fix: Show actual data count instead of X-axis position
-                SampleCountText.Text = Math.Max(_leftValues.Count, _rightValues.Count).ToString();
+                // Show actual data count
+                SampleCountText.Text = _values.Count.ToString();
+
+                // Update Min/Max display (if available)
+                if (MinWeightText != null && MaxWeightText != null)
+                {
+                    if (_hasMinMaxData)
+                    {
+                        MinWeightText.Text = $"Min: {_minWeight:F1} kg";
+                        MaxWeightText.Text = $"Max: {_maxWeight:F1} kg";
+                    }
+                    else
+                    {
+                        MinWeightText.Text = "Min: --";
+                        MaxWeightText.Text = "Max: --";
+                    }
+                }
+
+                // Update Efficiency display (if calculated)
+                if (EfficiencyText != null)
+                {
+                    if (_efficiency.HasValue)
+                    {
+                        EfficiencyText.Text = $"Efficiency: {_efficiency.Value:F1}%";
+                    }
+                    else
+                    {
+                        EfficiencyText.Text = "Efficiency: --";
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -442,29 +447,39 @@ namespace SuspensionPCB_CAN_WPF.Views
 
         /// <summary>
         /// Update Y-axis limits based on visible data with auto-scaling
+        /// Supports both weight-based scaling (like AVL LMSV1.0) and general auto-scaling
         /// </summary>
         private void UpdateYAxisAutoScale()
         {
             try
             {
-                if (_leftValues.Count == 0 && _rightValues.Count == 0)
+                var yAxis = _suspensionChart.YAxes.First();
+
+                // Weight-based Y-axis scaling (like AVL LMSV1.0: center around initial weight ±400 kg)
+                if (_useWeightBasedYAxis && _initialWeight.HasValue)
+                {
+                    double centerWeight = _initialWeight.Value;
+                    yAxis.MinLimit = Math.Max(0, centerWeight - WEIGHT_BASED_Y_RANGE);
+                    yAxis.MaxLimit = centerWeight + WEIGHT_BASED_Y_RANGE;
+                    return;
+                }
+
+                // General auto-scaling mode
+                if (_values.Count == 0)
                 {
                     // No data - use default range
-                    var yAxis = _suspensionChart.YAxes.First();
                     yAxis.MinLimit = 0.0;
                     yAxis.MaxLimit = 1000.0;
                     return;
                 }
 
                 // Get visible data (last MAX_SAMPLES values)
-                var visibleLeft = _leftValues.Skip(Math.Max(0, _leftValues.Count - MAX_SAMPLES));
-                var visibleRight = _rightValues.Skip(Math.Max(0, _rightValues.Count - MAX_SAMPLES));
-                var allValues = visibleLeft.Concat(visibleRight).Where(v => !double.IsNaN(v) && !double.IsInfinity(v));
+                var visibleValues = _values.Skip(Math.Max(0, _values.Count - MAX_SAMPLES));
+                var allValues = visibleValues.Where(v => !double.IsNaN(v) && !double.IsInfinity(v));
 
                 if (!allValues.Any())
                 {
                     // No valid data - use default range
-                    var yAxis = _suspensionChart.YAxes.First();
                     yAxis.MinLimit = 0.0;
                     yAxis.MaxLimit = 1000.0;
                     return;
@@ -489,9 +504,8 @@ namespace SuspensionPCB_CAN_WPF.Views
                 maxWeight = maxWeight + padding;
 
                 // Update Y-axis
-                var yAxis2 = _suspensionChart.YAxes.First();
-                yAxis2.MinLimit = minWeight;
-                yAxis2.MaxLimit = maxWeight;
+                yAxis.MinLimit = minWeight;
+                yAxis.MaxLimit = maxWeight;
             }
             catch (Exception ex)
             {
@@ -532,9 +546,9 @@ namespace SuspensionPCB_CAN_WPF.Views
                 if (_xAxisTimeBased)
                 {
                     // Time-based X-axis
-                    if (_leftTimestamps.Count > 0 || _rightTimestamps.Count > 0)
+                    if (_timestamps.Count > 0)
                     {
-                        var allTimestamps = _leftTimestamps.Concat(_rightTimestamps).Where(t => t != default);
+                        var allTimestamps = _timestamps.Where(t => t != default);
                         if (allTimestamps.Any())
                         {
                             var minTime = allTimestamps.Min();
@@ -550,10 +564,10 @@ namespace SuspensionPCB_CAN_WPF.Views
                 }
                 else
                 {
-                    // Sample-based X-axis (existing behavior)
-                    int maxCount = Math.Max(_leftValues.Count, _rightValues.Count);
-                    xAxis.MinLimit = Math.Max(0, maxCount - MAX_SAMPLES);
-                    xAxis.MaxLimit = maxCount;
+                    // Sample-based X-axis
+                    int currentCount = _values.Count;
+                    xAxis.MinLimit = Math.Max(0, currentCount - MAX_SAMPLES);
+                    xAxis.MaxLimit = currentCount;
                     xAxis.Name = "Samples";
                 }
             }
@@ -586,7 +600,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     }
                     else if (isSimulator)
                     {
-                        ConnectionStatusText.Text = "Connected (Simulator - Direct pattern graphs active)";
+                        ConnectionStatusText.Text = "Connected (Simulator - Event-driven graphs active)";
                     }
                     else if (!is1kHz)
                     {
@@ -594,7 +608,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     }
                     else
                     {
-                        ConnectionStatusText.Text = "Connected (1kHz - Graphs active via WeightProcessor)";
+                        ConnectionStatusText.Text = "Connected (1kHz - Event-driven graphs active)";
                     }
                 }
             }
@@ -627,6 +641,20 @@ namespace SuspensionPCB_CAN_WPF.Views
             }
         }
 
+        private void StartTestBtn_Click(object sender, RoutedEventArgs e)
+        {
+            StartTest();
+            StartTestBtn.IsEnabled = false;
+            StopTestBtn.IsEnabled = true;
+        }
+
+        private void StopTestBtn_Click(object sender, RoutedEventArgs e)
+        {
+            StopTest();
+            StartTestBtn.IsEnabled = true;
+            StopTestBtn.IsEnabled = false;
+        }
+
         private void PauseBtn_Click(object sender, RoutedEventArgs e)
         {
             _isPaused = true;
@@ -647,16 +675,19 @@ namespace SuspensionPCB_CAN_WPF.Views
         {
             try
             {
-                lock (_lock)
-                {
-                    _leftValues.Clear();
-                    _rightValues.Clear();
-                    _pendingLeft.Clear();
-                    _pendingRight.Clear();
-                    _leftTimestamps.Clear();
-                    _rightTimestamps.Clear();
-                    _sampleCount = 0;
-                }
+                // Clear all collections (no lock needed with ConcurrentQueue)
+                _values.Clear();
+                while (_pendingWeights.TryDequeue(out _)) { }
+                while (_pendingTimestamps.TryDequeue(out _)) { }
+                _timestamps.Clear();
+                _sampleCount = 0;
+
+                // Reset Min/Max tracking
+                _minWeight = double.MaxValue;
+                _maxWeight = double.MinValue;
+                _hasMinMaxData = false;
+                _efficiency = null;
+                _initialWeight = null;
 
                 // Reset X-axis
                 var xAxis = _suspensionChart.XAxes.First();
@@ -669,11 +700,67 @@ namespace SuspensionPCB_CAN_WPF.Views
                 yAxis.MaxLimit = _originalYMax;
 
                 SampleCountText.Text = "0";
+                UpdateStatusDisplays(); // Update Min/Max/Efficiency displays
                 ProductionLogger.Instance.LogInfo("Graph cleared", "SuspensionGraph");
             }
             catch (Exception ex)
             {
                 ProductionLogger.Instance.LogError($"Clear error: {ex.Message}", "SuspensionGraph");
+            }
+        }
+
+        /// <summary>
+        /// Switch between Left and Right side display
+        /// </summary>
+        private void SwitchSide_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Toggle side
+                _isLeftSide = !_isLeftSide;
+                
+                // Clear current data
+                _values.Clear();
+                while (_pendingWeights.TryDequeue(out _)) { }
+                while (_pendingTimestamps.TryDequeue(out _)) { }
+                _timestamps.Clear();
+                _sampleCount = 0;
+
+                // Update series name and color
+                var series = _suspensionChart.Series.First() as LineSeries<double>;
+                if (series != null)
+                {
+                    series.Name = _isLeftSide ? "Left Side" : "Right Side";
+                    series.Stroke = new SolidColorPaint(
+                        _isLeftSide 
+                            ? new SKColor(39, 174, 96)  // Green for Left
+                            : new SKColor(52, 152, 219), // Blue for Right
+                        2);
+                }
+
+                // Update UI labels
+                if (ActiveSideLabel != null)
+                    ActiveSideLabel.Text = _isLeftSide ? "Left Side:" : "Right Side:";
+                
+                if (ActiveSideIndicator != null)
+                    ActiveSideIndicator.Fill = new System.Windows.Media.SolidColorBrush(
+                        _isLeftSide 
+                            ? System.Windows.Media.Color.FromRgb(39, 174, 96)  // Green
+                            : System.Windows.Media.Color.FromRgb(52, 152, 219)); // Blue
+
+                // Reset X-axis
+                var xAxis = _suspensionChart.XAxes.First();
+                xAxis.MinLimit = 0;
+                xAxis.MaxLimit = MAX_SAMPLES;
+
+                // Update status displays
+                UpdateStatusDisplays();
+                
+                ProductionLogger.Instance.LogInfo($"Switched to {(_isLeftSide ? "Left" : "Right")} side", "SuspensionGraph");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Switch side error: {ex.Message}", "SuspensionGraph");
             }
         }
 
@@ -734,25 +821,17 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     using var writer = new System.IO.StreamWriter(filePath);
                     
-                    // Write header
-                    writer.WriteLine("Sample,Left Side (kg),Right Side (kg)");
+                    // Write header with active side name
+                    string sideName = _isLeftSide ? "Left Side" : "Right Side";
+                    writer.WriteLine($"Sample,{sideName} (kg)");
 
-                    // Copy data to arrays for thread-safe access
-                    double[] leftData;
-                    double[] rightData;
-                    lock (_lock)
-                    {
-                        leftData = _leftValues.ToArray();
-                        rightData = _rightValues.ToArray();
-                    }
+                    // Copy data to array (ObservableCollection is accessed on UI thread, safe to copy)
+                    double[] data = _values.ToArray();
 
-                    // Write data (use maximum count to align both series)
-                    int maxCount = Math.Max(leftData.Length, rightData.Length);
-                    for (int i = 0; i < maxCount; i++)
+                    // Write data
+                    for (int i = 0; i < data.Length; i++)
                     {
-                        double leftValue = i < leftData.Length ? leftData[i] : 0;
-                        double rightValue = i < rightData.Length ? rightData[i] : 0;
-                        writer.WriteLine($"{i},{leftValue:F2},{rightValue:F2}");
+                        writer.WriteLine($"{i},{data[i]:F2}");
                     }
                 }
                 catch (Exception ex)
@@ -765,6 +844,17 @@ namespace SuspensionPCB_CAN_WPF.Views
         // Event handlers for new controls
         private void YAxisModeToggle_Click(object sender, RoutedEventArgs e)
         {
+            // Disable weight-based mode when toggling auto/fixed
+            if (_useWeightBasedYAxis)
+            {
+                _useWeightBasedYAxis = false;
+                if (WeightBasedYAxisToggle != null)
+                {
+                    WeightBasedYAxisToggle.Content = "Y: Weight-Based";
+                    WeightBasedYAxisToggle.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 193, 7));
+                }
+            }
+
             _yAxisAutoScale = !_yAxisAutoScale;
             var btn = sender as System.Windows.Controls.Button;
             if (btn != null)
@@ -883,6 +973,222 @@ namespace SuspensionPCB_CAN_WPF.Views
             }
         }
 
+        /// <summary>
+        /// Start test tracking - captures initial weight for efficiency calculation and weight-based Y-axis
+        /// </summary>
+        public void StartTest()
+        {
+            try
+            {
+                // Capture initial weight for weight-based Y-axis and efficiency calculation
+                if (_weightProcessor != null)
+                {
+                    double currentWeight = _isLeftSide 
+                        ? _weightProcessor.LatestLeft.TaredWeight 
+                        : _weightProcessor.LatestRight.TaredWeight;
+                    
+                    if (currentWeight > 0)
+                    {
+                        _initialWeight = currentWeight;
+                        _testStartTime = DateTime.Now;
+                        
+                        // Reset Min/Max for new test
+                        _minWeight = double.MaxValue;
+                        _maxWeight = double.MinValue;
+                        _hasMinMaxData = false;
+                        _efficiency = null;
+                        
+                        ProductionLogger.Instance.LogInfo($"Test started - Initial weight: {_initialWeight:F1} kg ({(_isLeftSide ? "Left" : "Right")} side)", "SuspensionGraph");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Start test error: {ex.Message}", "SuspensionGraph");
+            }
+        }
+
+        /// <summary>
+        /// Stop test tracking - calculates efficiency (like AVL LMSV1.0)
+        /// Efficiency = (Min Weight / Initial Weight) × 100%
+        /// </summary>
+        public void StopTest()
+        {
+            try
+            {
+                _testEndTime = DateTime.Now;
+                
+                // Calculate efficiency if we have initial weight and min/max data
+                if (_initialWeight.HasValue && _initialWeight.Value > 0 && _hasMinMaxData)
+                {
+                    // Efficiency = (Min Weight / Initial Weight) × 100% (like AVL LMSV1.0)
+                    double efficiencyPercent = Math.Abs((_minWeight / _initialWeight.Value) * 100.0);
+                    _efficiency = efficiencyPercent;
+                    
+                    ProductionLogger.Instance.LogInfo($"Test stopped - Efficiency: {_efficiency:F1}% (Min: {_minWeight:F1} kg, Initial: {_initialWeight:F1} kg)", "SuspensionGraph");
+                }
+                else
+                {
+                    ProductionLogger.Instance.LogWarning("Cannot calculate efficiency - missing initial weight or min/max data", "SuspensionGraph");
+                }
+                
+                UpdateStatusDisplays(); // Update efficiency display
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Stop test error: {ex.Message}", "SuspensionGraph");
+            }
+        }
+
+        /// <summary>
+        /// Calculate efficiency from current data (can be called anytime)
+        /// </summary>
+        private void CalculateEfficiency()
+        {
+            try
+            {
+                if (_initialWeight.HasValue && _initialWeight.Value > 0 && _hasMinMaxData)
+                {
+                    double efficiencyPercent = Math.Abs((_minWeight / _initialWeight.Value) * 100.0);
+                    _efficiency = efficiencyPercent;
+                }
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Efficiency calculation error: {ex.Message}", "SuspensionGraph");
+            }
+        }
+
+        /// <summary>
+        /// Toggle weight-based Y-axis scaling (like AVL LMSV1.0: center around initial weight ±400 kg)
+        /// </summary>
+        private void WeightBasedYAxisToggle_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _useWeightBasedYAxis = !_useWeightBasedYAxis;
+                
+                // Disable regular auto-scale when weight-based is enabled
+                if (_useWeightBasedYAxis)
+                {
+                    _yAxisAutoScale = false;
+                    if (YAxisModeToggle != null)
+                    {
+                        YAxisModeToggle.Content = "Y: Fixed";
+                        YAxisModeToggle.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(108, 117, 125));
+                    }
+                }
+                
+                var btn = sender as System.Windows.Controls.Button;
+                if (btn != null)
+                {
+                    btn.Content = _useWeightBasedYAxis ? "Y: Weight-Based ✓" : "Y: Weight-Based";
+                    btn.Background = _useWeightBasedYAxis 
+                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 193, 7))  // Yellow/Orange
+                        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(108, 117, 125));  // Gray
+                }
+                
+                if (_useWeightBasedYAxis && !_initialWeight.HasValue)
+                {
+                    // Auto-capture initial weight if not set
+                    StartTest();
+                }
+                
+                ProductionLogger.Instance.LogInfo($"Weight-based Y-axis: {(_useWeightBasedYAxis ? "Enabled" : "Disabled")}", "SuspensionGraph");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Weight-based Y-axis toggle error: {ex.Message}", "SuspensionGraph");
+            }
+        }
+
+        /// <summary>
+        /// Save test data to JSON file (database-like functionality)
+        /// </summary>
+        private async void SaveTestDataBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Create test data object
+                var testData = new SuspensionTestDataModel
+                {
+                    TestId = Guid.NewGuid().ToString(),
+                    TestStartTime = _testStartTime ?? DateTime.Now,
+                    TestEndTime = _testEndTime ?? DateTime.Now,
+                    Side = _isLeftSide ? "Left" : "Right",
+                    InitialWeight = _initialWeight ?? 0.0,
+                    MinWeight = _hasMinMaxData ? _minWeight : 0.0,
+                    MaxWeight = _hasMinMaxData ? _maxWeight : 0.0,
+                    Efficiency = _efficiency ?? 0.0,
+                    SampleCount = _values.Count,
+                    TransmissionRate = GetRateText(_currentTransmissionRate),
+                    DataPoints = _values.ToArray()
+                };
+
+                // Show save dialog
+                var saveDialog = new SaveFileDialog
+                {
+                    Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                    FileName = $"SuspensionTest_{testData.Side}_{testData.TestStartTime:yyyyMMdd_HHmmss}.json",
+                    DefaultExt = "json"
+                };
+
+                if (saveDialog.ShowDialog() == true)
+                {
+                    await SaveTestDataToFile(testData, saveDialog.FileName);
+                    MessageBox.Show($"Test data saved successfully!\n\nSide: {testData.Side}\nEfficiency: {testData.Efficiency:F1}%\nSamples: {testData.SampleCount}", 
+                        "Save Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Save test data error: {ex.Message}", "SuspensionGraph");
+                MessageBox.Show($"Failed to save test data: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Save test data to JSON file
+        /// </summary>
+        private async Task SaveTestDataToFile(SuspensionTestDataModel testData, string filePath)
+        {
+            await Task.Run(() =>
+            {
+                try
+                {
+                    // Create a serializable version (without full data array for file size)
+                    var serializableData = new
+                    {
+                        TestId = testData.TestId,
+                        TestStartTime = testData.TestStartTime,
+                        TestEndTime = testData.TestEndTime,
+                        Side = testData.Side,
+                        InitialWeight = testData.InitialWeight,
+                        MinWeight = testData.MinWeight,
+                        MaxWeight = testData.MaxWeight,
+                        Efficiency = testData.Efficiency,
+                        SampleCount = testData.SampleCount,
+                        TransmissionRate = testData.TransmissionRate,
+                        DataPointCount = testData.DataPoints?.Length ?? 0,
+                        // Optionally include first/last few data points for reference
+                        FirstDataPoints = testData.DataPoints?.Take(10).ToArray() ?? Array.Empty<double>(),
+                        LastDataPoints = testData.DataPoints?.TakeLast(10).ToArray() ?? Array.Empty<double>()
+                    };
+
+                    string json = System.Text.Json.JsonSerializer.Serialize(serializableData, new System.Text.Json.JsonSerializerOptions 
+                    { 
+                        WriteIndented = true 
+                    });
+                    
+                    System.IO.File.WriteAllText(filePath, json);
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception($"Failed to write JSON file: {ex.Message}", ex);
+                }
+            });
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             try
@@ -890,16 +1196,16 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Stop UI timer
                 _uiTimer?.Stop();
 
-                // Stop background data collection thread
-                _dataCollectionCts?.Cancel();
-                _dataCollectionTask?.Wait(1000); // Wait up to 1 second for graceful shutdown
-                _dataCollectionCts?.Dispose();
-
                 // Unsubscribe from events
                 if (_canService != null)
                 {
+                    _canService.RawDataReceived -= OnRawDataReceived;
                     _canService.MessageReceived -= CanService_MessageReceived;
                 }
+
+                // Clear queues
+                while (_pendingWeights.TryDequeue(out _)) { }
+                while (_pendingTimestamps.TryDequeue(out _)) { }
 
                 ProductionLogger.Instance.LogInfo("SuspensionGraphWindow closed", "SuspensionGraph");
             }

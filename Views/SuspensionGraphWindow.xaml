@@ -33,16 +33,23 @@
         <!-- Status Info Panel -->
         <Border Grid.Row="1" Background="#FFF0F0F0" BorderBrush="#FFCCCCCC" 
                 BorderThickness="0,0,0,1" Padding="10,5">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <TextBlock Text="Left Side:" FontWeight="SemiBold" Margin="0,0,5,0"/>
-                <Ellipse Width="10" Height="10" Fill="#FF27AE60" Margin="0,0,10,0"/>
-                <TextBlock x:Name="LeftWeightText" Text="-- kg" Margin="0,0,20,0"/>
-                <TextBlock Text="Right Side:" FontWeight="SemiBold" Margin="0,0,5,0"/>
-                <Ellipse Width="10" Height="10" Fill="#FF3498DB" Margin="0,0,10,0"/>
-                <TextBlock x:Name="RightWeightText" Text="-- kg" Margin="0,0,20,0"/>
-                <TextBlock Text="Samples:" FontWeight="SemiBold" Margin="0,0,5,0"/>
-                <TextBlock x:Name="SampleCountText" Text="0" Margin="0,0,20,0"/>
-                <TextBlock x:Name="YAxisRangeText" Text="Y: 0-1000 kg" FontSize="10" Foreground="#FF6C757D"/>
+            <StackPanel>
+                <!-- First Row: Side, Weight, Samples -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
+                    <TextBlock x:Name="ActiveSideLabel" Text="Left Side:" FontWeight="SemiBold" Margin="0,0,5,0"/>
+                    <Ellipse x:Name="ActiveSideIndicator" Width="10" Height="10" Fill="#FF27AE60" Margin="0,0,10,0"/>
+                    <TextBlock x:Name="LeftWeightText" Text="-- kg" Margin="0,0,20,0"/>
+                    <TextBlock x:Name="RightWeightText" Text="-- kg" Margin="0,0,20,0"/>
+                    <TextBlock Text="Samples:" FontWeight="SemiBold" Margin="0,0,5,0"/>
+                    <TextBlock x:Name="SampleCountText" Text="0" Margin="0,0,20,0"/>
+                    <TextBlock x:Name="YAxisRangeText" Text="Y: 0-1000 kg" FontSize="10" Foreground="#FF6C757D"/>
+                </StackPanel>
+                <!-- Second Row: Min/Max, Efficiency -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock x:Name="MinWeightText" Text="Min: --" FontWeight="SemiBold" Foreground="#FF3498DB" Margin="0,0,15,0"/>
+                    <TextBlock x:Name="MaxWeightText" Text="Max: --" FontWeight="SemiBold" Foreground="#FFE74C3C" Margin="0,0,15,0"/>
+                    <TextBlock x:Name="EfficiencyText" Text="Efficiency: --" FontWeight="SemiBold" Foreground="#FF9B59B6" Margin="0,0,15,0"/>
+                </StackPanel>
             </StackPanel>
         </Border>
 
@@ -55,6 +62,16 @@
             <StackPanel>
                 <!-- Primary Controls Row -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
+                    <Button x:Name="StartTestBtn" Content="▶ Start Test" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF28A745" Click="StartTestBtn_Click" 
+                            Width="110" Height="32" Margin="5,0"
+                            ToolTip="Start test tracking (captures initial weight for efficiency calculation)"/>
+                    <Button x:Name="StopTestBtn" Content="⏹ Stop Test" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FFDC3545" Click="StopTestBtn_Click" 
+                            Width="110" Height="32" Margin="5,0"
+                            ToolTip="Stop test and calculate efficiency"/>
                     <Button x:Name="PauseBtn" Content="⏸ Pause" 
                             Style="{StaticResource ModernButton}" 
                             Background="#FF17A2B8" Click="PauseBtn_Click" 
@@ -63,6 +80,11 @@
                             Style="{StaticResource ModernButton}" 
                             Background="#FF28A745" Click="ResumeBtn_Click" 
                             Width="100" Height="32" Margin="5,0" IsEnabled="False"/>
+                    <Button x:Name="SwitchSideBtn" Content="🔄 Switch Side" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF9B59B6" Click="SwitchSide_Click" 
+                            Width="120" Height="32" Margin="5,0"
+                            ToolTip="Switch between Left and Right side display"/>
                     <Button x:Name="ClearBtn" Content="🗑 Clear" 
                             Style="{StaticResource ModernButton}" 
                             Background="#FF95A5A6" Click="ClearBtn_Click" 
@@ -71,6 +93,11 @@
                             Style="{StaticResource ModernButton}" 
                             Background="#FF6F42C1" Click="ExportBtn_Click" 
                             Width="120" Height="32" Margin="5,0"/>
+                    <Button x:Name="SaveTestDataBtn" Content="💾 Save Test" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF27AE60" Click="SaveTestDataBtn_Click" 
+                            Width="110" Height="32" Margin="5,0"
+                            ToolTip="Save test data to JSON file (database-like)"/>
                 </StackPanel>
                 
                 <!-- Separator -->
@@ -83,6 +110,11 @@
                             Background="#FF27AE60" Click="YAxisModeToggle_Click" 
                             Width="90" Height="32" Margin="5,0"
                             ToolTip="Toggle between Auto-scale and Fixed range Y-axis"/>
+                    <Button x:Name="WeightBasedYAxisToggle" Content="Y: Weight-Based" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FFFFC107" Click="WeightBasedYAxisToggle_Click" 
+                            Width="130" Height="32" Margin="5,0"
+                            ToolTip="Toggle weight-based Y-axis (center around initial weight ±400 kg, like AVL LMSV1.0)"/>
                     <Button x:Name="XAxisModeToggle" Content="X: Samples" 
                             Style="{StaticResource ModernButton}" 
                             Background="#FF6C757D" Click="XAxisModeToggle_Click" 
