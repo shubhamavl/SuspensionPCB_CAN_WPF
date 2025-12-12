@@ -104,7 +104,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                             ReleaseName = string.IsNullOrWhiteSpace(release.Name) ? release.TagName : release.Name,
                             Version = version,
                             ReleaseNotes = release.Body,
-                            IsCurrentVersion = version.Equals(_currentVersion),
+                            IsCurrentVersion = version.CompareTo(_currentVersion) == 0,
                             ReleaseDto = release
                         };
 

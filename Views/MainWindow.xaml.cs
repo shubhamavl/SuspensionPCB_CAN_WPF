@@ -1638,8 +1638,20 @@ namespace SuspensionPCB_CAN_WPF.Views
             try
             {
                 var result = await _updateService.CheckForUpdateAsync();
-                if (!result.IsSuccess || result.Info == null || !result.Info.IsUpdateAvailable)
+                if (!result.IsSuccess || result.Info == null)
+                {
+                    if (result.IsNetworkError)
+                    {
+                        _logger.LogWarning($"Background update check failed: Network error", "Update");
+                    }
                     return;
+                }
+                
+                if (!result.Info.IsUpdateAvailable)
+                {
+                    _logger.LogInfo($"No update available. Current={result.Info.CurrentVersion}, Latest={result.Info.LatestVersion}", "Update");
+                    return;
+                }
 
                 _logger.LogInfo($"Update available. Current={result.Info.CurrentVersion}, Latest={result.Info.LatestVersion}", "Update");
 
@@ -1699,6 +1711,9 @@ namespace SuspensionPCB_CAN_WPF.Views
                         "Update Check Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
+
+                // Log version comparison for debugging
+                _logger.LogInfo($"Update check result: Current={info.CurrentVersion}, Latest={info.LatestVersion}, IsUpdateAvailable={info.IsUpdateAvailable}", "Update");
 
                 if (!info.IsUpdateAvailable)
                 {
@@ -1867,18 +1882,33 @@ namespace SuspensionPCB_CAN_WPF.Views
                     var selectedInfo = dialog.SelectedVersionInfo;
                     var currentVersion = GetCurrentVersion();
                     
-                    // Check if this is a downgrade
-                    if (selectedInfo.LatestVersion < currentVersion)
+                    // Log version information for debugging
+                    _logger.LogInfo($"Version selection: Current={currentVersion}, Selected={selectedInfo.LatestVersion}", "Update");
+                    
+                    // Check if this is a downgrade - use CompareTo for reliable comparison
+                    int versionComparison = selectedInfo.LatestVersion.CompareTo(currentVersion);
+                    
+                    if (versionComparison < 0)  // Selected version is older (downgrade)
                     {
+                        _logger.LogInfo($"Downgrade detected: Current={currentVersion}, Selected={selectedInfo.LatestVersion}", "Update");
                         var warningResult = ShowDowngradeWarningDialog(currentVersion, selectedInfo.LatestVersion);
                         if (warningResult != MessageBoxResult.Yes)
                         {
                             _logger.LogInfo("User cancelled downgrade after warning", "Update");
                             return;
                         }
+                        _logger.LogInfo("User confirmed downgrade, proceeding with installation", "Update");
+                    }
+                    else if (versionComparison == 0)
+                    {
+                        _logger.LogInfo($"Reinstall detected: Version={currentVersion}", "Update");
+                    }
+                    else
+                    {
+                        _logger.LogInfo($"Upgrade detected: Current={currentVersion}, Selected={selectedInfo.LatestVersion}", "Update");
                     }
                     
-                    // Proceed with download/install
+                    // Proceed with download/install (for upgrade, downgrade, and reinstall)
                     await StartUpdateDownloadAsync(selectedInfo);
                 }
             }
@@ -1918,6 +1948,12 @@ namespace SuspensionPCB_CAN_WPF.Views
         {
             try
             {
+                // Log version information for debugging
+                var currentVersion = GetCurrentVersion();
+                bool isDowngrade = info.LatestVersion < currentVersion;
+                bool isReinstall = info.LatestVersion == currentVersion;
+                _logger.LogInfo($"Starting update process: Current={currentVersion}, Target={info.LatestVersion}, IsDowngrade={isDowngrade}, IsReinstall={isReinstall}", "Update");
+                
                 var progress = new Progress<double>(p =>
                 {
                     ShowDownloadStatus($"Downloading update... {p:0}%");
@@ -5238,26 +5274,26 @@ Most users should keep default values unless experiencing specific issues.";
                 if (_currentADCMode == 0)
                 {
                     // Switch to ADS1115
-                    _canService.SwitchToADS1115();
-                    _currentADCMode = 1;
-                    _activeADCMode = 1;
-                    UpdateAdcModeIndicators("ADS1115");
-                    UpdateWeightProcessorCalibration();
-                    UpdateDashboardMode();
+                        _canService.SwitchToADS1115();
+                        _currentADCMode = 1;
+                        _activeADCMode = 1;
+                        UpdateAdcModeIndicators("ADS1115");
+                        UpdateWeightProcessorCalibration();
+                        UpdateDashboardMode();
                     PersistADCMode(_currentADCMode);
-                    _logger.LogInfo("Switched to ADS1115 mode", "ADC");
+                        _logger.LogInfo("Switched to ADS1115 mode", "ADC");
                 }
                 else
                 {
                     // Switch to Internal ADC
-                    _canService.SwitchToInternalADC();
-                    _currentADCMode = 0;
-                    _activeADCMode = 0;
-                    UpdateAdcModeIndicators("Internal");
-                    UpdateWeightProcessorCalibration();
-                    UpdateDashboardMode();
+                        _canService.SwitchToInternalADC();
+                        _currentADCMode = 0;
+                        _activeADCMode = 0;
+                        UpdateAdcModeIndicators("Internal");
+                        UpdateWeightProcessorCalibration();
+                        UpdateDashboardMode();
                     PersistADCMode(_currentADCMode);
-                    _logger.LogInfo("Switched to Internal ADC mode", "ADC");
+                        _logger.LogInfo("Switched to Internal ADC mode", "ADC");
                 }
             }
             catch (Exception ex)
