@@ -861,6 +861,8 @@
                             
                             <TextBlock x:Name="DataRateTxt" Text="Rate: --" FontSize="11" 
                                        HorizontalAlignment="Center" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="FirmwareVersionText" Text="FW: --" FontSize="11" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,3"/>
                             <TextBlock x:Name="LastUpdateTxt" Text="Updated: --" FontSize="11" 
                                        HorizontalAlignment="Center" Margin="0,0,0,3"/>
                             <TextBlock x:Name="ErrorCountTxt" Text="Errors: 0" FontSize="11" 

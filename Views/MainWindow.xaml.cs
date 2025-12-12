@@ -1552,6 +1552,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 _canService.MessageReceived += OnCANMessageReceived;
                 _canService.RawDataReceived += OnRawDataReceived;
                 _canService.SystemStatusReceived += HandleSystemStatus;
+                _canService.FirmwareVersionReceived += HandleFirmwareVersion;
                 _canService.DataTimeout += OnDataTimeout;
                 
                 // Only subscribe to bootloader events and initialize firmware service if enabled
@@ -4612,6 +4613,8 @@ Most users should keep default values unless experiencing specific issues.";
         {
             try
             {
+                _logger.LogInfo($"HandleSystemStatus called: Status={e.SystemStatus}, Errors=0x{e.ErrorFlags:X2}, ADC={e.ADCMode}", "MainWindow");
+                
                 string mode = e.ADCMode == 0 ? "Internal" : "ADS1115";
                 UpdateAdcModeIndicators(mode);
                 
@@ -4731,6 +4734,44 @@ Most users should keep default values unless experiencing specific issues.";
             }
         }
 
+        private void HandleFirmwareVersion(object? sender, FirmwareVersionEventArgs e)
+        {
+            try
+            {
+                _logger.LogInfo($"Firmware version received: {e.VersionStringFull}", "Firmware");
+                UpdateFirmwareVersionUI(e);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Firmware version handler error: {ex.Message}", "CAN");
+            }
+        }
+
+        private void UpdateFirmwareVersionUI(FirmwareVersionEventArgs e)
+        {
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    // Update firmware version display
+                    if (FirmwareVersionText != null)
+                    {
+                        FirmwareVersionText.Text = $"FW: {e.VersionString}";
+                        FirmwareVersionText.ToolTip = $"Firmware Version: {e.VersionStringFull}\nReceived: {e.Timestamp:yyyy-MM-dd HH:mm:ss}";
+                        _logger.LogInfo($"Firmware version UI updated: {e.VersionString}", "UI");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("FirmwareVersionText UI element is null", "UI");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Firmware version UI update error: {ex.Message}", "CAN");
+            }
+        }
+
         private void OnDataTimeout(object? sender, string timeoutMessage)
         {
             try
@@ -4816,18 +4857,25 @@ Most users should keep default values unless experiencing specific issues.";
                     return;
                 }
 
-                bool success = _canService.RequestSystemStatus();
+                // Request both system status and firmware version
+                bool statusSuccess = _canService.RequestSystemStatus();
+                bool versionSuccess = _canService.RequestFirmwareVersion();
                 FlashTxIndicator();
                 
-                    if (success)
-                    {
-                    _logger.LogInfo("Requested system status from STM32", "Status");
-                    ShowInlineStatus("✓ Status request sent to STM32");
-                    }
+                if (statusSuccess && versionSuccess)
+                {
+                    _logger.LogInfo("Requested system status and firmware version from STM32", "Status");
+                    ShowInlineStatus("✓ Status & Version request sent to STM32");
+                }
+                else if (statusSuccess)
+                {
+                    _logger.LogInfo("Requested system status from STM32 (version request failed)", "Status");
+                    ShowInlineStatus("✓ Status request sent (version failed)");
+                }
                 else
                 {
-                    _logger.LogError("Failed to send status request", "Status");
-                    ShowInlineStatus("✗ Failed to request status", true);
+                    _logger.LogError("Failed to send status/version request", "Status");
+                    ShowInlineStatus("✗ Failed to request status/version", true);
                 }
             }
             catch (Exception ex)

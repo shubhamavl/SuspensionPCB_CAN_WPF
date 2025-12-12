@@ -319,9 +319,11 @@ namespace SuspensionPCB_CAN_WPF.Adapters
                 case 0x030:  // Switch to Internal ADC mode
                 case 0x031:  // Switch to ADS1115 mode
                 case 0x032:  // Request system status
+                case 0x033:  // Request firmware version
 
                 // System Status (STM32 → PC3)
                 case 0x300:  // System status response
+                case 0x301:  // Firmware version response
 
                 // Bootloader Protocol (separate firmware)
                 case 0x510:  // Bootloader app command
