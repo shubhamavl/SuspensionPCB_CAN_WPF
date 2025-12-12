@@ -26,7 +26,7 @@ namespace SuspensionPCB_CAN_WPF.Services
         private TimeSpan _timeout = TimeSpan.FromSeconds(5); // Configurable timeout
         private bool _timeoutNotified = false;
 
-        // v0.9 Ultra-Minimal CAN Protocol - Semantic IDs & Maximum Efficiency
+        // v1.0 Ultra-Minimal CAN Protocol - Semantic IDs & Maximum Efficiency
         // Raw Data: 2 bytes only (75% reduction from 8 bytes)
         // Stream Control: 1 byte only (87.5% reduction from 8 bytes)
         // System Status: 3 bytes only (62.5% reduction from 8 bytes)
@@ -59,7 +59,7 @@ namespace SuspensionPCB_CAN_WPF.Services
         public event Action<CANMessage>? MessageReceived;
         public event EventHandler<string>? DataTimeout;
         
-        // v0.9 Events
+        // v1.0 Events
         public event EventHandler<RawDataEventArgs>? RawDataReceived;
         public event EventHandler<SystemStatusEventArgs>? SystemStatusReceived;
         public event EventHandler<FirmwareVersionEventArgs>? FirmwareVersionReceived;
@@ -109,9 +109,9 @@ namespace SuspensionPCB_CAN_WPF.Services
             {
                 adapter = new PcanCanAdapter();
             }
-            else if (config is SimulatorCanAdapterConfig)
+            else if (config is NamedPipeCanAdapterConfig)
             {
-                adapter = new SimulatorCanAdapter();
+                adapter = new NamedPipeCanAdapter();
             }
             else
             {
@@ -309,12 +309,12 @@ namespace SuspensionPCB_CAN_WPF.Services
             }
         }
 
-        // Check if message ID belongs to suspension system protocol (v0.9 - Semantic IDs)
+        // Check if message ID belongs to suspension system protocol (v1.0 - Semantic IDs)
         private bool IsSuspensionMessage(uint canId)
         {
             switch (canId)
             {
-                // v0.9 Ultra-Minimal Protocol - Semantic IDs
+                // v1.0 Ultra-Minimal Protocol - Semantic IDs
                 case CAN_MSG_ID_LEFT_RAW_DATA:      // 0x200 - Left side raw ADC data
                 case CAN_MSG_ID_RIGHT_RAW_DATA:     // 0x201 - Right side raw ADC data
                 case CAN_MSG_ID_START_LEFT_STREAM:  // 0x040 - Start left side streaming
@@ -399,7 +399,7 @@ namespace SuspensionPCB_CAN_WPF.Services
             return frame.ToArray();
         }
 
-        // v0.9 Stream Control Methods - Semantic IDs
+        // v1.0 Stream Control Methods - Semantic IDs
         public bool StartLeftStream(byte rate)
         {
             byte[] data = new byte[1];
@@ -497,7 +497,7 @@ namespace SuspensionPCB_CAN_WPF.Services
             return SendMessage(CAN_MSG_ID_BOOT_COMMAND, data);
         }
 
-        #region Event Firing Logic for v0.9 Protocol - Semantic IDs
+        #region Event Firing Logic for v1.0 Protocol - Semantic IDs
         private void FireSpecificEvents(uint canId, byte[] canData)
         {
             switch (canId)
@@ -577,22 +577,6 @@ namespace SuspensionPCB_CAN_WPF.Services
         #endregion
 
         /// <summary>
-        /// Get the current adapter as SimulatorCanAdapter if it is one
-        /// </summary>
-        public SimulatorCanAdapter? GetSimulatorAdapter()
-        {
-            return _adapter as SimulatorCanAdapter;
-        }
-
-        /// <summary>
-        /// Check if the current adapter is a simulator (not real CAN hardware)
-        /// </summary>
-        public bool IsSimulatorAdapter()
-        {
-            return _adapter?.AdapterType == "Simulator";
-        }
-
-        /// <summary>
         /// Set data timeout for CAN communication
         /// </summary>
         /// <param name="timeout">Timeout duration</param>
@@ -616,7 +600,7 @@ namespace SuspensionPCB_CAN_WPF.Services
 
     }  // Class closing brace
 
-    // v0.9 Event Args Classes - Ultra-Minimal
+    // v1.0 Event Args Classes - Ultra-Minimal
     public class RawDataEventArgs : EventArgs
     {
         public byte Side { get; set; }              // 0=Left, 1=Right

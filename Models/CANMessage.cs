@@ -148,10 +148,10 @@ namespace SuspensionPCB_CAN_WPF.Models
             }
         }
 
-        // Decode message based on CAN Protocol Specification v0.9
+        // Decode message based on CAN Protocol Specification v1.0
         private string DecodeMessage()
         {
-            // Handle empty messages properly (v0.9 protocol has empty messages)
+            // Handle empty messages properly (v1.0 protocol has empty messages)
             if (_message.Data == null || _message.Data.Length == 0)
             {
                 // For commands that expect empty data, show decoded name

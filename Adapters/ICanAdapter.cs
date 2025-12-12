@@ -103,6 +103,17 @@ namespace SuspensionPCB_CAN_WPF.Adapters
         /// </summary>
         public ushort PcanBitrate { get; set; } = 0x001C; // PCAN_BAUD_500K
     }
+
+    /// <summary>
+    /// Configuration for Named Pipe CAN adapter
+    /// </summary>
+    public class NamedPipeCanAdapterConfig : CanAdapterConfig
+    {
+        /// <summary>
+        /// Named pipe name (e.g., "CANBridge_UI" or "CANBridge_Emulator")
+        /// </summary>
+        public string PipeName { get; set; } = "CANBridge_UI";
+    }
 }
 
 

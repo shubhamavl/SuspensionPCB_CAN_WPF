@@ -303,7 +303,7 @@ namespace SuspensionPCB_CAN_WPF.Adapters
 
         private bool IsSuspensionMessage(uint canId)
         {
-            // Protocol v0.9 - Ultra-Minimal Suspension System - Semantic IDs
+            // Protocol v1.0 - Ultra-Minimal Suspension System - Semantic IDs
             switch (canId)
             {
                 // Raw ADC Data Transmission (STM32 → PC3)

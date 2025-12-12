@@ -23,6 +23,7 @@ namespace SuspensionPCB_CAN_WPF.Views
         private ProductionLogger _logger = ProductionLogger.Instance;
         private DateTime _lastRawLogTime = DateTime.MinValue;
         private int _rawSamplesSinceLog = 0;
+        private DateTime _lastStatusRequestTime = DateTime.MinValue;
         
         // Dual-mode tracking
         private bool _isCapturingDualMode = false;
@@ -65,6 +66,7 @@ namespace SuspensionPCB_CAN_WPF.Views
             if (_canService != null && _canService.IsConnected)
             {
                 _canService.RawDataReceived += OnRawDataReceived;
+                _canService.SystemStatusReceived += OnSystemStatusReceived;
                 _hasStream = true;
                 _logger.LogInfo($"Calibration dialog opened for {side} side (ADC mode: {adcMode}) - Stream available", "CalibrationDialog");
             }
@@ -80,6 +82,9 @@ namespace SuspensionPCB_CAN_WPF.Views
                 _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
                 _refreshTimer.Tick += RefreshTimer_Tick;
                 _refreshTimer.Start();
+                
+                // Request initial status to get current ADC mode
+                _canService?.RequestSystemStatus();
             }
             
             // Add first point by default
@@ -93,6 +98,18 @@ namespace SuspensionPCB_CAN_WPF.Views
         {
             // Update live ADC for all points (will be handled by binding in XAML)
             // This method is kept for compatibility but live updates are handled per-point
+            
+            // Periodically request status to ensure ADC mode tracking is current
+            // (every 5 seconds to avoid flooding the CAN bus)
+            if (_hasStream && _canService?.IsConnected == true)
+            {
+                var now = DateTime.Now;
+                if (_lastStatusRequestTime == DateTime.MinValue || (now - _lastStatusRequestTime).TotalSeconds >= 5)
+                {
+                    _canService.RequestSystemStatus();
+                    _lastStatusRequestTime = now;
+                }
+            }
         }
         
         private void OnRawDataReceived(object? sender, RawDataEventArgs e)
@@ -105,21 +122,32 @@ namespace SuspensionPCB_CAN_WPF.Views
                     _currentRawADC = e.RawADCSum;
                     _rawSamplesSinceLog++;
 
-                    // Update live ADC for all non-captured points based on current ADC mode
-                    foreach (var point in Points.Where(p => !p.BothModesCaptured))
+                    // Update UI on the dispatcher thread to ensure thread safety
+                    Dispatcher.Invoke(() =>
                     {
-                        point.RawADC = _currentRawADC; // For backward compatibility
-                        
-                        // Update the appropriate ADC value based on current mode
-                        if (_adcMode == 0)
+                        try
                         {
-                            point.InternalADC = (ushort)_currentRawADC;
+                            // Update live ADC for all non-captured points based on current ADC mode
+                            foreach (var point in Points.Where(p => !p.BothModesCaptured))
+                            {
+                                point.RawADC = _currentRawADC; // For backward compatibility
+                                
+                                // Update the appropriate ADC value based on current mode
+                                if (_adcMode == 0)
+                                {
+                                    point.InternalADC = _currentRawADC;
+                                }
+                                else
+                                {
+                                    point.ADS1115ADC = _currentRawADC;
+                                }
+                            }
                         }
-                        else
+                        catch (Exception uiEx)
                         {
-                            point.ADS1115ADC = (ushort)_currentRawADC;
+                            _logger.LogError($"Error updating UI in OnRawDataReceived: {uiEx.Message}", "CalibrationDialog");
                         }
-                    }
+                    });
 
                     var now = DateTime.Now;
                     if (_lastRawLogTime == DateTime.MinValue || (now - _lastRawLogTime).TotalSeconds >= 1)
@@ -133,6 +161,56 @@ namespace SuspensionPCB_CAN_WPF.Views
             catch (Exception ex)
             {
                 _logger.LogError($"Error processing raw data: {ex.Message}", "CalibrationDialog");
+            }
+        }
+        
+        /// <summary>
+        /// Handle system status updates to track ADC mode changes
+        /// </summary>
+        private void OnSystemStatusReceived(object? sender, SystemStatusEventArgs e)
+        {
+            try
+            {
+                // Update ADC mode if it changed
+                if (e.ADCMode != _adcMode)
+                {
+                    byte oldMode = _adcMode;
+                    _adcMode = e.ADCMode;
+                    _logger.LogInfo($"ADC mode changed in calibration dialog: {oldMode} -> {_adcMode}", "CalibrationDialog");
+                    
+                    // Update UI on dispatcher thread
+                    Dispatcher.Invoke(() =>
+                    {
+                        // When mode changes, update which ADC field gets the live values
+                        // This ensures the correct field is updated based on current mode
+                        foreach (var point in Points.Where(p => !p.BothModesCaptured))
+                        {
+                            // The next OnRawDataReceived will update the correct field
+                            // But we can clear the opposite field to avoid confusion
+                            if (_adcMode == 0)
+                            {
+                                // Now in Internal mode - clear ADS1115 if it was being updated
+                                // (but don't clear if it was already captured)
+                                if (!point.IsCaptured)
+                                {
+                                    point.ADS1115ADC = 0;
+                                }
+                            }
+                            else
+                            {
+                                // Now in ADS1115 mode - clear Internal if it was being updated
+                                if (!point.IsCaptured)
+                                {
+                                    point.InternalADC = 0;
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error processing system status: {ex.Message}", "CalibrationDialog");
             }
         }
         
@@ -312,16 +390,18 @@ namespace SuspensionPCB_CAN_WPF.Views
                     }
                     
                     // Validate ranges
-                    if (point.InternalADC > 4095)
+                    // Internal ADC combined values (Ch0+Ch1 or Ch2+Ch3) are unsigned: 0-8190
+                    if (point.InternalADC < 0 || point.InternalADC > 8190)
                     {
-                        MessageBox.Show($"Internal ADC value must be between 0-4095. Current: {point.InternalADC}", 
+                        MessageBox.Show($"Internal ADC value must be between 0-8190. Current: {point.InternalADC}", 
                                       "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
                     
-                    if (point.ADS1115ADC > 32767)
+                    // ADS1115 combined values (Ch0+Ch1 or Ch2+Ch3) are signed 32-bit: -65536 to +65534
+                    if (point.ADS1115ADC < -65536 || point.ADS1115ADC > 65534)
                     {
-                        MessageBox.Show($"ADS1115 ADC value must be between 0-32767. Current: {point.ADS1115ADC}", 
+                        MessageBox.Show($"ADS1115 ADC value must be between -65536 to +65534. Current: {point.ADS1115ADC}", 
                                       "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
@@ -402,7 +482,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Step 1: Capture current mode ADC
                 string modeName = _adcMode == 0 ? "Internal" : "ADS1115";
                 
-                ushort firstModeADC;
+                int firstModeADC;
                 CalibrationCaptureResult? firstResult = null;
                 
                 if (averagingEnabled)
@@ -451,7 +531,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     // Single sample mode (old behavior, backward compatible)
                     point.StatusText = $"Capturing {modeName} ADC...";
                     await System.Threading.Tasks.Task.Delay(_calibrationDelayMs); // Wait for stable reading
-                    firstModeADC = (ushort)_currentRawADC;
+                    firstModeADC = _currentRawADC;
                     _logger.LogInfo($"Captured {modeName} ADC (single sample): {firstModeADC}", "CalibrationDialog");
                 }
                 
@@ -501,7 +581,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Step 3: Capture second mode ADC
                 modeName = _adcMode == 0 ? "Internal" : "ADS1115";
                 
-                ushort secondModeADC;
+                int secondModeADC;
                 CalibrationCaptureResult? secondResult = null;
                 
                 if (averagingEnabled)
@@ -577,7 +657,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     // Single sample mode (old behavior, backward compatible)
                     point.StatusText = $"Capturing {modeName} ADC...";
                     await System.Threading.Tasks.Task.Delay(_calibrationDelayMs); // Wait for stable reading
-                    secondModeADC = (ushort)_currentRawADC;
+                    secondModeADC = _currentRawADC;
                     
                     // Clear statistics for single sample mode
                     point.CaptureMean = 0;
@@ -866,6 +946,7 @@ namespace SuspensionPCB_CAN_WPF.Views
             if (_canService != null)
             {
                 _canService.RawDataReceived -= OnRawDataReceived;
+                _canService.SystemStatusReceived -= OnSystemStatusReceived;
                 
                 // Restore original ADC mode if we switched it
                 if (_hasStream && _canService.IsConnected && _adcMode != _startingADCMode)

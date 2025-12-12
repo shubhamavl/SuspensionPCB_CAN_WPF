@@ -39,7 +39,7 @@ namespace SuspensionPCB_CAN_WPF.Views
         private bool _firmwareUpdateInProgress;
         private readonly object _statisticsLock = new object();
 
-        // v0.9 Calibration and Tare functionality - Mode-specific calibrations
+        // v1.0 Calibration and Tare functionality - Mode-specific calibrations
         private LinearCalibration? _leftCalibrationInternal;
         private LinearCalibration? _leftCalibrationADS1115;
         private LinearCalibration? _rightCalibrationInternal;
@@ -77,7 +77,7 @@ namespace SuspensionPCB_CAN_WPF.Views
         private SettingsManager _settingsManager = SettingsManager.Instance;
         private WeightProcessor _weightProcessor = new WeightProcessor();
 
-        // v0.9 Protocol - Only semantic IDs
+        // v1.0 Protocol - Only semantic IDs
         private readonly HashSet<uint> _rxMessageIds = new HashSet<uint> {
             0x200,  // Left side raw ADC data
             0x201,  // Right side raw ADC data
@@ -239,7 +239,7 @@ namespace SuspensionPCB_CAN_WPF.Views
         {
             try
             {
-                // Use v0.9 semantic stream control to stop all streams
+                // Use v1.0 semantic stream control to stop all streams
                 bool stopped = _canService?.StopAllStreams() ?? false;
                 
                 // Flash TX indicator to show message was sent
@@ -395,7 +395,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     timer.Interval = TimeSpan.FromSeconds(3);
                     timer.Tick += (s, e) =>
                     {
-                        StatusBarText.Text = "Ready | CAN v0.9 @ 250 kbps";
+                        StatusBarText.Text = "Ready | CAN v1.0 @ 250 kbps";
                         StatusBarText.Foreground = System.Windows.Media.Brushes.White;
                         timer.Stop();
                     };
@@ -497,7 +497,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                             CheckPcanAvailability();
                         }
                     }
-                    else if (adapterType == "SIM")
+                    else if (adapterType == "PIPE")
                     {
                         if (PcanChannelCombo != null)
                         {
@@ -505,15 +505,11 @@ namespace SuspensionPCB_CAN_WPF.Views
                         }
                         if (AdapterHintTxt != null)
                         {
-                            AdapterHintTxt.Text = "Simulator mode enabled. No hardware required - automatic weight data generation.";
+                            AdapterHintTxt.Text = "Named Pipe Bridge adapter selected. Connects to CAN Bridge Service via named pipe.";
                         }
                         if (PcanStatusTxt != null)
                         {
                             PcanStatusTxt.Visibility = Visibility.Collapsed;
-                        }
-                        if (OpenSimulatorControlBtn != null)
-                        {
-                            OpenSimulatorControlBtn.Visibility = Visibility.Visible;
                         }
                     }
                     else
@@ -529,10 +525,6 @@ namespace SuspensionPCB_CAN_WPF.Views
                         if (PcanStatusTxt != null)
                         {
                             PcanStatusTxt.Visibility = Visibility.Collapsed;
-                        }
-                        if (OpenSimulatorControlBtn != null)
-                        {
-                            OpenSimulatorControlBtn.Visibility = Visibility.Collapsed;
                         }
                     }
                     SaveConfiguration();
@@ -610,10 +602,11 @@ namespace SuspensionPCB_CAN_WPF.Views
                             BitrateKbps = GetBaudRateValue()
                         };
                     }
-                    else if (adapterType == "SIM")
+                    else if (adapterType == "PIPE")
                     {
-                        return new SimulatorCanAdapterConfig
+                        return new NamedPipeCanAdapterConfig
                         {
+                            PipeName = "CANBridge_UI",
                             BitrateKbps = GetBaudRateValue()
                         };
                     }
@@ -763,7 +756,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     ResetStatistics();
                     string adapterName = GetSelectedAdapterType();
                     ShowStatusBanner("✓ Connected Successfully", true);
-                    ShowInlineStatus($"{adapterName} Connected Successfully. Protocol: CAN v0.9", false);
+                    ShowInlineStatus($"{adapterName} Connected Successfully. Protocol: CAN v1.0", false);
                     if (ConnectionToggle != null) ConnectionToggle.IsChecked = true;
                     SaveConfiguration(); // Save adapter settings
                     
@@ -837,7 +830,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                     else if (vm.Direction == "TX") _txMessages++;
                 }
 
-                // Process weight and calibration data according to protocol v0.9
+                // Process weight and calibration data according to protocol v1.0
                 lock (_dataLock)
                 {
                     ProcessProtocolMessage(message);
@@ -4031,13 +4024,6 @@ Most users should keep default values unless experiencing specific issues.";
                     ConnectionToggle.Content = connected ? "🔌 Disconnect" : "🔌 Connect";
                 }
                 
-                // Enable/disable simulator control button based on connection and adapter type
-                if (OpenSimulatorControlBtn != null)
-                {
-                    bool isSimulator = GetSelectedAdapterType() == "Simulator";
-                    OpenSimulatorControlBtn.IsEnabled = connected && isSimulator;
-                }
-                
                 if (RequestLeftBtn != null)
                 {
                     RequestLeftBtn.IsEnabled = connected;
@@ -4502,44 +4488,6 @@ Most users should keep default values unless experiencing specific issues.";
             }
         }
 
-        private void OpenSimulatorControl_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (_canService == null)
-                {
-                    MessageBox.Show("CAN Service not initialized.", "Error", 
-                                  MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                if (!_canService.IsConnected)
-                {
-                    MessageBox.Show("Please connect to simulator first.", "Connection Required", 
-                                  MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                var simulatorAdapter = _canService.GetSimulatorAdapter();
-                if (simulatorAdapter == null)
-                {
-                    MessageBox.Show("Simulator adapter not available. Please select Simulator adapter and connect.", 
-                                  "Simulator Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                var simulatorWindow = new SimulatorControlWindow();
-                simulatorWindow.Owner = this;
-                simulatorWindow.Initialize(simulatorAdapter);
-                simulatorWindow.Show();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error opening simulator control window: {ex.Message}", "UI");
-                MessageBox.Show($"Error opening simulator control window: {ex.Message}", "Error", 
-                              MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
 
         private LogsWindow? _logsWindow;
         private SuspensionGraphWindow? _graphWindow;

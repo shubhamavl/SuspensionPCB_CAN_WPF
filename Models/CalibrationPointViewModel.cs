@@ -11,8 +11,8 @@ namespace SuspensionPCB_CAN_WPF.Models
     {
         private int _pointNumber;
         private int _rawADC = 0;
-        private ushort _internalADC = 0;
-        private ushort _ads1115ADC = 0;
+        private int _internalADC = 0;
+        private int _ads1115ADC = 0;
         private double _knownWeight = 0;
         private bool _isCaptured = false;
         private bool _bothModesCaptured = false;
@@ -37,26 +37,28 @@ namespace SuspensionPCB_CAN_WPF.Models
             set { _rawADC = value; OnPropertyChanged(nameof(RawADC)); }
         }
         
-        public ushort InternalADC
+        public int InternalADC
         {
             get => _internalADC;
             set 
             { 
-                if (value > 4095)
-                    throw new ArgumentOutOfRangeException(nameof(InternalADC), $"Internal ADC value must be between 0-4095. Value: {value}");
+                // Internal ADC combined values (Ch0+Ch1 or Ch2+Ch3) are unsigned: 0-8190
+                if (value < 0 || value > 8190)
+                    throw new ArgumentOutOfRangeException(nameof(InternalADC), $"Internal ADC value must be between 0-8190. Value: {value}");
                 _internalADC = value; 
                 OnPropertyChanged(nameof(InternalADC));
                 UpdateStatusText();
             }
         }
         
-        public ushort ADS1115ADC
+        public int ADS1115ADC
         {
             get => _ads1115ADC;
             set 
             { 
-                if (value > 32767)
-                    throw new ArgumentOutOfRangeException(nameof(ADS1115ADC), $"ADS1115 ADC value must be between 0-32767. Value: {value}");
+                // ADS1115 combined values (Ch0+Ch1 or Ch2+Ch3) are signed 32-bit: -65536 to +65534
+                if (value < -65536 || value > 65534)
+                    throw new ArgumentOutOfRangeException(nameof(ADS1115ADC), $"ADS1115 ADC value must be between -65536 to +65534. Value: {value}");
                 _ads1115ADC = value; 
                 OnPropertyChanged(nameof(ADS1115ADC));
                 UpdateStatusText();
