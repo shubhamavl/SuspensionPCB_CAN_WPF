@@ -41,6 +41,8 @@ namespace SuspensionPCB_CAN_WPF.Services
         private const uint CAN_MSG_ID_STATUS_REQUEST = 0x032;     // Request system status (empty message)
         private const uint CAN_MSG_ID_MODE_INTERNAL = 0x030;      // Switch to Internal ADC mode (empty message)
         private const uint CAN_MSG_ID_MODE_ADS1115 = 0x031;       // Switch to ADS1115 mode (empty message)
+        private const uint CAN_MSG_ID_VERSION_REQUEST = 0x033;    // Request firmware version (empty message)
+        private const uint CAN_MSG_ID_VERSION_RESPONSE = 0x301;   // Firmware version response (4 bytes: major, minor, patch, build)
 
         // Bootloader protocol IDs
         private const uint CAN_MSG_ID_BOOT_COMMAND = BootloaderProtocol.CanIdBootCommand;
@@ -60,6 +62,7 @@ namespace SuspensionPCB_CAN_WPF.Services
         // v0.9 Events
         public event EventHandler<RawDataEventArgs>? RawDataReceived;
         public event EventHandler<SystemStatusEventArgs>? SystemStatusReceived;
+        public event EventHandler<FirmwareVersionEventArgs>? FirmwareVersionReceived;
         public event EventHandler<BootStatusEventArgs>? BootStatusReceived;
 
         public bool IsConnected => _connected;
@@ -127,7 +130,8 @@ namespace SuspensionPCB_CAN_WPF.Services
         {
             MessageReceived?.Invoke(message);
             // Fire specific events for protocol messages
-            if (message.Data != null && message.Data.Length > 0)
+            // Note: Some messages (like status/version requests) may have empty data, but responses should have data
+            if (message.Data != null)
             {
                 FireSpecificEvents(message.ID, message.Data);
             }
@@ -317,8 +321,11 @@ namespace SuspensionPCB_CAN_WPF.Services
                 case CAN_MSG_ID_START_RIGHT_STREAM: // 0x041 - Start right side streaming
                 case CAN_MSG_ID_STOP_ALL_STREAMS:   // 0x044 - Stop all streaming
                 case CAN_MSG_ID_SYSTEM_STATUS:      // 0x300 - System status
+                case CAN_MSG_ID_STATUS_REQUEST:     // 0x032 - Request system status
                 case CAN_MSG_ID_MODE_INTERNAL:      // 0x030 - Switch to Internal ADC mode
                 case CAN_MSG_ID_MODE_ADS1115:       // 0x031 - Switch to ADS1115 mode
+                case CAN_MSG_ID_VERSION_REQUEST:    // 0x033 - Request firmware version
+                case CAN_MSG_ID_VERSION_RESPONSE:   // 0x301 - Firmware version response
                 case CAN_MSG_ID_BOOT_STATUS:
                 case CAN_MSG_ID_BOOT_INFO:
                     return true;
@@ -436,6 +443,15 @@ namespace SuspensionPCB_CAN_WPF.Services
             return SendMessage(CAN_MSG_ID_STATUS_REQUEST, new byte[0]);
         }
 
+        /// <summary>
+        /// Request firmware version from STM32 (on-demand)
+        /// </summary>
+        /// <returns>True if request sent successfully</returns>
+        public bool RequestFirmwareVersion()
+        {
+            return SendMessage(CAN_MSG_ID_VERSION_REQUEST, new byte[0]);
+        }
+
         // Static methods for easy access from all windows
         public static bool SendStaticMessage(uint canId, byte[] data)
         {
@@ -513,7 +529,7 @@ namespace SuspensionPCB_CAN_WPF.Services
                     break;
 
                 case CAN_MSG_ID_SYSTEM_STATUS: // 0x300 - System status
-                    if (canData.Length >= 3)
+                    if (canData != null && canData.Length >= 3)
                     {
                         SystemStatusReceived?.Invoke(this, new SystemStatusEventArgs
                         {
@@ -522,6 +538,30 @@ namespace SuspensionPCB_CAN_WPF.Services
                             ADCMode = canData[2],
                             Timestamp = DateTime.Now
                         });
+                        ProductionLogger.Instance.LogInfo($"SystemStatus event fired: Status={canData[0]}, Errors=0x{canData[1]:X2}, ADC={canData[2]}", "CANService");
+                    }
+                    else
+                    {
+                        ProductionLogger.Instance.LogWarning($"SystemStatus message invalid: Data length={canData?.Length ?? 0}", "CANService");
+                    }
+                    break;
+
+                case CAN_MSG_ID_VERSION_RESPONSE: // 0x301 - Firmware version response
+                    if (canData != null && canData.Length >= 4)
+                    {
+                        FirmwareVersionReceived?.Invoke(this, new FirmwareVersionEventArgs
+                        {
+                            Major = canData[0],
+                            Minor = canData[1],
+                            Patch = canData[2],
+                            Build = canData[3],
+                            Timestamp = DateTime.Now
+                        });
+                        ProductionLogger.Instance.LogInfo($"FirmwareVersion event fired: {canData[0]}.{canData[1]}.{canData[2]}.{canData[3]}", "CANService");
+                    }
+                    else
+                    {
+                        ProductionLogger.Instance.LogWarning($"FirmwareVersion message invalid: Data length={canData?.Length ?? 0}", "CANService");
                     }
                     break;
                 case CAN_MSG_ID_BOOT_STATUS:
@@ -590,6 +630,18 @@ namespace SuspensionPCB_CAN_WPF.Services
         public byte ErrorFlags { get; set; }        // Error flags
         public byte ADCMode { get; set; }           // Current ADC mode (0=Internal, 1=ADS1115)
         public DateTime Timestamp { get; set; }     // PC3 reception timestamp
+    }
+
+    public class FirmwareVersionEventArgs : EventArgs
+    {
+        public byte Major { get; set; }              // Major version number
+        public byte Minor { get; set; }              // Minor version number
+        public byte Patch { get; set; }              // Patch version number
+        public byte Build { get; set; }              // Build number
+        public DateTime Timestamp { get; set; }      // PC3 reception timestamp
+        
+        public string VersionString => $"{Major}.{Minor}.{Patch}";
+        public string VersionStringFull => $"{Major}.{Minor}.{Patch}.{Build}";
     }
 
     public class BootStatusEventArgs : EventArgs

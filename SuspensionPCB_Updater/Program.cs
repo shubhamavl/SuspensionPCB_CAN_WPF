@@ -31,6 +31,8 @@ namespace SuspensionPCB_Updater
 
             try
             {
+                Console.WriteLine($"Updater started: TargetDir={targetDir}, Package={packagePath}, MainExe={mainExeName}");
+                
                 if (!Directory.Exists(targetDir))
                 {
                     Console.Error.WriteLine($"Target directory not found: {targetDir}");
@@ -42,29 +44,40 @@ namespace SuspensionPCB_Updater
                     Console.Error.WriteLine($"Package not found: {packagePath}");
                     return 3;
                 }
+                
+                Console.WriteLine($"Package found: {packagePath} ({new FileInfo(packagePath).Length} bytes)");
 
                 // Give the main application some time to exit and release file locks
+                Console.WriteLine("Waiting for main application to exit...");
                 Thread.Sleep(1500);
 
                 string backupDir = Path.Combine(targetDir, "Backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
                 try
                 {
+                    Console.WriteLine($"Creating backup: {backupDir}");
                     Directory.CreateDirectory(backupDir);
                     CopyDirectory(targetDir, backupDir, excludeUpdater: true);
+                    Console.WriteLine("Backup created successfully");
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Console.WriteLine($"Warning: Backup failed (non-critical): {ex.Message}");
                     // Backup failures should not block the update entirely
                 }
 
                 // Apply the update
+                Console.WriteLine("Applying update...");
                 if (packagePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 {
+                    Console.WriteLine("Extracting ZIP package...");
                     ApplyZipUpdate(targetDir, packagePath);
+                    Console.WriteLine("ZIP package extracted successfully");
                 }
                 else if (packagePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                 {
+                    Console.WriteLine("Copying single-file update...");
                     ApplySingleFileUpdate(targetDir, packagePath, mainExeName);
+                    Console.WriteLine("Single-file update applied successfully");
                 }
                 else
                 {
@@ -76,6 +89,7 @@ namespace SuspensionPCB_Updater
                 string mainExePath = Path.Combine(targetDir, mainExeName);
                 if (File.Exists(mainExePath))
                 {
+                    Console.WriteLine($"Restarting main application: {mainExePath}");
                     var startInfo = new ProcessStartInfo
                     {
                         FileName = mainExePath,
@@ -83,8 +97,15 @@ namespace SuspensionPCB_Updater
                         UseShellExecute = true
                     };
                     Process.Start(startInfo);
+                    Console.WriteLine("Main application restarted successfully");
+                }
+                else
+                {
+                    Console.Error.WriteLine($"Main executable not found: {mainExePath}");
+                    return 6;
                 }
 
+                Console.WriteLine("Update completed successfully");
                 return 0;
             }
             catch (Exception ex)

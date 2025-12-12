@@ -167,7 +167,11 @@ namespace SuspensionPCB_CAN_WPF.Services
         /// <summary>
         /// Enqueue raw data from CAN thread - must be FAST!
         /// </summary>
-        public void EnqueueRawData(byte side, ushort rawADC)
+        /// <summary>
+        /// Enqueue raw ADC data for processing
+        /// Supports both Internal ADC (unsigned 0-8190) and ADS1115 (signed -65536 to +65534)
+        /// </summary>
+        public void EnqueueRawData(byte side, int rawADC)
         {
             const int MAX_QUEUE_SIZE = 100; // Prevent memory leak
             
@@ -180,7 +184,7 @@ namespace SuspensionPCB_CAN_WPF.Services
             _rawDataQueue.Enqueue(new RawWeightData 
             { 
                 Side = side, 
-                RawADC = rawADC,
+                RawADC = rawADC,  // Can be signed (ADS1115) or unsigned (Internal)
                 Timestamp = DateTime.Now 
             });
         }

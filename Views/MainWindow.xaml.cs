@@ -119,10 +119,10 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     SettingsPanel.Visibility = Visibility.Visible;
                     SettingsToggleBtn.Content = "⚙ Hide";
-
+                    
                     // Always reload settings when panel opens so UI reflects saved values
                     LoadSaveDirectorySettings();
-                    LoadFilterSettings();
+                        LoadFilterSettings();
                     LoadDisplaySettings();
                     LoadUIVisibilitySettings();
                     LoadAdvancedSettings();
@@ -854,64 +854,148 @@ namespace SuspensionPCB_CAN_WPF.Views
             switch (message.ID)
             {
                 case 0x200: // Left Side Raw ADC Data
-                    if (message.Data?.Length >= 2)
+                    // Mode-dependent parsing: 2 bytes (Internal) or 4 bytes (ADS1115)
+                    if (_currentADCMode == 0) // Internal ADC
                     {
-                        _leftRawADC = (ushort)(message.Data[0] | (message.Data[1] << 8));
-                        _currentRawADC = _leftRawADC;
-                        
-                        // Set active side to Left
-                        if (_activeSide != "Left")
+                        if (message.Data?.Length >= 2)
                         {
-                            _activeSide = "Left";
-                            _activeADCMode = _currentADCMode; // Use current system ADC mode
-                            UpdateDashboardMode();
-                            UpdateWeightProcessorCalibration(); // This already sets ADC mode for active side
-                            _logger.LogInfo($"Active side set to Left (ADC mode: {_activeADCMode})", "CAN");
+                            // 2 bytes (unsigned 0-8190)
+                            int rawADC16 = (ushort)(message.Data[0] | (message.Data[1] << 8));
+                            _leftRawADC = rawADC16;
+                            _currentRawADC = _leftRawADC;
+                            
+                            // Set active side to Left
+                            if (_activeSide != "Left")
+                            {
+                                _activeSide = "Left";
+                                _activeADCMode = _currentADCMode;
+                                UpdateDashboardMode();
+                                UpdateWeightProcessorCalibration();
+                                _logger.LogInfo($"Active side set to Left (Internal ADC)", "CAN");
+                            }
+                            
+                            // Confirm left stream is active
+                            if (!_leftStreamRunning)
+                            {
+                                _leftStreamRunning = true;
+                                _rightStreamRunning = false;
+                                UpdateStreamingIndicators();
+                                UpdateDashboardMode();
+                                _logger.LogInfo("Left stream confirmed active via 0x200 (Internal)", "CAN");
+                            }
+                            
+                            // Send to WeightProcessor
+                            _weightProcessor.EnqueueRawData(0, rawADC16);
                         }
-                        
-                        // Confirm left stream is active
-                        if (!_leftStreamRunning)
+                    }
+                    else // ADS1115
+                    {
+                        if (message.Data?.Length >= 4)
                         {
-                            _leftStreamRunning = true;
-                            _rightStreamRunning = false; // Ensure right is stopped (only one can run)
-                            UpdateStreamingIndicators();
-                            UpdateDashboardMode();
-                            _logger.LogInfo("Left stream confirmed active via 0x200", "CAN");
+                            // 4 bytes (signed -65536 to +65534)
+                            int rawADC32 = (int)(message.Data[0] | 
+                                                (message.Data[1] << 8) | 
+                                                (message.Data[2] << 16) | 
+                                                (message.Data[3] << 24));
+                            _leftRawADC = rawADC32;
+                            _currentRawADC = _leftRawADC;
+                            
+                            // Set active side to Left
+                            if (_activeSide != "Left")
+                            {
+                                _activeSide = "Left";
+                                _activeADCMode = _currentADCMode;
+                                UpdateDashboardMode();
+                                UpdateWeightProcessorCalibration();
+                                _logger.LogInfo($"Active side set to Left (ADS1115 signed)", "CAN");
+                            }
+                            
+                            // Confirm left stream is active
+                            if (!_leftStreamRunning)
+                            {
+                                _leftStreamRunning = true;
+                                _rightStreamRunning = false;
+                                UpdateStreamingIndicators();
+                                UpdateDashboardMode();
+                                _logger.LogInfo("Left stream confirmed active via 0x200 (ADS1115)", "CAN");
+                            }
+                            
+                            // Send to WeightProcessor
+                            _weightProcessor.EnqueueRawData(0, rawADC32);
                         }
-                        
-                        // Send to WeightProcessor for calibration
-                        _weightProcessor.EnqueueRawData(0, (ushort)_leftRawADC);
                     }
                     break;
 
                 case 0x201: // Right Side Raw ADC Data
-                    if (message.Data?.Length >= 2)
+                    // Mode-dependent parsing: 2 bytes (Internal) or 4 bytes (ADS1115)
+                    if (_currentADCMode == 0) // Internal ADC
                     {
-                        _rightRawADC = (ushort)(message.Data[0] | (message.Data[1] << 8));
-                        _currentRawADC = _rightRawADC;
-                        
-                        // Set active side to Right
-                        if (_activeSide != "Right")
+                        if (message.Data?.Length >= 2)
                         {
-                            _activeSide = "Right";
-                            _activeADCMode = _currentADCMode; // Use current system ADC mode
-                            UpdateDashboardMode();
-                            UpdateWeightProcessorCalibration(); // This already sets ADC mode for active side
-                            _logger.LogInfo($"Active side set to Right (ADC mode: {_activeADCMode})", "CAN");
+                            // 2 bytes (unsigned 0-8190)
+                            int rawADC16 = (ushort)(message.Data[0] | (message.Data[1] << 8));
+                            _rightRawADC = rawADC16;
+                            _currentRawADC = _rightRawADC;
+                            
+                            // Set active side to Right
+                            if (_activeSide != "Right")
+                            {
+                                _activeSide = "Right";
+                                _activeADCMode = _currentADCMode;
+                                UpdateDashboardMode();
+                                UpdateWeightProcessorCalibration();
+                                _logger.LogInfo($"Active side set to Right (Internal ADC)", "CAN");
+                            }
+                            
+                            // Confirm right stream is active
+                            if (!_rightStreamRunning)
+                            {
+                                _rightStreamRunning = true;
+                                _leftStreamRunning = false;
+                                UpdateStreamingIndicators();
+                                UpdateDashboardMode();
+                                _logger.LogInfo("Right stream confirmed active via 0x201 (Internal)", "CAN");
+                            }
+                            
+                            // Send to WeightProcessor
+                            _weightProcessor.EnqueueRawData(1, rawADC16);
                         }
-                        
-                        // Confirm right stream is active
-                        if (!_rightStreamRunning)
+                    }
+                    else // ADS1115
+                    {
+                        if (message.Data?.Length >= 4)
                         {
-                            _rightStreamRunning = true;
-                            _leftStreamRunning = false; // Ensure left is stopped (only one can run)
-                            UpdateStreamingIndicators();
-                            UpdateDashboardMode();
-                            _logger.LogInfo("Right stream confirmed active via 0x201", "CAN");
+                            // 4 bytes (signed -65536 to +65534)
+                            int rawADC32 = (int)(message.Data[0] | 
+                                                (message.Data[1] << 8) | 
+                                                (message.Data[2] << 16) | 
+                                                (message.Data[3] << 24));
+                            _rightRawADC = rawADC32;
+                            _currentRawADC = _rightRawADC;
+                            
+                            // Set active side to Right
+                            if (_activeSide != "Right")
+                            {
+                                _activeSide = "Right";
+                                _activeADCMode = _currentADCMode;
+                                UpdateDashboardMode();
+                                UpdateWeightProcessorCalibration();
+                                _logger.LogInfo($"Active side set to Right (ADS1115 signed)", "CAN");
+                            }
+                            
+                            // Confirm right stream is active
+                            if (!_rightStreamRunning)
+                            {
+                                _rightStreamRunning = true;
+                                _leftStreamRunning = false;
+                                UpdateStreamingIndicators();
+                                UpdateDashboardMode();
+                                _logger.LogInfo("Right stream confirmed active via 0x201 (ADS1115)", "CAN");
+                            }
+                            
+                            // Send to WeightProcessor
+                            _weightProcessor.EnqueueRawData(1, rawADC32);
                         }
-                        
-                        // Send to WeightProcessor for calibration
-                        _weightProcessor.EnqueueRawData(1, (ushort)_rightRawADC);
                     }
                     break;
 
@@ -1552,6 +1636,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 _canService.MessageReceived += OnCANMessageReceived;
                 _canService.RawDataReceived += OnRawDataReceived;
                 _canService.SystemStatusReceived += HandleSystemStatus;
+                _canService.FirmwareVersionReceived += HandleFirmwareVersion;
                 _canService.DataTimeout += OnDataTimeout;
                 
                 // Only subscribe to bootloader events and initialize firmware service if enabled
@@ -1638,8 +1723,20 @@ namespace SuspensionPCB_CAN_WPF.Views
             try
             {
                 var result = await _updateService.CheckForUpdateAsync();
-                if (!result.IsSuccess || result.Info == null || !result.Info.IsUpdateAvailable)
+                if (!result.IsSuccess || result.Info == null)
+                {
+                    if (result.IsNetworkError)
+                    {
+                        _logger.LogWarning($"Background update check failed: Network error", "Update");
+                    }
                     return;
+                }
+                
+                if (!result.Info.IsUpdateAvailable)
+                {
+                    _logger.LogInfo($"No update available. Current={result.Info.CurrentVersion}, Latest={result.Info.LatestVersion}", "Update");
+                    return;
+                }
 
                 _logger.LogInfo($"Update available. Current={result.Info.CurrentVersion}, Latest={result.Info.LatestVersion}", "Update");
 
@@ -1699,6 +1796,9 @@ namespace SuspensionPCB_CAN_WPF.Views
                         "Update Check Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
+
+                // Log version comparison for debugging
+                _logger.LogInfo($"Update check result: Current={info.CurrentVersion}, Latest={info.LatestVersion}, IsUpdateAvailable={info.IsUpdateAvailable}", "Update");
 
                 if (!info.IsUpdateAvailable)
                 {
@@ -1867,18 +1967,33 @@ namespace SuspensionPCB_CAN_WPF.Views
                     var selectedInfo = dialog.SelectedVersionInfo;
                     var currentVersion = GetCurrentVersion();
                     
-                    // Check if this is a downgrade
-                    if (selectedInfo.LatestVersion < currentVersion)
+                    // Log version information for debugging
+                    _logger.LogInfo($"Version selection: Current={currentVersion}, Selected={selectedInfo.LatestVersion}", "Update");
+                    
+                    // Check if this is a downgrade - use CompareTo for reliable comparison
+                    int versionComparison = selectedInfo.LatestVersion.CompareTo(currentVersion);
+                    
+                    if (versionComparison < 0)  // Selected version is older (downgrade)
                     {
+                        _logger.LogInfo($"Downgrade detected: Current={currentVersion}, Selected={selectedInfo.LatestVersion}", "Update");
                         var warningResult = ShowDowngradeWarningDialog(currentVersion, selectedInfo.LatestVersion);
                         if (warningResult != MessageBoxResult.Yes)
                         {
                             _logger.LogInfo("User cancelled downgrade after warning", "Update");
                             return;
                         }
+                        _logger.LogInfo("User confirmed downgrade, proceeding with installation", "Update");
+                    }
+                    else if (versionComparison == 0)
+                    {
+                        _logger.LogInfo($"Reinstall detected: Version={currentVersion}", "Update");
+                    }
+                    else
+                    {
+                        _logger.LogInfo($"Upgrade detected: Current={currentVersion}, Selected={selectedInfo.LatestVersion}", "Update");
                     }
                     
-                    // Proceed with download/install
+                    // Proceed with download/install (for upgrade, downgrade, and reinstall)
                     await StartUpdateDownloadAsync(selectedInfo);
                 }
             }
@@ -1918,6 +2033,12 @@ namespace SuspensionPCB_CAN_WPF.Views
         {
             try
             {
+                // Log version information for debugging
+                var currentVersion = GetCurrentVersion();
+                bool isDowngrade = info.LatestVersion < currentVersion;
+                bool isReinstall = info.LatestVersion == currentVersion;
+                _logger.LogInfo($"Starting update process: Current={currentVersion}, Target={info.LatestVersion}, IsDowngrade={isDowngrade}, IsReinstall={isReinstall}", "Update");
+                
                 var progress = new Progress<double>(p =>
                 {
                     ShowDownloadStatus($"Downloading update... {p:0}%");
@@ -2157,7 +2278,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     SmaSettingsPanel.Visibility = filterType == "SMA" ? Visibility.Visible : Visibility.Collapsed;
                 }
-
+                
                 if (EmaAlphaSlider != null)
                 {
                     EmaAlphaSlider.Value = filterAlpha;
@@ -4576,6 +4697,8 @@ Most users should keep default values unless experiencing specific issues.";
         {
             try
             {
+                _logger.LogInfo($"HandleSystemStatus called: Status={e.SystemStatus}, Errors=0x{e.ErrorFlags:X2}, ADC={e.ADCMode}", "MainWindow");
+                
                 string mode = e.ADCMode == 0 ? "Internal" : "ADS1115";
                 UpdateAdcModeIndicators(mode);
                 
@@ -4695,6 +4818,44 @@ Most users should keep default values unless experiencing specific issues.";
             }
         }
 
+        private void HandleFirmwareVersion(object? sender, FirmwareVersionEventArgs e)
+        {
+            try
+            {
+                _logger.LogInfo($"Firmware version received: {e.VersionStringFull}", "Firmware");
+                UpdateFirmwareVersionUI(e);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Firmware version handler error: {ex.Message}", "CAN");
+            }
+        }
+
+        private void UpdateFirmwareVersionUI(FirmwareVersionEventArgs e)
+        {
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    // Update firmware version display
+                    if (FirmwareVersionText != null)
+                    {
+                        FirmwareVersionText.Text = $"FW: {e.VersionString}";
+                        FirmwareVersionText.ToolTip = $"Firmware Version: {e.VersionStringFull}\nReceived: {e.Timestamp:yyyy-MM-dd HH:mm:ss}";
+                        _logger.LogInfo($"Firmware version UI updated: {e.VersionString}", "UI");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("FirmwareVersionText UI element is null", "UI");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Firmware version UI update error: {ex.Message}", "CAN");
+            }
+        }
+
         private void OnDataTimeout(object? sender, string timeoutMessage)
         {
             try
@@ -4780,18 +4941,25 @@ Most users should keep default values unless experiencing specific issues.";
                     return;
                 }
 
-                bool success = _canService.RequestSystemStatus();
+                // Request both system status and firmware version
+                bool statusSuccess = _canService.RequestSystemStatus();
+                bool versionSuccess = _canService.RequestFirmwareVersion();
                 FlashTxIndicator();
                 
-                    if (success)
+                if (statusSuccess && versionSuccess)
+                {
+                    _logger.LogInfo("Requested system status and firmware version from STM32", "Status");
+                    ShowInlineStatus("✓ Status & Version request sent to STM32");
+                }
+                else if (statusSuccess)
                     {
-                    _logger.LogInfo("Requested system status from STM32", "Status");
-                    ShowInlineStatus("✓ Status request sent to STM32");
+                    _logger.LogInfo("Requested system status from STM32 (version request failed)", "Status");
+                    ShowInlineStatus("✓ Status request sent (version failed)");
                     }
                 else
                 {
-                    _logger.LogError("Failed to send status request", "Status");
-                    ShowInlineStatus("✗ Failed to request status", true);
+                    _logger.LogError("Failed to send status/version request", "Status");
+                    ShowInlineStatus("✗ Failed to request status/version", true);
                 }
             }
             catch (Exception ex)
@@ -5238,26 +5406,26 @@ Most users should keep default values unless experiencing specific issues.";
                 if (_currentADCMode == 0)
                 {
                     // Switch to ADS1115
-                    _canService.SwitchToADS1115();
-                    _currentADCMode = 1;
-                    _activeADCMode = 1;
-                    UpdateAdcModeIndicators("ADS1115");
-                    UpdateWeightProcessorCalibration();
-                    UpdateDashboardMode();
+                        _canService.SwitchToADS1115();
+                        _currentADCMode = 1;
+                        _activeADCMode = 1;
+                        UpdateAdcModeIndicators("ADS1115");
+                        UpdateWeightProcessorCalibration();
+                        UpdateDashboardMode();
                     PersistADCMode(_currentADCMode);
-                    _logger.LogInfo("Switched to ADS1115 mode", "ADC");
+                        _logger.LogInfo("Switched to ADS1115 mode", "ADC");
                 }
                 else
                 {
                     // Switch to Internal ADC
-                    _canService.SwitchToInternalADC();
-                    _currentADCMode = 0;
-                    _activeADCMode = 0;
-                    UpdateAdcModeIndicators("Internal");
-                    UpdateWeightProcessorCalibration();
-                    UpdateDashboardMode();
+                        _canService.SwitchToInternalADC();
+                        _currentADCMode = 0;
+                        _activeADCMode = 0;
+                        UpdateAdcModeIndicators("Internal");
+                        UpdateWeightProcessorCalibration();
+                        UpdateDashboardMode();
                     PersistADCMode(_currentADCMode);
-                    _logger.LogInfo("Switched to Internal ADC mode", "ADC");
+                        _logger.LogInfo("Switched to Internal ADC mode", "ADC");
                 }
             }
             catch (Exception ex)

@@ -49,7 +49,7 @@ namespace SuspensionPCB_CAN_WPF.Services
             public string? ReleaseNotes { get; init; }
             public string? ExpectedSha256Hash { get; init; }  // SHA-256 hash for integrity verification
 
-            public bool IsUpdateAvailable => LatestVersion > CurrentVersion;
+            public bool IsUpdateAvailable => LatestVersion.CompareTo(CurrentVersion) > 0;
         }
 
         public sealed class UpdateCheckResult
