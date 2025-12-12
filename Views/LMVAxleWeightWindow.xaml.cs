@@ -529,6 +529,16 @@ namespace SuspensionPCB_CAN_WPF.Views
 
                 // Save to JSON file
                 SaveTestDataToJson(_currentTestData);
+                
+                // Also save to settings for automatic loading in SuspensionGraphWindow
+                try
+                {
+                    Services.SettingsManager.Instance.SaveAxleWeights(leftWeight, rightWeight);
+                }
+                catch (Exception ex)
+                {
+                    ProductionLogger.Instance.LogError($"Failed to save axle weights to settings: {ex.Message}", "LMVAxle");
+                }
 
                 UpdateTestState(TestState.Completed);
                 ProductionLogger.Instance.LogInfo($"Axle test data saved: Left={leftWeight:F1}kg, Right={rightWeight:F1}kg", "LMVAxle");

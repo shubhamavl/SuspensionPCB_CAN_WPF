@@ -303,5 +303,50 @@ namespace SuspensionPCB_CAN_WPF.Services
                 ProductionLogger.Instance.LogError($"Failed to save calibration averaging settings: {ex.Message}", "Settings");
             }
         }
+        
+        /// <summary>
+        /// Set suspension efficiency limits for Pass/Fail validation
+        /// </summary>
+        public void SetSuspensionEfficiencyLimits(double leftLimit, double rightLimit)
+        {
+            try
+            {
+                _settings.SuspensionEfficiencyLimitLeft = leftLimit;
+                _settings.SuspensionEfficiencyLimitRight = rightLimit;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"Suspension efficiency limits saved: Left={leftLimit:F1}%, Right={rightLimit:F1}%", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to save suspension efficiency limits: {ex.Message}", "Settings");
+            }
+        }
+        
+        /// <summary>
+        /// Save axle weights (from axle weight test) for automatic loading in SuspensionGraphWindow
+        /// </summary>
+        public void SaveAxleWeights(double leftWeight, double rightWeight)
+        {
+            try
+            {
+                _settings.LastAxleWeightLeft = leftWeight;
+                _settings.LastAxleWeightRight = rightWeight;
+                _settings.LastAxleWeightSaveTime = DateTime.Now;
+                SaveSettings();
+                ProductionLogger.Instance.LogInfo($"Axle weights saved: Left={leftWeight:F1}kg, Right={rightWeight:F1}kg", "Settings");
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to save axle weights: {ex.Message}", "Settings");
+            }
+        }
+        
+        /// <summary>
+        /// Get last saved axle weights (for automatic loading)
+        /// </summary>
+        public (double? leftWeight, double? rightWeight, DateTime? saveTime) GetLastAxleWeights()
+        {
+            return (_settings.LastAxleWeightLeft, _settings.LastAxleWeightRight, _settings.LastAxleWeightSaveTime);
+        }
     }
 }

@@ -65,6 +65,11 @@ namespace SuspensionPCB_CAN_WPF.Models
         // Suspension Test Settings
         public double SuspensionEfficiencyLimitLeft { get; set; } = 85.0; // Minimum efficiency % for Pass (Left side)
         public double SuspensionEfficiencyLimitRight { get; set; } = 85.0; // Minimum efficiency % for Pass (Right side)
+        
+        // Axle Weight Storage (for automatic loading in SuspensionGraphWindow)
+        public double? LastAxleWeightLeft { get; set; } = null; // Last saved axle weight for Left side
+        public double? LastAxleWeightRight { get; set; } = null; // Last saved axle weight for Right side
+        public DateTime? LastAxleWeightSaveTime { get; set; } = null; // When axle weights were last saved
     }
 }
 

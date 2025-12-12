@@ -123,6 +123,9 @@ namespace SuspensionPCB_CAN_WPF.Views
 
             // Load efficiency limits from settings
             LoadEfficiencyLimits();
+            
+            // Auto-load axle weights from settings (if available)
+            LoadAxleWeightsFromSettings();
 
             InitializeGraph();
             InitializeTimers();
@@ -156,6 +159,41 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Use default
                 _efficiencyLimit = 85.0;
                 _limitsString = "≥85.0%";
+            }
+        }
+        
+        /// <summary>
+        /// Auto-load axle weights from settings (if available)
+        /// </summary>
+        private void LoadAxleWeightsFromSettings()
+        {
+            try
+            {
+                var (leftWeight, rightWeight, saveTime) = Services.SettingsManager.Instance.GetLastAxleWeights();
+                
+                if (leftWeight.HasValue && leftWeight.Value > 0)
+                {
+                    _axleWeightLeft = leftWeight.Value;
+                    if (AxleWeightLeftInput != null)
+                    {
+                        AxleWeightLeftInput.Text = leftWeight.Value.ToString("F1");
+                    }
+                    ProductionLogger.Instance.LogInfo($"Auto-loaded Left axle weight from settings: {leftWeight.Value:F1} kg (saved: {saveTime})", "SuspensionGraph");
+                }
+                
+                if (rightWeight.HasValue && rightWeight.Value > 0)
+                {
+                    _axleWeightRight = rightWeight.Value;
+                    if (AxleWeightRightInput != null)
+                    {
+                        AxleWeightRightInput.Text = rightWeight.Value.ToString("F1");
+                    }
+                    ProductionLogger.Instance.LogInfo($"Auto-loaded Right axle weight from settings: {rightWeight.Value:F1} kg (saved: {saveTime})", "SuspensionGraph");
+                }
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Failed to auto-load axle weights from settings: {ex.Message}", "SuspensionGraph");
             }
         }
 
@@ -1552,6 +1590,117 @@ namespace SuspensionPCB_CAN_WPF.Views
             catch (Exception ex)
             {
                 ProductionLogger.Instance.LogError($"Error parsing right axle weight: {ex.Message}", "SuspensionGraph");
+            }
+        }
+
+        /// <summary>
+        /// Load axle weights from saved axle test JSON file
+        /// </summary>
+        private void LoadAxleWeightsBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var openDialog = new Microsoft.Win32.OpenFileDialog
+                {
+                    Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                    Title = "Select Axle Test JSON File"
+                };
+
+                if (openDialog.ShowDialog() == true)
+                {
+                    LoadAxleWeightsFromFile(openDialog.FileName);
+                }
+            }
+            catch (Exception ex)
+            {
+                ProductionLogger.Instance.LogError($"Error loading axle weights from file: {ex.Message}", "SuspensionGraph");
+                MessageBox.Show($"Failed to load axle weights: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Load axle weights from JSON file (axle test data)
+        /// </summary>
+        private void LoadAxleWeightsFromFile(string filePath)
+        {
+            try
+            {
+                if (!System.IO.File.Exists(filePath))
+                {
+                    MessageBox.Show("File not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                string json = System.IO.File.ReadAllText(filePath);
+                var options = new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                // Try to deserialize as AxleTestDataModel
+                var axleTestData = System.Text.Json.JsonSerializer.Deserialize<Models.AxleTestDataModel>(json, options);
+                
+                if (axleTestData != null)
+                {
+                    // Extract weights from axle test data
+                    double leftWeight = axleTestData.LeftWeight;
+                    double rightWeight = axleTestData.RightWeight;
+
+                    if (leftWeight > 0 && rightWeight > 0)
+                    {
+                        // Set axle weights
+                        _axleWeightLeft = leftWeight;
+                        _axleWeightRight = rightWeight;
+
+                        // Update UI
+                        if (AxleWeightLeftInput != null)
+                            AxleWeightLeftInput.Text = leftWeight.ToString("F1");
+                        if (AxleWeightRightInput != null)
+                            AxleWeightRightInput.Text = rightWeight.ToString("F1");
+
+                        // Also save to settings for future auto-loading
+                        Services.SettingsManager.Instance.SaveAxleWeights(leftWeight, rightWeight);
+
+                        // Recalculate efficiency if we have min/max data
+                        if (_hasMinMaxDataLeft || _hasMinMaxDataRight)
+                        {
+                            CalculateEfficiency();
+                            UpdateStatusDisplays();
+                        }
+
+                        MessageBox.Show(
+                            $"Axle weights loaded successfully!\n\n" +
+                            $"Left: {leftWeight:F1} kg\n" +
+                            $"Right: {rightWeight:F1} kg\n" +
+                            $"Total: {axleTestData.TotalWeight:F1} kg\n\n" +
+                            $"Test Date: {axleTestData.TestStartTime:yyyy-MM-dd HH:mm:ss}",
+                            "Axle Weights Loaded",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+
+                        ProductionLogger.Instance.LogInfo($"Axle weights loaded from file: Left={leftWeight:F1}kg, Right={rightWeight:F1}kg", "SuspensionGraph");
+                    }
+                    else
+                    {
+                        MessageBox.Show("Invalid axle weights in file (must be > 0).", "Error", 
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("Could not parse axle test data from file. Please ensure it's a valid axle test JSON file.", 
+                        "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                MessageBox.Show($"Invalid JSON file format: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to load axle weights from file: {ex.Message}", ex);
             }
         }
 

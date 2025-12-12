@@ -56,12 +56,17 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
                     <TextBlock Text="Axle Weight (Left):" FontWeight="SemiBold" Margin="0,0,5,0" VerticalAlignment="Center"/>
                     <TextBox x:Name="AxleWeightLeftInput" Width="80" Height="25" Margin="0,0,15,0" VerticalAlignment="Center" 
-                             TextChanged="AxleWeightLeftInput_TextChanged" ToolTip="Enter axle weight for Left side (from axle weight test)"/>
+                             TextChanged="AxleWeightLeftInput_TextChanged" ToolTip="Enter axle weight for Left side (from axle weight test) or load from saved test"/>
                     <TextBlock Text="kg" Margin="0,0,20,0" VerticalAlignment="Center"/>
                     <TextBlock Text="Axle Weight (Right):" FontWeight="SemiBold" Margin="0,0,5,0" VerticalAlignment="Center"/>
                     <TextBox x:Name="AxleWeightRightInput" Width="80" Height="25" Margin="0,0,15,0" VerticalAlignment="Center"
-                             TextChanged="AxleWeightRightInput_TextChanged" ToolTip="Enter axle weight for Right side (from axle weight test)"/>
-                    <TextBlock Text="kg" Margin="0,0,0,0" VerticalAlignment="Center"/>
+                             TextChanged="AxleWeightRightInput_TextChanged" ToolTip="Enter axle weight for Right side (from axle weight test) or load from saved test"/>
+                    <TextBlock Text="kg" Margin="0,0,15,0" VerticalAlignment="Center"/>
+                    <Button x:Name="LoadAxleWeightsBtn" Content="📂 Load from File" 
+                            Style="{StaticResource ModernButton}" 
+                            Background="#FF17A2B8" Click="LoadAxleWeightsBtn_Click" 
+                            Width="130" Height="25" Margin="5,0,0,0" VerticalAlignment="Center"
+                            ToolTip="Load axle weights from saved axle test JSON file"/>
                 </StackPanel>
             </StackPanel>
         </Border>
