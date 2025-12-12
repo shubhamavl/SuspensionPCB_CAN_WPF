@@ -119,10 +119,10 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     SettingsPanel.Visibility = Visibility.Visible;
                     SettingsToggleBtn.Content = "⚙ Hide";
-
+                    
                     // Always reload settings when panel opens so UI reflects saved values
                     LoadSaveDirectorySettings();
-                    LoadFilterSettings();
+                        LoadFilterSettings();
                     LoadDisplaySettings();
                     LoadUIVisibilitySettings();
                     LoadAdvancedSettings();
@@ -854,64 +854,148 @@ namespace SuspensionPCB_CAN_WPF.Views
             switch (message.ID)
             {
                 case 0x200: // Left Side Raw ADC Data
-                    if (message.Data?.Length >= 2)
+                    // Mode-dependent parsing: 2 bytes (Internal) or 4 bytes (ADS1115)
+                    if (_currentADCMode == 0) // Internal ADC
                     {
-                        _leftRawADC = (ushort)(message.Data[0] | (message.Data[1] << 8));
-                        _currentRawADC = _leftRawADC;
-                        
-                        // Set active side to Left
-                        if (_activeSide != "Left")
+                        if (message.Data?.Length >= 2)
                         {
-                            _activeSide = "Left";
-                            _activeADCMode = _currentADCMode; // Use current system ADC mode
-                            UpdateDashboardMode();
-                            UpdateWeightProcessorCalibration(); // This already sets ADC mode for active side
-                            _logger.LogInfo($"Active side set to Left (ADC mode: {_activeADCMode})", "CAN");
+                            // 2 bytes (unsigned 0-8190)
+                            int rawADC16 = (ushort)(message.Data[0] | (message.Data[1] << 8));
+                            _leftRawADC = rawADC16;
+                            _currentRawADC = _leftRawADC;
+                            
+                            // Set active side to Left
+                            if (_activeSide != "Left")
+                            {
+                                _activeSide = "Left";
+                                _activeADCMode = _currentADCMode;
+                                UpdateDashboardMode();
+                                UpdateWeightProcessorCalibration();
+                                _logger.LogInfo($"Active side set to Left (Internal ADC)", "CAN");
+                            }
+                            
+                            // Confirm left stream is active
+                            if (!_leftStreamRunning)
+                            {
+                                _leftStreamRunning = true;
+                                _rightStreamRunning = false;
+                                UpdateStreamingIndicators();
+                                UpdateDashboardMode();
+                                _logger.LogInfo("Left stream confirmed active via 0x200 (Internal)", "CAN");
+                            }
+                            
+                            // Send to WeightProcessor
+                            _weightProcessor.EnqueueRawData(0, rawADC16);
                         }
-                        
-                        // Confirm left stream is active
-                        if (!_leftStreamRunning)
+                    }
+                    else // ADS1115
+                    {
+                        if (message.Data?.Length >= 4)
                         {
-                            _leftStreamRunning = true;
-                            _rightStreamRunning = false; // Ensure right is stopped (only one can run)
-                            UpdateStreamingIndicators();
-                            UpdateDashboardMode();
-                            _logger.LogInfo("Left stream confirmed active via 0x200", "CAN");
+                            // 4 bytes (signed -65536 to +65534)
+                            int rawADC32 = (int)(message.Data[0] | 
+                                                (message.Data[1] << 8) | 
+                                                (message.Data[2] << 16) | 
+                                                (message.Data[3] << 24));
+                            _leftRawADC = rawADC32;
+                            _currentRawADC = _leftRawADC;
+                            
+                            // Set active side to Left
+                            if (_activeSide != "Left")
+                            {
+                                _activeSide = "Left";
+                                _activeADCMode = _currentADCMode;
+                                UpdateDashboardMode();
+                                UpdateWeightProcessorCalibration();
+                                _logger.LogInfo($"Active side set to Left (ADS1115 signed)", "CAN");
+                            }
+                            
+                            // Confirm left stream is active
+                            if (!_leftStreamRunning)
+                            {
+                                _leftStreamRunning = true;
+                                _rightStreamRunning = false;
+                                UpdateStreamingIndicators();
+                                UpdateDashboardMode();
+                                _logger.LogInfo("Left stream confirmed active via 0x200 (ADS1115)", "CAN");
+                            }
+                            
+                            // Send to WeightProcessor
+                            _weightProcessor.EnqueueRawData(0, rawADC32);
                         }
-                        
-                        // Send to WeightProcessor for calibration
-                        _weightProcessor.EnqueueRawData(0, (ushort)_leftRawADC);
                     }
                     break;
 
                 case 0x201: // Right Side Raw ADC Data
-                    if (message.Data?.Length >= 2)
+                    // Mode-dependent parsing: 2 bytes (Internal) or 4 bytes (ADS1115)
+                    if (_currentADCMode == 0) // Internal ADC
                     {
-                        _rightRawADC = (ushort)(message.Data[0] | (message.Data[1] << 8));
-                        _currentRawADC = _rightRawADC;
-                        
-                        // Set active side to Right
-                        if (_activeSide != "Right")
+                        if (message.Data?.Length >= 2)
                         {
-                            _activeSide = "Right";
-                            _activeADCMode = _currentADCMode; // Use current system ADC mode
-                            UpdateDashboardMode();
-                            UpdateWeightProcessorCalibration(); // This already sets ADC mode for active side
-                            _logger.LogInfo($"Active side set to Right (ADC mode: {_activeADCMode})", "CAN");
+                            // 2 bytes (unsigned 0-8190)
+                            int rawADC16 = (ushort)(message.Data[0] | (message.Data[1] << 8));
+                            _rightRawADC = rawADC16;
+                            _currentRawADC = _rightRawADC;
+                            
+                            // Set active side to Right
+                            if (_activeSide != "Right")
+                            {
+                                _activeSide = "Right";
+                                _activeADCMode = _currentADCMode;
+                                UpdateDashboardMode();
+                                UpdateWeightProcessorCalibration();
+                                _logger.LogInfo($"Active side set to Right (Internal ADC)", "CAN");
+                            }
+                            
+                            // Confirm right stream is active
+                            if (!_rightStreamRunning)
+                            {
+                                _rightStreamRunning = true;
+                                _leftStreamRunning = false;
+                                UpdateStreamingIndicators();
+                                UpdateDashboardMode();
+                                _logger.LogInfo("Right stream confirmed active via 0x201 (Internal)", "CAN");
+                            }
+                            
+                            // Send to WeightProcessor
+                            _weightProcessor.EnqueueRawData(1, rawADC16);
                         }
-                        
-                        // Confirm right stream is active
-                        if (!_rightStreamRunning)
+                    }
+                    else // ADS1115
+                    {
+                        if (message.Data?.Length >= 4)
                         {
-                            _rightStreamRunning = true;
-                            _leftStreamRunning = false; // Ensure left is stopped (only one can run)
-                            UpdateStreamingIndicators();
-                            UpdateDashboardMode();
-                            _logger.LogInfo("Right stream confirmed active via 0x201", "CAN");
+                            // 4 bytes (signed -65536 to +65534)
+                            int rawADC32 = (int)(message.Data[0] | 
+                                                (message.Data[1] << 8) | 
+                                                (message.Data[2] << 16) | 
+                                                (message.Data[3] << 24));
+                            _rightRawADC = rawADC32;
+                            _currentRawADC = _rightRawADC;
+                            
+                            // Set active side to Right
+                            if (_activeSide != "Right")
+                            {
+                                _activeSide = "Right";
+                                _activeADCMode = _currentADCMode;
+                                UpdateDashboardMode();
+                                UpdateWeightProcessorCalibration();
+                                _logger.LogInfo($"Active side set to Right (ADS1115 signed)", "CAN");
+                            }
+                            
+                            // Confirm right stream is active
+                            if (!_rightStreamRunning)
+                            {
+                                _rightStreamRunning = true;
+                                _leftStreamRunning = false;
+                                UpdateStreamingIndicators();
+                                UpdateDashboardMode();
+                                _logger.LogInfo("Right stream confirmed active via 0x201 (ADS1115)", "CAN");
+                            }
+                            
+                            // Send to WeightProcessor
+                            _weightProcessor.EnqueueRawData(1, rawADC32);
                         }
-                        
-                        // Send to WeightProcessor for calibration
-                        _weightProcessor.EnqueueRawData(1, (ushort)_rightRawADC);
                     }
                     break;
 
@@ -2194,7 +2278,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     SmaSettingsPanel.Visibility = filterType == "SMA" ? Visibility.Visible : Visibility.Collapsed;
                 }
-
+                
                 if (EmaAlphaSlider != null)
                 {
                     EmaAlphaSlider.Value = filterAlpha;
@@ -4868,10 +4952,10 @@ Most users should keep default values unless experiencing specific issues.";
                     ShowInlineStatus("✓ Status & Version request sent to STM32");
                 }
                 else if (statusSuccess)
-                {
+                    {
                     _logger.LogInfo("Requested system status from STM32 (version request failed)", "Status");
                     ShowInlineStatus("✓ Status request sent (version failed)");
-                }
+                    }
                 else
                 {
                     _logger.LogError("Failed to send status/version request", "Status");
