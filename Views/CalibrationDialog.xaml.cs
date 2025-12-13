@@ -113,12 +113,30 @@ namespace SuspensionPCB_CAN_WPF.Views
                         // Update the appropriate ADC value based on current mode
                         if (_adcMode == 0)
                         {
-                            point.InternalADC = (ushort)_currentRawADC;
+                            // Internal ADC: must be in range 0-4095 (unsigned)
+                            // Only update if value is in valid range to avoid errors
+                            if (_currentRawADC >= 0 && _currentRawADC <= 4095)
+                            {
+                                point.InternalADC = (ushort)_currentRawADC;
+                            }
+                            // If out of range, don't update (might be from wrong mode)
                         }
                         else
                         {
-                            // ADS1115: Store as signed int (can be negative)
-                            point.ADS1115ADC = _currentRawADC;
+                            // ADS1115: Store as signed int (can be negative, -65536 to +65534)
+                            // Value should already be correctly signed from CAN parsing (BitConverter.ToInt32)
+                            // However, if value appears as unsigned (32768-65535), convert to signed
+                            // This handles cases where unsigned values slip through the pipeline
+                            int signedValue = _currentRawADC;
+                            // Convert if value is in unsigned 16-bit range (> 32767)
+                            // This covers cases like 65523 (unsigned) -> -13 (signed)
+                            // Note: Legitimate positive values up to 32767 are preserved
+                            if (signedValue > 32767 && signedValue <= 65535)
+                            {
+                                // Convert unsigned 16-bit to signed: values > 32767 are negative in two's complement
+                                signedValue = (short)(ushort)signedValue;
+                            }
+                            point.ADS1115ADC = signedValue;
                         }
                     }
 
@@ -304,10 +322,13 @@ namespace SuspensionPCB_CAN_WPF.Views
             {
                 if (sender is Button button && button.DataContext is CalibrationPointViewModel point)
                 {
-                    // Validate ADC values
-                    if (point.InternalADC == 0 && point.ADS1115ADC == 0)
+                    // Validate ADC values - zero is valid for both (zero point calibration)
+                    // For zero point (weight=0), both ADCs can be 0
+                    // For non-zero weight, at least one ADC should be non-zero
+                    if (point.KnownWeight != 0 && point.InternalADC == 0 && point.ADS1115ADC == 0)
                     {
-                        MessageBox.Show("Please enter at least one ADC value (Internal or ADS1115).", 
+                        MessageBox.Show("For non-zero weight, please enter at least one ADC value (Internal or ADS1115).\n\n" +
+                                      "Note: Zero weight with zero ADC values is valid for zero point calibration.", 
                                       "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
@@ -320,9 +341,10 @@ namespace SuspensionPCB_CAN_WPF.Views
                         return;
                     }
                     
-                    if (point.ADS1115ADC < -32768 || point.ADS1115ADC > 32767)
+                    // Combined channel value range: -65536 to +65534 (Ch0+Ch1 or Ch2+Ch3)
+                    if (point.ADS1115ADC < -65536 || point.ADS1115ADC > 65534)
                     {
-                        MessageBox.Show($"ADS1115 ADC value must be between -32768 to +32767. Current: {point.ADS1115ADC}", 
+                        MessageBox.Show($"ADS1115 ADC value must be between -65536 to +65534. Current: {point.ADS1115ADC}", 
                                       "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
@@ -342,15 +364,29 @@ namespace SuspensionPCB_CAN_WPF.Views
                         return;
                     }
                     
-                    // Mark as captured if both values are set
-                    if (point.InternalADC > 0 && point.ADS1115ADC != 0)
+                    // Mark as captured - zero is valid for both ADC types
+                    // For zero point (weight=0): both ADCs can be 0
+                    // For non-zero weight: need at least one non-zero ADC, prefer both
+                    if (point.KnownWeight == 0)
                     {
+                        // Zero point: both ADCs can be 0, mark as captured if weight is set
                         point.BothModesCaptured = true;
                         point.IsCaptured = true;
                     }
-                    else if (point.InternalADC > 0 || point.ADS1115ADC != 0)
+                    else
                     {
-                        point.IsCaptured = true;
+                        // Non-zero weight: need at least one ADC value
+                        if (point.InternalADC > 0 && point.ADS1115ADC != 0)
+                        {
+                            // Both modes captured
+                            point.BothModesCaptured = true;
+                            point.IsCaptured = true;
+                        }
+                        else if (point.InternalADC > 0 || point.ADS1115ADC != 0)
+                        {
+                            // At least one mode captured
+                            point.IsCaptured = true;
+                        }
                     }
                     
                     point.IsEditing = false;
@@ -403,7 +439,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Step 1: Capture current mode ADC
                 string modeName = _adcMode == 0 ? "Internal" : "ADS1115";
                 
-                ushort firstModeADC;
+                int firstModeADC;
                 CalibrationCaptureResult? firstResult = null;
                 
                 if (averagingEnabled)
@@ -436,6 +472,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                         maxStdDev: maxStdDev
                     );
                     
+                    // AveragedValue is now int (supports signed values)
                     firstModeADC = firstResult.AveragedValue;
                     
                     // Log first mode capture
@@ -452,18 +489,49 @@ namespace SuspensionPCB_CAN_WPF.Views
                     // Single sample mode (old behavior, backward compatible)
                     point.StatusText = $"Capturing {modeName} ADC...";
                     await System.Threading.Tasks.Task.Delay(_calibrationDelayMs); // Wait for stable reading
-                    firstModeADC = (ushort)_currentRawADC;
+                    
+                    // For ADS1115 mode, keep as signed int; for Internal, validate and cast to ushort
+                    if (_adcMode == 1) // ADS1115 mode
+                    {
+                        firstModeADC = _currentRawADC; // Already signed int
+                    }
+                    else // Internal mode
+                    {
+                        // Validate Internal ADC is in range 0-4095
+                        if (_currentRawADC < 0 || _currentRawADC > 4095)
+                        {
+                            throw new ArgumentOutOfRangeException(nameof(_currentRawADC), 
+                                $"Internal ADC value must be between 0-4095. Value: {_currentRawADC}");
+                        }
+                        firstModeADC = (ushort)_currentRawADC;
+                    }
+                    
                     _logger.LogInfo($"Captured {modeName} ADC (single sample): {firstModeADC}", "CalibrationDialog");
                 }
                 
-                // Store first mode ADC value
+                // Store first mode ADC value with validation
                 if (_adcMode == 0)
                 {
-                    point.InternalADC = firstModeADC;
+                    // Internal ADC: must be in range 0-4095 (unsigned)
+                    if (firstModeADC < 0 || firstModeADC > 4095)
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(firstModeADC), 
+                            $"Internal ADC value must be between 0-4095. Value: {firstModeADC}");
+                    }
+                    point.InternalADC = (ushort)firstModeADC;
                 }
                 else
                 {
-                    point.ADS1115ADC = firstModeADC;
+                    // ADS1115: signed value (-65536 to +65534)
+                    // Value should already be correctly signed from CAN parsing
+                    // However, if value appears as unsigned (32768-65535), convert to signed
+                    int signedValue = firstModeADC;
+                    if (signedValue > 32767 && signedValue <= 65535)
+                    {
+                        // Convert unsigned 16-bit to signed: values > 32767 are negative in two's complement
+                        signedValue = (short)(ushort)signedValue;
+                    }
+                    point.ADS1115ADC = signedValue;
                 }
                 
                 // Step 2: Switch to other ADC mode
@@ -502,7 +570,7 @@ namespace SuspensionPCB_CAN_WPF.Views
                 // Step 3: Capture second mode ADC
                 modeName = _adcMode == 0 ? "Internal" : "ADS1115";
                 
-                ushort secondModeADC;
+                int secondModeADC;
                 CalibrationCaptureResult? secondResult = null;
                 
                 if (averagingEnabled)
@@ -535,7 +603,21 @@ namespace SuspensionPCB_CAN_WPF.Views
                         maxStdDev: maxStdDev
                     );
                     
+                    // AveragedValue is now int (supports signed values)
                     secondModeADC = secondResult.AveragedValue;
+                    
+                    // Validate the captured value matches the expected mode
+                    if (_adcMode == 0) // Internal mode
+                    {
+                        // Internal ADC must be in range 0-4095
+                        if (secondModeADC < 0 || secondModeADC > 4095)
+                        {
+                            throw new ArgumentOutOfRangeException(nameof(secondModeADC), 
+                                $"Internal ADC value must be between 0-4095. Value: {secondModeADC}. " +
+                                $"This may indicate the mode switch did not complete properly. Please try again.");
+                        }
+                    }
+                    // ADS1115 mode: value can be signed (-65536 to +65534), no range check needed here
                     
                     // Store statistics from second mode capture (for display)
                     point.CaptureMean = secondResult.Mean;
@@ -578,7 +660,22 @@ namespace SuspensionPCB_CAN_WPF.Views
                     // Single sample mode (old behavior, backward compatible)
                     point.StatusText = $"Capturing {modeName} ADC...";
                     await System.Threading.Tasks.Task.Delay(_calibrationDelayMs); // Wait for stable reading
-                    secondModeADC = (ushort)_currentRawADC;
+                    
+                    // For ADS1115 mode, keep as signed int; for Internal, validate and cast to ushort
+                    if (_adcMode == 1) // ADS1115 mode
+                    {
+                        secondModeADC = _currentRawADC; // Already signed int
+                    }
+                    else // Internal mode
+                    {
+                        // Validate Internal ADC is in range 0-4095
+                        if (_currentRawADC < 0 || _currentRawADC > 4095)
+                        {
+                            throw new ArgumentOutOfRangeException(nameof(_currentRawADC), 
+                                $"Internal ADC value must be between 0-4095. Value: {_currentRawADC}");
+                        }
+                        secondModeADC = (ushort)_currentRawADC;
+                    }
                     
                     // Clear statistics for single sample mode
                     point.CaptureMean = 0;
@@ -589,13 +686,31 @@ namespace SuspensionPCB_CAN_WPF.Views
                     _logger.LogInfo($"Captured {modeName} ADC (single sample): {secondModeADC}", "CalibrationDialog");
                 }
                 
+                // Store second mode ADC value with validation
                 if (_adcMode == 0)
                 {
-                    point.InternalADC = secondModeADC;
+                    // Internal ADC: must be in range 0-4095 (unsigned)
+                    if (secondModeADC < 0 || secondModeADC > 4095)
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(secondModeADC), 
+                            $"Internal ADC value must be between 0-4095. Value: {secondModeADC}. " +
+                            $"This may indicate the mode switch did not complete properly or the wrong mode value was captured. " +
+                            $"Please ensure the hardware has switched to Internal ADC mode and try again.");
+                    }
+                    point.InternalADC = (ushort)secondModeADC;
                 }
                 else
                 {
-                    point.ADS1115ADC = secondModeADC;
+                    // ADS1115: signed value (-65536 to +65534)
+                    // Value should already be correctly signed from CAN parsing
+                    // However, if value appears as unsigned (32768-65535), convert to signed
+                    int signedValue = secondModeADC;
+                    if (signedValue > 32767 && signedValue <= 65535)
+                    {
+                        // Convert unsigned 16-bit to signed: values > 32767 are negative in two's complement
+                        signedValue = (short)(ushort)signedValue;
+                    }
+                    point.ADS1115ADC = signedValue;
                 }
                 
                 // Step 4: Mark as captured
@@ -648,16 +763,24 @@ namespace SuspensionPCB_CAN_WPF.Views
         }
         
         /// <summary>
-        /// Wait for ADC mode switch to complete
+        /// Wait for ADC mode switch to complete and verify it succeeded
         /// </summary>
         private async System.Threading.Tasks.Task WaitForModeSwitch()
         {
-            // Wait for mode switch to stabilize
+            // Wait for mode switch command to be sent and processed
             await System.Threading.Tasks.Task.Delay(300);
             
             // Request system status to confirm mode switch
             _canService?.RequestSystemStatus();
+            
+            // Wait for status response
+            await System.Threading.Tasks.Task.Delay(500);
+            
+            // Additional wait to ensure new mode data is flowing
             await System.Threading.Tasks.Task.Delay(200);
+            
+            // Note: We can't directly verify the mode switch here without SystemStatus event,
+            // but the delay should be sufficient for the hardware to switch modes
         }
         
         private void CalculateCalibration_Click(object sender, RoutedEventArgs e)

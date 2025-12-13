@@ -55,8 +55,10 @@ namespace SuspensionPCB_CAN_WPF.Models
             get => _ads1115ADC;
             set 
             { 
-                if (value < -32768 || value > 32767)
-                    throw new ArgumentOutOfRangeException(nameof(ADS1115ADC), $"ADS1115 ADC value must be between -32768 to +32767. Value: {value}");
+                // Combined channel value range: -65536 to +65534 (Ch0+Ch1 or Ch2+Ch3)
+                // Individual channel range: -32768 to +32767, but combined can exceed this
+                if (value < -65536 || value > 65534)
+                    throw new ArgumentOutOfRangeException(nameof(ADS1115ADC), $"ADS1115 ADC value must be between -65536 to +65534. Value: {value}");
                 _ads1115ADC = value; 
                 OnPropertyChanged(nameof(ADS1115ADC));
                 UpdateStatusText();

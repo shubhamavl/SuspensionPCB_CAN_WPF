@@ -502,29 +502,6 @@ namespace SuspensionPCB_CAN_WPF.Views
                             CheckPcanAvailability();
                         }
                     }
-                    else if (adapterType == "SIM")
-                    {
-                        if (PcanChannelCombo != null)
-                        {
-                            PcanChannelCombo.Visibility = Visibility.Collapsed;
-                        }
-                        if (ComPortCombo != null)
-                        {
-                            ComPortCombo.Visibility = Visibility.Collapsed;
-                        }
-                        if (AdapterHintTxt != null)
-                        {
-                            AdapterHintTxt.Text = "Simulator mode enabled. No hardware required - automatic weight data generation.";
-                        }
-                        if (PcanStatusTxt != null)
-                        {
-                            PcanStatusTxt.Visibility = Visibility.Collapsed;
-                        }
-                        if (OpenSimulatorControlBtn != null)
-                        {
-                            OpenSimulatorControlBtn.Visibility = Visibility.Visible;
-                        }
-                    }
                     else // USB-CAN-A Serial
                     {
                         if (PcanChannelCombo != null)
@@ -543,10 +520,6 @@ namespace SuspensionPCB_CAN_WPF.Views
                         if (PcanStatusTxt != null)
                         {
                             PcanStatusTxt.Visibility = Visibility.Collapsed;
-                        }
-                        if (OpenSimulatorControlBtn != null)
-                        {
-                            OpenSimulatorControlBtn.Visibility = Visibility.Collapsed;
                         }
                     }
                     SaveConfiguration();
@@ -657,13 +630,6 @@ namespace SuspensionPCB_CAN_WPF.Views
                         {
                             Channel = channel,
                             PcanBitrate = bitrate,
-                            BitrateKbps = GetBaudRateValue()
-                        };
-                    }
-                    else if (adapterType == "SIM")
-                    {
-                        return new SimulatorCanAdapterConfig
-                        {
                             BitrateKbps = GetBaudRateValue()
                         };
                     }
@@ -4092,13 +4058,6 @@ Most users should keep default values unless experiencing specific issues.";
                     ConnectionToggle.Content = connected ? "🔌 Disconnect" : "🔌 Connect";
                 }
                 
-                // Enable/disable simulator control button based on connection and adapter type
-                if (OpenSimulatorControlBtn != null)
-                {
-                    bool isSimulator = GetSelectedAdapterType() == "Simulator";
-                    OpenSimulatorControlBtn.IsEnabled = connected && isSimulator;
-                }
-                
                 if (RequestLeftBtn != null)
                 {
                     RequestLeftBtn.IsEnabled = connected;
@@ -4559,45 +4518,6 @@ Most users should keep default values unless experiencing specific issues.";
             {
                 _logger.LogError($"Error opening LMV axle window: {ex.Message}", "UI");
                 MessageBox.Show($"Error opening LMV axle window: {ex.Message}", "Error",
-                              MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void OpenSimulatorControl_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (_canService == null)
-                {
-                    MessageBox.Show("CAN Service not initialized.", "Error", 
-                                  MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                if (!_canService.IsConnected)
-                {
-                    MessageBox.Show("Please connect to simulator first.", "Connection Required", 
-                                  MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                var simulatorAdapter = _canService.GetSimulatorAdapter();
-                if (simulatorAdapter == null)
-                {
-                    MessageBox.Show("Simulator adapter not available. Please select Simulator adapter and connect.", 
-                                  "Simulator Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                var simulatorWindow = new SimulatorControlWindow();
-                simulatorWindow.Owner = this;
-                simulatorWindow.Initialize(simulatorAdapter);
-                simulatorWindow.Show();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error opening simulator control window: {ex.Message}", "UI");
-                MessageBox.Show($"Error opening simulator control window: {ex.Message}", "Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
