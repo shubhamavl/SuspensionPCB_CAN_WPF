@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Data;
 using System.IO;
+using System.IO.Ports;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Windows.Input;
@@ -487,6 +488,10 @@ namespace SuspensionPCB_CAN_WPF.Views
                             PcanChannelCombo.Visibility = Visibility.Visible;
                             RefreshPcanChannels();
                         }
+                        if (ComPortCombo != null)
+                        {
+                            ComPortCombo.Visibility = Visibility.Collapsed;
+                        }
                         if (AdapterHintTxt != null)
                         {
                             AdapterHintTxt.Text = "PCAN adapter selected. Make sure PCANBasic.dll is available and PCAN driver is installed.";
@@ -503,6 +508,10 @@ namespace SuspensionPCB_CAN_WPF.Views
                         {
                             PcanChannelCombo.Visibility = Visibility.Collapsed;
                         }
+                        if (ComPortCombo != null)
+                        {
+                            ComPortCombo.Visibility = Visibility.Collapsed;
+                        }
                         if (AdapterHintTxt != null)
                         {
                             AdapterHintTxt.Text = "Simulator mode enabled. No hardware required - automatic weight data generation.";
@@ -516,11 +525,16 @@ namespace SuspensionPCB_CAN_WPF.Views
                             OpenSimulatorControlBtn.Visibility = Visibility.Visible;
                         }
                     }
-                    else
+                    else // USB-CAN-A Serial
                     {
                         if (PcanChannelCombo != null)
                         {
                             PcanChannelCombo.Visibility = Visibility.Collapsed;
+                        }
+                        if (ComPortCombo != null)
+                        {
+                            ComPortCombo.Visibility = Visibility.Visible;
+                            LoadAvailableComPorts();
                         }
                         if (AdapterHintTxt != null)
                         {
@@ -572,6 +586,42 @@ namespace SuspensionPCB_CAN_WPF.Views
             }
         }
 
+        private void ComPortCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            try
+            {
+                // Save configuration immediately when COM port changes
+                SaveConfiguration();
+                _logger.LogInfo("COM port setting saved", "Settings");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"COM port selection error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void LoadAvailableComPorts()
+        {
+            if (ComPortCombo == null) return;
+
+            try
+            {
+                ComPortCombo.Items.Clear();
+                foreach (string port in SerialPort.GetPortNames().OrderBy(p => p))
+                {
+                    ComPortCombo.Items.Add(port);
+                }
+                if (ComPortCombo.Items.Count > 0)
+                {
+                    ComPortCombo.SelectedIndex = 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error loading COM ports: {ex.Message}", "Settings");
+            }
+        }
+
         private string GetSelectedAdapterType()
             {
                 try
@@ -619,9 +669,15 @@ namespace SuspensionPCB_CAN_WPF.Views
                     }
                     else // USB-CAN-A Serial
                     {
+                        string portName = string.Empty;
+                        if (ComPortCombo?.SelectedItem != null)
+                        {
+                            portName = ComPortCombo.SelectedItem.ToString() ?? string.Empty;
+                        }
+                        // If no port selected, use auto-detect (empty string)
                         return new UsbSerialCanAdapterConfig
                         {
-                            PortName = string.Empty, // Auto-detect
+                            PortName = portName,
                             SerialBaudRate = 2000000,
                             BitrateKbps = GetBaudRateValue()
                         };
@@ -5596,6 +5652,25 @@ Most users should keep default values unless experiencing specific issues.";
                                 }
                             }
                         }
+                        
+                        if (config.ContainsKey("ComPort") && ComPortCombo != null)
+                        {
+                            string comPort = config["ComPort"].ToString() ?? string.Empty;
+                            // Load COM ports first if not already loaded
+                            if (ComPortCombo.Items.Count == 0)
+                            {
+                                LoadAvailableComPorts();
+                            }
+                            // Try to select the saved COM port
+                            for (int i = 0; i < ComPortCombo.Items.Count; i++)
+                            {
+                                if (ComPortCombo.Items[i].ToString() == comPort)
+                                {
+                                    ComPortCombo.SelectedIndex = i;
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -5637,6 +5712,11 @@ Most users should keep default values unless experiencing specific issues.";
                 if (BaudRateCombo?.SelectedItem is ComboBoxItem baudItem)
                 {
                     config["BaudRate"] = baudItem.Content?.ToString() ?? "500 kbps";
+                }
+                
+                if (ComPortCombo?.SelectedItem != null)
+                {
+                    config["ComPort"] = ComPortCombo.SelectedItem.ToString() ?? string.Empty;
                 }
                 
                 string jsonStringOut = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });

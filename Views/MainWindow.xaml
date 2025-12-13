@@ -199,6 +199,7 @@
                                 <ComboBoxItem Content="USB7" Tag="0x57"/>
                                 <ComboBoxItem Content="USB8" Tag="0x58"/>
                             </ComboBox>
+                            <ComboBox x:Name="ComPortCombo" Width="150" Margin="0,0,10,0" Visibility="Collapsed" SelectionChanged="ComPortCombo_SelectionChanged"/>
                             <ComboBox x:Name="BaudRateCombo" Width="120" SelectedIndex="1" SelectionChanged="BaudRateCombo_SelectionChanged">
                                 <ComboBoxItem Content="125 kbps"/>
                                 <ComboBoxItem Content="250 kbps"/>
