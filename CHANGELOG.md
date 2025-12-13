@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 13-12-2025
+
+### Added
+- **Version 3.1.0 Release**: Minor version update with improvements and enhancements
+
+### Changed
+- **Version Number**: Updated from 3.0.0 to 3.1.0
+- **Build Configuration**: Updated assembly and file versions
+
+### Fixed
+- (Add any bug fixes here)
+
+### Technical Details
+- **Protocol**: CAN v1.0 compliant
+- **Framework**: .NET 8.0 WPF
+- **Platform**: Windows 10/11 (64-bit)
+
+---
+
 ## [2.2.1] - 10-12-2025
 
 ### Fixed
