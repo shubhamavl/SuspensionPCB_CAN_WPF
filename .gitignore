@@ -1,66 +1,125 @@
-# Generated data outputs
-*.csv
-*.log
-*.txt
-*.json
+## .NET / Visual Studio / WPF
 
-# Build outputs
-bin/
-obj/
-# .NET / Visual Studio
-bin/
-obj/
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio cache/options
 .vs/
-Debug/
-Release/
-*.user
+.vscode/
 *.suo
+*.user
+*.userosscache
+*.sln.docstates
 *.userprefs
-*.pidb
-*.log
-*.tlog
-*.cache
-*.ide/
 
 # Build outputs
 publish/
 **/PublishProfiles/
+*.cache
+*.pidb
 
-# Package restore
-packages/
+# Generated files (WPF/XAML)
+*.baml
+*.g.cs
+*.g.i.cs
+*.AssemblyInfo.cs
+*.AssemblyAttributes.cs
+
+# NuGet Packages
 *.nupkg
 *.snupkg
+**/packages/*
+!**/packages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nuget.props
+*.nuget.targets
 
-# Rider / VS Code
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+*.coverage
+*.coveragexml
+
+# Build logs
+*.log
+*.tlog
+
+# Rider / JetBrains
 .idea/
+*.sln.iml
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# Visual Studio Code
 .vscode/
+*.swp
+*.swo
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
 
 # OS files
 Thumbs.db
+ehthumbs.db
 Desktop.ini
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+$RECYCLE.BIN/
 
-# Project-specific large artifacts
-SuspensionPCB_Portable/
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*~
+
+# Archives
 *.zip
 *.7z
 *.rar
+*.tar
+*.gz
 
-# Generated
-*.baml
-*.g.cs
-*~
-
-# Log files
-*.log
-*.txt
-*.csv
-logs/
-Logs/
-
-# Application data
+# Database files
 *.db
 *.sqlite
+*.mdf
+*.ldf
+
+# Mono auto generated files
+mono_crash.*
+
+## Project-specific
+
+# Generated data outputs
+*.csv
+*.txt
+
+# Application configuration files (user-specific, can be regenerated)
 *.json
 config.json
 settings.json
@@ -68,23 +127,9 @@ app_settings.json
 tare_config.json
 Suspension_Config.json
 
-# Temporary files
-*.tmp
-*.temp
-*.bak
-*.backup
+# Log files
+logs/
+Logs/
 
-# IDE specific
-*.swp
-*.swo
-*~
-
-# OS specific
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
+# Portable build output
+SuspensionPCB_Portable/

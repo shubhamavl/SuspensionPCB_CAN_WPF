@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Data;
 using System.IO;
+using System.IO.Ports;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Windows.Input;
@@ -487,6 +488,10 @@ namespace SuspensionPCB_CAN_WPF.Views
                             PcanChannelCombo.Visibility = Visibility.Visible;
                             RefreshPcanChannels();
                         }
+                        if (ComPortCombo != null)
+                        {
+                            ComPortCombo.Visibility = Visibility.Collapsed;
+                        }
                         if (AdapterHintTxt != null)
                         {
                             AdapterHintTxt.Text = "PCAN adapter selected. Make sure PCANBasic.dll is available and PCAN driver is installed.";
@@ -497,30 +502,16 @@ namespace SuspensionPCB_CAN_WPF.Views
                             CheckPcanAvailability();
                         }
                     }
-                    else if (adapterType == "SIM")
+                    else // USB-CAN-A Serial
                     {
                         if (PcanChannelCombo != null)
                         {
                             PcanChannelCombo.Visibility = Visibility.Collapsed;
                         }
-                        if (AdapterHintTxt != null)
+                        if (ComPortCombo != null)
                         {
-                            AdapterHintTxt.Text = "Simulator mode enabled. No hardware required - automatic weight data generation.";
-                        }
-                        if (PcanStatusTxt != null)
-                        {
-                            PcanStatusTxt.Visibility = Visibility.Collapsed;
-                        }
-                        if (OpenSimulatorControlBtn != null)
-                        {
-                            OpenSimulatorControlBtn.Visibility = Visibility.Visible;
-                        }
-                    }
-                    else
-                    {
-                        if (PcanChannelCombo != null)
-                        {
-                            PcanChannelCombo.Visibility = Visibility.Collapsed;
+                            ComPortCombo.Visibility = Visibility.Visible;
+                            LoadAvailableComPorts();
                         }
                         if (AdapterHintTxt != null)
                         {
@@ -529,10 +520,6 @@ namespace SuspensionPCB_CAN_WPF.Views
                         if (PcanStatusTxt != null)
                         {
                             PcanStatusTxt.Visibility = Visibility.Collapsed;
-                        }
-                        if (OpenSimulatorControlBtn != null)
-                        {
-                            OpenSimulatorControlBtn.Visibility = Visibility.Collapsed;
                         }
                     }
                     SaveConfiguration();
@@ -569,6 +556,42 @@ namespace SuspensionPCB_CAN_WPF.Views
             catch (Exception ex)
             {
                 _logger.LogError($"Baud rate selection error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void ComPortCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            try
+            {
+                // Save configuration immediately when COM port changes
+                SaveConfiguration();
+                _logger.LogInfo("COM port setting saved", "Settings");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"COM port selection error: {ex.Message}", "Settings");
+            }
+        }
+
+        private void LoadAvailableComPorts()
+        {
+            if (ComPortCombo == null) return;
+
+            try
+            {
+                ComPortCombo.Items.Clear();
+                foreach (string port in SerialPort.GetPortNames().OrderBy(p => p))
+                {
+                    ComPortCombo.Items.Add(port);
+                }
+                if (ComPortCombo.Items.Count > 0)
+                {
+                    ComPortCombo.SelectedIndex = 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error loading COM ports: {ex.Message}", "Settings");
             }
         }
 
@@ -610,18 +633,17 @@ namespace SuspensionPCB_CAN_WPF.Views
                             BitrateKbps = GetBaudRateValue()
                         };
                     }
-                    else if (adapterType == "SIM")
-                    {
-                        return new SimulatorCanAdapterConfig
-                        {
-                            BitrateKbps = GetBaudRateValue()
-                        };
-                    }
                     else // USB-CAN-A Serial
                     {
+                        string portName = string.Empty;
+                        if (ComPortCombo?.SelectedItem != null)
+                        {
+                            portName = ComPortCombo.SelectedItem.ToString() ?? string.Empty;
+                        }
+                        // If no port selected, use auto-detect (empty string)
                         return new UsbSerialCanAdapterConfig
                         {
-                            PortName = string.Empty, // Auto-detect
+                            PortName = portName,
                             SerialBaudRate = 2000000,
                             BitrateKbps = GetBaudRateValue()
                         };
@@ -892,11 +914,8 @@ namespace SuspensionPCB_CAN_WPF.Views
                     {
                         if (message.Data?.Length >= 4)
                         {
-                            // 4 bytes (signed -65536 to +65534)
-                            int rawADC32 = (int)(message.Data[0] | 
-                                                (message.Data[1] << 8) | 
-                                                (message.Data[2] << 16) | 
-                                                (message.Data[3] << 24));
+                            // 4 bytes (signed -65536 to +65534) - little-endian int32
+                            int rawADC32 = BitConverter.ToInt32(message.Data, 0);
                             _leftRawADC = rawADC32;
                             _currentRawADC = _leftRawADC;
                             
@@ -965,11 +984,8 @@ namespace SuspensionPCB_CAN_WPF.Views
                     {
                         if (message.Data?.Length >= 4)
                         {
-                            // 4 bytes (signed -65536 to +65534)
-                            int rawADC32 = (int)(message.Data[0] | 
-                                                (message.Data[1] << 8) | 
-                                                (message.Data[2] << 16) | 
-                                                (message.Data[3] << 24));
+                            // 4 bytes (signed -65536 to +65534) - little-endian int32
+                            int rawADC32 = BitConverter.ToInt32(message.Data, 0);
                             _rightRawADC = rawADC32;
                             _currentRawADC = _rightRawADC;
                             
@@ -1096,8 +1112,19 @@ namespace SuspensionPCB_CAN_WPF.Views
                 currentData = isLeft ? leftData : rightData;
                 _currentRawADC = isLeft ? _leftRawADC : _rightRawADC;
                 
-                // Update Raw ADC display
-                if (RawTxt != null) RawTxt.Text = _currentRawADC.ToString();
+                // Update Raw ADC display (show signed for ADS1115, unsigned for Internal)
+                if (RawTxt != null)
+                {
+                    if (_activeADCMode == 1) // ADS1115 - show signed
+                    {
+                        // Format signed value (show + for positive, - for negative)
+                        RawTxt.Text = _currentRawADC >= 0 ? $"+{_currentRawADC}" : _currentRawADC.ToString();
+                    }
+                    else // Internal - show unsigned
+                    {
+                        RawTxt.Text = _currentRawADC.ToString();
+                    }
+                }
                 
                 // Check if calibrated
                 bool isCalibrated = currentCalibration != null && currentCalibration.IsValid;
@@ -4031,13 +4058,6 @@ Most users should keep default values unless experiencing specific issues.";
                     ConnectionToggle.Content = connected ? "🔌 Disconnect" : "🔌 Connect";
                 }
                 
-                // Enable/disable simulator control button based on connection and adapter type
-                if (OpenSimulatorControlBtn != null)
-                {
-                    bool isSimulator = GetSelectedAdapterType() == "Simulator";
-                    OpenSimulatorControlBtn.IsEnabled = connected && isSimulator;
-                }
-                
                 if (RequestLeftBtn != null)
                 {
                     RequestLeftBtn.IsEnabled = connected;
@@ -4498,45 +4518,6 @@ Most users should keep default values unless experiencing specific issues.";
             {
                 _logger.LogError($"Error opening LMV axle window: {ex.Message}", "UI");
                 MessageBox.Show($"Error opening LMV axle window: {ex.Message}", "Error",
-                              MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void OpenSimulatorControl_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (_canService == null)
-                {
-                    MessageBox.Show("CAN Service not initialized.", "Error", 
-                                  MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                if (!_canService.IsConnected)
-                {
-                    MessageBox.Show("Please connect to simulator first.", "Connection Required", 
-                                  MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                var simulatorAdapter = _canService.GetSimulatorAdapter();
-                if (simulatorAdapter == null)
-                {
-                    MessageBox.Show("Simulator adapter not available. Please select Simulator adapter and connect.", 
-                                  "Simulator Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                var simulatorWindow = new SimulatorControlWindow();
-                simulatorWindow.Owner = this;
-                simulatorWindow.Initialize(simulatorAdapter);
-                simulatorWindow.Show();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error opening simulator control window: {ex.Message}", "UI");
-                MessageBox.Show($"Error opening simulator control window: {ex.Message}", "Error", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -5596,6 +5577,25 @@ Most users should keep default values unless experiencing specific issues.";
                                 }
                             }
                         }
+                        
+                        if (config.ContainsKey("ComPort") && ComPortCombo != null)
+                        {
+                            string comPort = config["ComPort"].ToString() ?? string.Empty;
+                            // Load COM ports first if not already loaded
+                            if (ComPortCombo.Items.Count == 0)
+                            {
+                                LoadAvailableComPorts();
+                            }
+                            // Try to select the saved COM port
+                            for (int i = 0; i < ComPortCombo.Items.Count; i++)
+                            {
+                                if (ComPortCombo.Items[i].ToString() == comPort)
+                                {
+                                    ComPortCombo.SelectedIndex = i;
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -5637,6 +5637,11 @@ Most users should keep default values unless experiencing specific issues.";
                 if (BaudRateCombo?.SelectedItem is ComboBoxItem baudItem)
                 {
                     config["BaudRate"] = baudItem.Content?.ToString() ?? "500 kbps";
+                }
+                
+                if (ComPortCombo?.SelectedItem != null)
+                {
+                    config["ComPort"] = ComPortCombo.SelectedItem.ToString() ?? string.Empty;
                 }
                 
                 string jsonStringOut = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });

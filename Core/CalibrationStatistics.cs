@@ -11,7 +11,7 @@ namespace SuspensionPCB_CAN_WPF.Core
     /// </summary>
     public class CalibrationCaptureResult
     {
-        public ushort AveragedValue { get; set; }
+        public int AveragedValue { get; set; } // Changed to int to support signed values (ADS1115)
         public double Mean { get; set; }
         public double Median { get; set; }
         public double StandardDeviation { get; set; }
@@ -49,7 +49,7 @@ namespace SuspensionPCB_CAN_WPF.Core
             double maxStdDev = 10.0,
             CancellationToken cancellationToken = default)
         {
-            var samples = new List<ushort>();
+            var samples = new List<int>(); // Changed to int to support signed values (ADS1115)
             var startTime = DateTime.Now;
             const int sampleIntervalMs = 10; // Collect samples at ~100Hz
 
@@ -60,10 +60,11 @@ namespace SuspensionPCB_CAN_WPF.Core
             {
                 int currentADC = getCurrentADC();
                 
-                // Filter invalid readings (zero or out-of-range values)
-                if (currentADC > 0 && currentADC <= 65535)
+                // Accept all valid signed values (including zero and negative for ADS1115)
+                // Range: -65536 to +65534 for combined channels
+                if (currentADC >= -65536 && currentADC <= 65534)
                 {
-                    samples.Add((ushort)currentADC);
+                    samples.Add(currentADC);
                     updateProgress?.Invoke(samples.Count, sampleCount);
                 }
 
@@ -84,13 +85,13 @@ namespace SuspensionPCB_CAN_WPF.Core
             double stdDev = CalculateStandardDeviation(samples, mean);
             
             // Calculate median
-            var sortedSamples = new List<ushort>(samples);
+            var sortedSamples = new List<int>(samples);
             sortedSamples.Sort();
             double median = CalculateMedian(sortedSamples);
 
             // Remove outliers if requested
             int outliersRemoved = 0;
-            List<ushort> filteredSamples = samples;
+            List<int> filteredSamples = samples;
             if (removeOutliers && samples.Count > 2)
             {
                 filteredSamples = RemoveOutliers(samples, mean, stdDev, outlierThreshold);
@@ -102,16 +103,16 @@ namespace SuspensionPCB_CAN_WPF.Core
                     mean = filteredSamples.Average(x => (double)x);
                     stdDev = CalculateStandardDeviation(filteredSamples, mean);
                     
-                    sortedSamples = new List<ushort>(filteredSamples);
+                    sortedSamples = new List<int>(filteredSamples);
                     sortedSamples.Sort();
                     median = CalculateMedian(sortedSamples);
                 }
             }
 
-            // Determine final averaged value
-            ushort averagedValue = useMedian 
-                ? (ushort)Math.Round(median) 
-                : (ushort)Math.Round(mean);
+            // Determine final averaged value (keep as int to support signed values)
+            int averagedValue = useMedian 
+                ? (int)Math.Round(median) 
+                : (int)Math.Round(mean);
 
             // Check stability
             bool isStable = stdDev <= maxStdDev;
@@ -131,7 +132,7 @@ namespace SuspensionPCB_CAN_WPF.Core
         /// <summary>
         /// Calculate standard deviation from sample list
         /// </summary>
-        public static double CalculateStandardDeviation(List<ushort> samples, double mean)
+        public static double CalculateStandardDeviation(List<int> samples, double mean)
         {
             if (samples.Count == 0)
                 return 0.0;
@@ -143,10 +144,10 @@ namespace SuspensionPCB_CAN_WPF.Core
         /// <summary>
         /// Remove outliers from sample list (values outside N standard deviations from mean)
         /// </summary>
-        public static List<ushort> RemoveOutliers(List<ushort> samples, double mean, double stdDev, double threshold)
+        public static List<int> RemoveOutliers(List<int> samples, double mean, double stdDev, double threshold)
         {
             if (stdDev < 0.1) // Very low std dev, no outliers to remove
-                return new List<ushort>(samples);
+                return new List<int>(samples);
 
             return samples.Where(s => Math.Abs(s - mean) <= threshold * stdDev).ToList();
         }
@@ -154,7 +155,7 @@ namespace SuspensionPCB_CAN_WPF.Core
         /// <summary>
         /// Calculate median from sorted sample list
         /// </summary>
-        public static double CalculateMedian(List<ushort> sortedSamples)
+        public static double CalculateMedian(List<int> sortedSamples)
         {
             if (sortedSamples.Count == 0)
                 return 0.0;

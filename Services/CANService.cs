@@ -25,6 +25,7 @@ namespace SuspensionPCB_CAN_WPF.Services
         private DateTime _lastMessageTime = DateTime.MinValue;
         private TimeSpan _timeout = TimeSpan.FromSeconds(5); // Configurable timeout
         private bool _timeoutNotified = false;
+        private byte _currentADCMode = 0; // Track current ADC mode (0=Internal, 1=ADS1115)
 
         // v0.9 Ultra-Minimal CAN Protocol - Semantic IDs & Maximum Efficiency
         // Raw Data: 2 bytes only (75% reduction from 8 bytes)
@@ -108,10 +109,6 @@ namespace SuspensionPCB_CAN_WPF.Services
             else if (config is PcanCanAdapterConfig)
             {
                 adapter = new PcanCanAdapter();
-            }
-            else if (config is SimulatorCanAdapterConfig)
-            {
-                adapter = new SimulatorCanAdapter();
             }
             else
             {
@@ -503,34 +500,77 @@ namespace SuspensionPCB_CAN_WPF.Services
             switch (canId)
             {
                 case CAN_MSG_ID_LEFT_RAW_DATA: // 0x200 - Left side raw ADC data
-                    if (canData.Length >= 2)
+                    // Mode-dependent parsing: 2 bytes (Internal) or 4 bytes (ADS1115)
+                    if (_currentADCMode == 0) // Internal ADC
                     {
-                        ushort rawADC = (ushort)(canData[0] | (canData[1] << 8));
-                        RawDataReceived?.Invoke(this, new RawDataEventArgs
+                        if (canData.Length >= 2)
                         {
-                            Side = 0,  // Left side
-                            RawADCSum = rawADC,
-                            TimestampFull = DateTime.Now
-                        });
+                            // Internal ADC: 2 bytes unsigned (0-8190)
+                            ushort rawADC = (ushort)(canData[0] | (canData[1] << 8));
+                            // Store as int (0-8190 fits in int, treated as unsigned)
+                            RawDataReceived?.Invoke(this, new RawDataEventArgs
+                            {
+                                Side = 0,  // Left side
+                                RawADCSum = rawADC,  // Unsigned value 0-8190 stored in int
+                                TimestampFull = DateTime.Now
+                            });
+                        }
+                    }
+                    else // ADS1115
+                    {
+                        if (canData.Length >= 4)
+                        {
+                            // ADS1115: 4 bytes signed int32 (-65536 to +65534)
+                            int rawADC = BitConverter.ToInt32(canData, 0);
+                            RawDataReceived?.Invoke(this, new RawDataEventArgs
+                            {
+                                Side = 0,  // Left side
+                                RawADCSum = rawADC,  // Signed value -65536 to +65534
+                                TimestampFull = DateTime.Now
+                            });
+                        }
                     }
                     break;
 
                 case CAN_MSG_ID_RIGHT_RAW_DATA: // 0x201 - Right side raw ADC data
-                    if (canData.Length >= 2)
+                    // Mode-dependent parsing: 2 bytes (Internal) or 4 bytes (ADS1115)
+                    if (_currentADCMode == 0) // Internal ADC
                     {
-                        ushort rawADC = (ushort)(canData[0] | (canData[1] << 8));
-                        RawDataReceived?.Invoke(this, new RawDataEventArgs
+                        if (canData.Length >= 2)
                         {
-                            Side = 1,  // Right side
-                            RawADCSum = rawADC,
-                            TimestampFull = DateTime.Now
-                        });
+                            // Internal ADC: 2 bytes unsigned (0-8190)
+                            ushort rawADC = (ushort)(canData[0] | (canData[1] << 8));
+                            // Store as int (0-8190 fits in int, treated as unsigned)
+                            RawDataReceived?.Invoke(this, new RawDataEventArgs
+                            {
+                                Side = 1,  // Right side
+                                RawADCSum = rawADC,  // Unsigned value 0-8190 stored in int
+                                TimestampFull = DateTime.Now
+                            });
+                        }
+                    }
+                    else // ADS1115
+                    {
+                        if (canData.Length >= 4)
+                        {
+                            // ADS1115: 4 bytes signed int32 (-65536 to +65534)
+                            int rawADC = BitConverter.ToInt32(canData, 0);
+                            RawDataReceived?.Invoke(this, new RawDataEventArgs
+                            {
+                                Side = 1,  // Right side
+                                RawADCSum = rawADC,  // Signed value -65536 to +65534
+                                TimestampFull = DateTime.Now
+                            });
+                        }
                     }
                     break;
 
                 case CAN_MSG_ID_SYSTEM_STATUS: // 0x300 - System status
                     if (canData != null && canData.Length >= 3)
                     {
+                        // Update current ADC mode for mode-dependent parsing
+                        _currentADCMode = canData[2];
+                        
                         SystemStatusReceived?.Invoke(this, new SystemStatusEventArgs
                         {
                             SystemStatus = canData[0],
@@ -576,21 +616,6 @@ namespace SuspensionPCB_CAN_WPF.Services
         }
         #endregion
 
-        /// <summary>
-        /// Get the current adapter as SimulatorCanAdapter if it is one
-        /// </summary>
-        public SimulatorCanAdapter? GetSimulatorAdapter()
-        {
-            return _adapter as SimulatorCanAdapter;
-        }
-
-        /// <summary>
-        /// Check if the current adapter is a simulator (not real CAN hardware)
-        /// </summary>
-        public bool IsSimulatorAdapter()
-        {
-            return _adapter?.AdapterType == "Simulator";
-        }
 
         /// <summary>
         /// Set data timeout for CAN communication
@@ -620,7 +645,10 @@ namespace SuspensionPCB_CAN_WPF.Services
     public class RawDataEventArgs : EventArgs
     {
         public byte Side { get; set; }              // 0=Left, 1=Right
-        public ushort RawADCSum { get; set; }       // Raw ADC sum (Ch0+Ch1 or Ch2+Ch3)
+        // Raw ADC sum: int to support both modes
+        // - Internal ADC: unsigned 0-8190 (stored as int, treated as unsigned)
+        // - ADS1115: signed -65536 to +65534
+        public int RawADCSum { get; set; }
         public DateTime TimestampFull { get; set; } // PC3 reception timestamp
     }
 

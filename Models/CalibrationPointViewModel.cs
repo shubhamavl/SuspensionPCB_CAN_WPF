@@ -12,7 +12,7 @@ namespace SuspensionPCB_CAN_WPF.Models
         private int _pointNumber;
         private int _rawADC = 0;
         private ushort _internalADC = 0;
-        private ushort _ads1115ADC = 0;
+        private int _ads1115ADC = 0;  // Changed to int for signed support (-32768 to +32767)
         private double _knownWeight = 0;
         private bool _isCaptured = false;
         private bool _bothModesCaptured = false;
@@ -50,13 +50,15 @@ namespace SuspensionPCB_CAN_WPF.Models
             }
         }
         
-        public ushort ADS1115ADC
+        public int ADS1115ADC
         {
             get => _ads1115ADC;
             set 
             { 
-                if (value > 32767)
-                    throw new ArgumentOutOfRangeException(nameof(ADS1115ADC), $"ADS1115 ADC value must be between 0-32767. Value: {value}");
+                // Combined channel value range: -65536 to +65534 (Ch0+Ch1 or Ch2+Ch3)
+                // Individual channel range: -32768 to +32767, but combined can exceed this
+                if (value < -65536 || value > 65534)
+                    throw new ArgumentOutOfRangeException(nameof(ADS1115ADC), $"ADS1115 ADC value must be between -65536 to +65534. Value: {value}");
                 _ads1115ADC = value; 
                 OnPropertyChanged(nameof(ADS1115ADC));
                 UpdateStatusText();
@@ -153,7 +155,9 @@ namespace SuspensionPCB_CAN_WPF.Models
                     statsInfo = $" (n={_captureSampleCount}, σ={_captureStdDev:F1}){stabilityIndicator}";
                 }
                 
-                StatusText = $"✓ Captured: {KnownWeight:F0} kg @ Internal:{InternalADC} ADS1115:{ADS1115ADC}{zeroIndicator}{statsInfo}";
+                // Format ADS1115 as signed (can be negative)
+                string ads1115Display = ADS1115ADC >= 0 ? $"+{ADS1115ADC}" : ADS1115ADC.ToString();
+                StatusText = $"✓ Captured: {KnownWeight:F0} kg @ Internal:{InternalADC} ADS1115:{ads1115Display}{zeroIndicator}{statsInfo}";
             }
             else if (_isCaptured)
             {

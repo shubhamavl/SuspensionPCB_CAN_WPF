@@ -72,9 +72,6 @@ namespace SuspensionPCB_CAN_WPF.Views
         // Transmission rate tracking
         private byte _currentTransmissionRate = 0x03; // Default 1kHz
         private const byte RATE_1KHZ = 0x03; // 1kHz rate code
-        
-        // Simulator adapter reference (for direct pattern weight access)
-        private SimulatorCanAdapter? _simulatorAdapter;
 
 
         // Weight-based Y-axis scaling (like AVL LMSV1.0)
@@ -117,9 +114,6 @@ namespace SuspensionPCB_CAN_WPF.Views
             _canService = canService;
             _weightProcessor = weightProcessor;
             _currentTransmissionRate = transmissionRate;
-            
-            // Get simulator adapter reference if available (for direct pattern access)
-            _simulatorAdapter = _canService?.GetSimulatorAdapter();
 
             // Load efficiency limits from settings
             LoadEfficiencyLimits();
@@ -303,21 +297,15 @@ namespace SuspensionPCB_CAN_WPF.Views
         }
 
         /// <summary>
-        /// Get weight for a specific side (handles both simulator and real CAN)
+        /// Get weight for a specific side
         /// </summary>
         private double GetWeightForSide(byte side)
         {
-            bool isSimulator = _canService?.IsSimulatorAdapter() ?? false;
             bool isLeft = side == 0;
 
-            if (isSimulator && _simulatorAdapter != null)
+            if (_weightProcessor != null)
             {
-                // DIRECT PATH: Get pattern weights directly from simulator (bypasses WeightProcessor)
-                return _simulatorAdapter.GetCurrentPatternWeight(isLeft);
-            }
-            else if (_weightProcessor != null)
-            {
-                // REAL CAN PATH: Get processed weights from WeightProcessor (with calibration/filtering/tare)
+                // Get processed weights from WeightProcessor (with calibration/filtering/tare)
                 return isLeft ? _weightProcessor.LatestLeft.TaredWeight : _weightProcessor.LatestRight.TaredWeight;
             }
 
@@ -734,7 +722,6 @@ namespace SuspensionPCB_CAN_WPF.Views
             try
             {
                 bool isConnected = _canService?.IsConnected ?? false;
-                bool isSimulator = _canService?.IsSimulatorAdapter() ?? false;
                 bool is1kHz = _currentTransmissionRate == RATE_1KHZ;
                 
                 if (ConnectionIndicator != null)
@@ -749,10 +736,6 @@ namespace SuspensionPCB_CAN_WPF.Views
                     if (!isConnected)
                     {
                         ConnectionStatusText.Text = "Disconnected";
-                    }
-                    else if (isSimulator)
-                    {
-                        ConnectionStatusText.Text = "Connected (Simulator - Event-driven graphs active)";
                     }
                     else if (!is1kHz)
                     {
