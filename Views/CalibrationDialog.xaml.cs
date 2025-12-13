@@ -117,7 +117,8 @@ namespace SuspensionPCB_CAN_WPF.Views
                         }
                         else
                         {
-                            point.ADS1115ADC = (ushort)_currentRawADC;
+                            // ADS1115: Store as signed int (can be negative)
+                            point.ADS1115ADC = _currentRawADC;
                         }
                     }
 
@@ -319,9 +320,9 @@ namespace SuspensionPCB_CAN_WPF.Views
                         return;
                     }
                     
-                    if (point.ADS1115ADC > 32767)
+                    if (point.ADS1115ADC < -32768 || point.ADS1115ADC > 32767)
                     {
-                        MessageBox.Show($"ADS1115 ADC value must be between 0-32767. Current: {point.ADS1115ADC}", 
+                        MessageBox.Show($"ADS1115 ADC value must be between -32768 to +32767. Current: {point.ADS1115ADC}", 
                                       "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
@@ -342,12 +343,12 @@ namespace SuspensionPCB_CAN_WPF.Views
                     }
                     
                     // Mark as captured if both values are set
-                    if (point.InternalADC > 0 && point.ADS1115ADC > 0)
+                    if (point.InternalADC > 0 && point.ADS1115ADC != 0)
                     {
                         point.BothModesCaptured = true;
                         point.IsCaptured = true;
                     }
-                    else if (point.InternalADC > 0 || point.ADS1115ADC > 0)
+                    else if (point.InternalADC > 0 || point.ADS1115ADC != 0)
                     {
                         point.IsCaptured = true;
                     }

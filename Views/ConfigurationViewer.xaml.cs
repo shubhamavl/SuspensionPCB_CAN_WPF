@@ -109,8 +109,18 @@ namespace SuspensionPCB_CAN_WPF.Views
                 {
                     var firstPoint = calibration.Points.First();
                     var lastPoint = calibration.Points.Last();
-                    zeroPoint.Text = firstPoint.RawADC.ToString();
-                    knownWeight.Text = lastPoint.RawADC.ToString();
+                    
+                    // Format as signed for ADS1115, unsigned for Internal
+                    if (adcMode == 1) // ADS1115
+                    {
+                        zeroPoint.Text = firstPoint.RawADC >= 0 ? $"+{firstPoint.RawADC}" : firstPoint.RawADC.ToString();
+                        knownWeight.Text = lastPoint.RawADC >= 0 ? $"+{lastPoint.RawADC}" : lastPoint.RawADC.ToString();
+                    }
+                    else // Internal
+                    {
+                        zeroPoint.Text = firstPoint.RawADC.ToString();
+                        knownWeight.Text = lastPoint.RawADC.ToString();
+                    }
                 }
                 else
                 {

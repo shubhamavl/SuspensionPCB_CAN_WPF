@@ -948,11 +948,8 @@ namespace SuspensionPCB_CAN_WPF.Views
                     {
                         if (message.Data?.Length >= 4)
                         {
-                            // 4 bytes (signed -65536 to +65534)
-                            int rawADC32 = (int)(message.Data[0] | 
-                                                (message.Data[1] << 8) | 
-                                                (message.Data[2] << 16) | 
-                                                (message.Data[3] << 24));
+                            // 4 bytes (signed -65536 to +65534) - little-endian int32
+                            int rawADC32 = BitConverter.ToInt32(message.Data, 0);
                             _leftRawADC = rawADC32;
                             _currentRawADC = _leftRawADC;
                             
@@ -1021,11 +1018,8 @@ namespace SuspensionPCB_CAN_WPF.Views
                     {
                         if (message.Data?.Length >= 4)
                         {
-                            // 4 bytes (signed -65536 to +65534)
-                            int rawADC32 = (int)(message.Data[0] | 
-                                                (message.Data[1] << 8) | 
-                                                (message.Data[2] << 16) | 
-                                                (message.Data[3] << 24));
+                            // 4 bytes (signed -65536 to +65534) - little-endian int32
+                            int rawADC32 = BitConverter.ToInt32(message.Data, 0);
                             _rightRawADC = rawADC32;
                             _currentRawADC = _rightRawADC;
                             
@@ -1152,8 +1146,19 @@ namespace SuspensionPCB_CAN_WPF.Views
                 currentData = isLeft ? leftData : rightData;
                 _currentRawADC = isLeft ? _leftRawADC : _rightRawADC;
                 
-                // Update Raw ADC display
-                if (RawTxt != null) RawTxt.Text = _currentRawADC.ToString();
+                // Update Raw ADC display (show signed for ADS1115, unsigned for Internal)
+                if (RawTxt != null)
+                {
+                    if (_activeADCMode == 1) // ADS1115 - show signed
+                    {
+                        // Format signed value (show + for positive, - for negative)
+                        RawTxt.Text = _currentRawADC >= 0 ? $"+{_currentRawADC}" : _currentRawADC.ToString();
+                    }
+                    else // Internal - show unsigned
+                    {
+                        RawTxt.Text = _currentRawADC.ToString();
+                    }
+                }
                 
                 // Check if calibrated
                 bool isCalibrated = currentCalibration != null && currentCalibration.IsValid;
